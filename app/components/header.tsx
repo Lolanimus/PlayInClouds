@@ -9,6 +9,24 @@ const HOUR_HEIGHT = 40
 const VISIBLE_ITEMS = 5
 const DROPDOWN_ANIMATION_MS = 200
 
+type CitySuggestion = {
+  id: string
+  name: string
+}
+
+type GoogleAutocompleteResponse = {
+  suggestions?: Array<{
+    placePrediction?: {
+      placeId?: string
+      text?: {
+        text?: string
+      }
+    }
+  }>
+}
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
+
 function IOSTimePicker({
   value,
   onChange,
@@ -120,12 +138,6 @@ function IOSTimePicker({
   )
 }
 
-const locations = [
-  { id: 1, name: "London, United Kingdom", icon: MapPin },
-  { id: 2, name: "London, Canada", icon: MapPin },
-  { id: 3, name: "London International Airport, London, Canada", icon: MapPin },
-]
-
 const daysOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 
 function getDaysInMonth(year: number, month: number) {
@@ -153,6 +165,9 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const [closingField, setClosingField] = useState<"where" | "when" | "who" | null>(null)
   const [location, setLocation] = useState("")
   const [locationSearch, setLocationSearch] = useState("")
+  const [locationSuggestions, setLocationSuggestions] = useState<CitySuggestion[]>([])
+  const [isLoadingLocations, setIsLoadingLocations] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [participantCount, setParticipantCount] = useState(1)
   const [currentMonth, setCurrentMonth] = useState(new Date(2026, 2)) // March 2026
@@ -162,21 +177,11 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
 
-  const query = locationSearch.trim().toLowerCase()
-  const filteredLocations = query.length >= 2
-    ? locations.filter((loc) => loc.name.toLowerCase().includes(query))
-    : []
-
-  const fallbackLocations =
-    query.startsWith("barc") && filteredLocations.length === 0
-      ? [{ id: 999, name: "Barcelona, Spain", icon: MapPin }]
-      : []
-
-  const locationSuggestions = [...filteredLocations, ...fallbackLocations]
-  const showWhereSuggestions = query.length >= 2 && locationSuggestions.length > 0
+  const query = locationSearch.trim()
+  const showWhereSuggestions = query.length >= 2
 
   const handleLocationSelect = (locationName: string) => {
-    setLocation(locationName.split(",")[0])
+    setLocation(locationName)
     setLocationSearch("")
     if (activeField) {
       setClosingField(activeField)
@@ -207,6 +212,79 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
       if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    const trimmedQuery = locationSearch.trim()
+
+    if (trimmedQuery.length < 2) {
+      setLocationSuggestions([])
+      setIsLoadingLocations(false)
+      setLocationError(null)
+      return
+    }
+
+    if (!GOOGLE_MAPS_API_KEY) {
+      setLocationSuggestions([])
+      setIsLoadingLocations(false)
+      setLocationError("Missing Google Maps API key")
+      return
+    }
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(async () => {
+      setIsLoadingLocations(true)
+      setLocationError(null)
+
+      try {
+        const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+            "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text",
+          },
+          body: JSON.stringify({
+            input: trimmedQuery,
+            includedPrimaryTypes: ["(cities)"],
+          }),
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error(`Google API error: ${response.status}`)
+        }
+
+        const data = (await response.json()) as GoogleAutocompleteResponse
+        const parsedSuggestions: CitySuggestion[] = (data.suggestions ?? [])
+          .map((item) => item.placePrediction)
+          .filter((prediction): prediction is NonNullable<typeof prediction> => Boolean(prediction?.placeId && prediction?.text?.text))
+          .map((prediction) => ({
+            id: prediction.placeId as string,
+            name: prediction.text?.text as string,
+          }))
+
+        const uniqueSuggestions = Array.from(
+          new Map(parsedSuggestions.map((item) => [item.id, item])).values()
+        ).slice(0, 6)
+
+        setLocationSuggestions(uniqueSuggestions)
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setLocationSuggestions([])
+          setLocationError("Could not load city suggestions")
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingLocations(false)
+        }
+      }
+    }, 250)
+
+    return () => {
+      clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [locationSearch])
 
   const prevMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))
@@ -394,14 +472,26 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                   : "pointer-events-none animate-out fade-out-0 slide-out-to-bottom-2 duration-200 ease-out"
               )}>
                 <div className="max-h-60 overflow-y-auto">
-                  {locationSuggestions.map((loc) => (
+                  {isLoadingLocations && (
+                    <div className="px-4 py-3 text-sm text-[#6a6a6a]">Searching cities...</div>
+                  )}
+
+                  {!isLoadingLocations && locationError && (
+                    <div className="px-4 py-3 text-sm text-[#6a6a6a]">{locationError}</div>
+                  )}
+
+                  {!isLoadingLocations && !locationError && locationSuggestions.length === 0 && (
+                    <div className="px-4 py-3 text-sm text-[#6a6a6a]">No cities found</div>
+                  )}
+
+                  {!isLoadingLocations && !locationError && locationSuggestions.map((loc) => (
                     <button
                       key={loc.id}
                       onClick={() => handleLocationSelect(loc.name)}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#e9e9e9] transition-colors"
                     >
                       <div className="h-10 w-10 bg-[#e9e9e9] rounded-lg flex items-center justify-center">
-                        <loc.icon className="h-5 w-5 text-[#6a6a6a]" />
+                        <MapPin className="h-5 w-5 text-[#6a6a6a]" />
                       </div>
                       <span className="text-sm text-[#000000] text-left">{loc.name}</span>
                     </button>
