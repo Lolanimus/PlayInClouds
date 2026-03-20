@@ -404,13 +404,13 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         <div className="absolute left-1/2 -translate-x-1/2">
           <div className="relative">
             <div className={cn(
-              "inline-flex w-max max-w-screen-xl items-center rounded-full bg-[#ffffff] transition-all duration-300 ease-out",
+              "inline-flex w-max max-w-screen-xl items-center rounded-full bg-[#ffffff] transition-all duration-200 ease-out",
               isSearchSummary ? "shadow-xl ring-1 ring-[#000000]/5" : "shadow-lg"
             )}>
               {/* Where Field */}
               <div
                 className={cn(
-                  "relative min-w-0 rounded-full pl-6 pr-4 transition-all duration-300 ease-out",
+                  "relative min-w-0 rounded-full pl-6 pr-4 transition-all duration-200 ease-out",
                   isSearchSummary ? "py-3.5 flex-[2.15_1_auto]" : "py-4 flex-[2_1_auto]",
                   activeField === "where" && "bg-[#e9e9e9]"
                 )}
@@ -468,7 +468,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
               {/* When Field */}
               <div
                 className={cn(
-                  "relative min-w-0 cursor-pointer rounded-full pl-6 pr-4 transition-all duration-300 ease-out",
+                  "relative min-w-0 cursor-pointer rounded-full pl-6 pr-4 transition-all duration-200 ease-out",
                   isSearchSummary ? "py-3.5 flex-[1.25_1_auto]" : "py-4 flex-[1.2_1_auto]",
                   activeField === "when" && "bg-[#e9e9e9]"
                 )}
@@ -512,7 +512,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
               {/* Who Field */}
               <div
                 className={cn(
-                  "relative min-w-0 cursor-pointer rounded-full px-6 transition-all duration-300 ease-out",
+                  "relative min-w-0 cursor-pointer rounded-full px-6 transition-all duration-200 ease-out",
                   isSearchSummary ? "py-3.5 flex-[1.05_1_auto]" : "py-4 flex-[1_1_auto]",
                   activeField === "who" && "bg-[#e9e9e9]"
                 )}
@@ -546,7 +546,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                     setIsSearchSummary(true)
                   }}
                   className={cn(
-                    "h-9 w-9 rounded-full bg-[#000000] text-[#ffffff] transition-all duration-300",
+                    "h-9 w-9 rounded-full bg-[#000000] text-[#ffffff] transition-all duration-200",
                     isSearchSummary ? "scale-95 hover:bg-[#6a6a6a]" : "scale-100 hover:bg-[#6a6a6a]"
                   )}
                 >
@@ -560,10 +560,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
               <div
                 onTransitionEnd={(e) => handleDropdownTransitionEnd("where", e)}
                 className={cn(
-                  "absolute top-full left-0 mt-2 w-80 bg-[#ffffff] rounded-2xl shadow-xl border border-[#e9e9e9] overflow-hidden z-[80] transform-gpu will-change-[transform,opacity] transition-[opacity,transform] duration-300 ease-out",
+                  "absolute top-full left-0 mt-2 w-80 bg-[#ffffff] rounded-2xl shadow-xl border border-[#e9e9e9] overflow-hidden z-[80] transform-gpu will-change-[transform,opacity] transition-[opacity,transform] ease-out",
                   activeField === "where"
-                    ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
-                    : "pointer-events-none opacity-0 -translate-y-1"
+                    ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
+                    : "pointer-events-none duration-150 opacity-0 -translate-y-1"
                 )}
               >
                 <div className="max-h-60 overflow-y-auto">
@@ -600,10 +600,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
               <div
                 onTransitionEnd={(e) => handleDropdownTransitionEnd("when", e)}
                 className={cn(
-                  "absolute top-full left-0 mt-2 w-full bg-[#ffffff] rounded-2xl shadow-xl border border-[#e9e9e9] overflow-hidden z-[80] transform-gpu will-change-[transform,opacity] transition-[opacity,transform] duration-300 ease-out",
+                  "absolute top-full left-0 mt-2 w-full bg-[#ffffff] rounded-2xl shadow-xl border border-[#e9e9e9] overflow-hidden z-[80] transform-gpu will-change-[transform,opacity] transition-[opacity,transform] ease-out",
                   activeField === "when"
-                    ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
-                    : "pointer-events-none opacity-0 -translate-y-1"
+                    ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
+                    : "pointer-events-none duration-150 opacity-0 -translate-y-1"
                 )}
               >
                 <div className="flex">
@@ -703,10 +703,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
               <div
                 onTransitionEnd={(e) => handleDropdownTransitionEnd("who", e)}
                 className={cn(
-                  "absolute top-full right-0 mt-2 w-64 bg-[#ffffff] rounded-2xl shadow-xl border border-[#e9e9e9] overflow-hidden z-[80] transform-gpu will-change-[transform,opacity] transition-[opacity,transform] duration-300 ease-out",
+                  "absolute top-full right-0 mt-2 w-64 bg-[#ffffff] rounded-2xl shadow-xl border border-[#e9e9e9] overflow-hidden z-[80] transform-gpu will-change-[transform,opacity] transition-[opacity,transform] ease-out",
                   activeField === "who"
-                    ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
-                    : "pointer-events-none opacity-0 -translate-y-1"
+                    ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
+                    : "pointer-events-none duration-150 opacity-0 -translate-y-1"
                 )}
               >
                 <div className="p-4">
