@@ -155,7 +155,7 @@ export function FiltersModal({
           </div>
         </div>
 
-        <div className="h-px bg-[#e9e9e9] my-6" />
+        <div className="h-[0.0625rem] bg-[#e9e9e9] my-6" />
 
         <div className="flex gap-3">
           <Button

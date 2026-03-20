@@ -93,7 +93,7 @@ export function MapView() {
         })
 
         const infoWindow = new window.google.maps.InfoWindow({
-          content: `<div style="padding: 4px 8px; font-size: 12px; font-weight: 500;">${marker.title}</div>`,
+          content: `<div style="padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 500;">${marker.title}</div>`,
         })
 
         mapMarker.addListener("click", () => {
