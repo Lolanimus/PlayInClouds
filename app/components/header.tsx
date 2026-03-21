@@ -24,6 +24,17 @@ type GoogleAutocompleteResponse = {
   }>
 }
 
+type GoogleGeocodeResponse = {
+  results?: Array<{
+    formatted_address?: string
+    address_components?: Array<{
+      long_name?: string
+      short_name?: string
+      types?: string[]
+    }>
+  }>
+}
+
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
 function IOSTimePicker({
@@ -248,6 +259,63 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
       document.removeEventListener("mousedown", handleClickOutside)
     }
   }, [transitionToField])
+
+  useEffect(() => {
+    if (location || locationSearch || !GOOGLE_MAPS_API_KEY) return
+    if (typeof window === "undefined" || !("geolocation" in navigator)) return
+
+    let isCancelled = false
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        if (isCancelled) return
+
+        try {
+          const { latitude, longitude } = position.coords
+          const response = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&result_type=locality|administrative_area_level_3&key=${GOOGLE_MAPS_API_KEY}`
+          )
+
+          if (!response.ok) return
+
+          const data = (await response.json()) as GoogleGeocodeResponse
+          const bestResult = data.results?.[0]
+          if (!bestResult) return
+
+          const components = bestResult.address_components ?? []
+          const cityComponent = components.find((component) =>
+            component.types?.includes("locality") || component.types?.includes("postal_town")
+          )
+          const countryComponent = components.find((component) => component.types?.includes("country"))
+
+          const cityName = cityComponent?.long_name?.trim()
+          const countryName = countryComponent?.short_name?.trim()
+          const resolvedLocation =
+            cityName && countryName
+              ? `${cityName}, ${countryName}`
+              : cityName || bestResult.formatted_address?.trim() || ""
+
+          if (!isCancelled && resolvedLocation) {
+            setLocation(resolvedLocation)
+          }
+        } catch {
+          // ignore geocoding errors; user can still type manually
+        }
+      },
+      () => {
+        // ignore geolocation errors; user can still type manually
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 600000,
+      }
+    )
+
+    return () => {
+      isCancelled = true
+    }
+  }, [location, locationSearch])
 
   useEffect(() => {
     const trimmedQuery = locationSearch.trim()
