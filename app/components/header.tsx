@@ -538,17 +538,21 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
               </div>
 
               {/* Search Button */}
-              <div className="pr-2">
+              <div className="pr-2 shrink-0">
                 <Button
                   size="icon"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (isSearchSummary && activeFieldRef.current === null) {
+                      setIsSearchSummary(false)
+                      transitionToField("where")
+                      return
+                    }
+
                     transitionToField(null)
                     setIsSearchSummary(true)
                   }}
-                  className={cn(
-                    "h-9 w-9 rounded-full bg-[#000000] text-[#ffffff] transition-all duration-200",
-                    isSearchSummary ? "scale-95 hover:bg-[#6a6a6a]" : "scale-100 hover:bg-[#6a6a6a]"
-                  )}
+                  className="relative z-10 h-9 w-9 rounded-full bg-[#000000] text-[#ffffff] transition-all duration-200 hover:bg-[#6a6a6a]"
                 >
                   <Search className="h-3.5 w-3.5" />
                 </Button>
