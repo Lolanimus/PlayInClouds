@@ -6,8 +6,11 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+import { useState } from "react";
 
 import type { Route } from "./+types/root";
+import { Header } from "./components/header";
+import { FiltersModal } from "./components/filter-bar";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -44,7 +47,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+
+  return (
+    <>
+      <Header onOpenFilters={() => setIsFiltersOpen(true)} />
+      <Outlet />
+      <FiltersModal isOpen={isFiltersOpen} onClose={() => setIsFiltersOpen(false)} />
+    </>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

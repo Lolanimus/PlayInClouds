@@ -472,23 +472,20 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
 
   return (
     <header ref={headerRef} className="relative z-40 bg-[#000000] w-full">
-      <div className="relative flex items-center justify-between p-8">
+      <div className="relative flex items-center justify-between pl-8">
         {/* Logo */}
-        <div className="w-24 flex-shrink-0">
-          <svg
-            viewBox="0 0 100 40"
-            className="h-8 w-auto text-[#ffffff]"
-            fill="currentColor"
-          >
-            <path d="M10 30 Q 15 10, 30 15 Q 45 20, 40 30 Q 35 35, 25 32 Q 15 29, 10 30" stroke="currentColor" strokeWidth="1.5" fill="none" />
-            <path d="M30 15 L 45 8" stroke="currentColor" strokeWidth="1.5" fill="none" />
-            <path d="M50 25 Q 55 15, 65 20 Q 75 25, 70 30" stroke="currentColor" strokeWidth="1.5" fill="none" />
-          </svg>
+        <div className="w-30 flex-shrink-0">
+          <img
+            src="/AirDrums_Logo.svg"
+            alt="AirDrums"
+            className="size-full"
+          />
         </div>
 
         {/* Search Bar */}
         <div className="absolute left-1/2 -translate-x-1/2">
-          <div className="relative">
+          <div className="flex items-center">
+            <div className="relative">
             <div className={cn(
               "inline-flex w-max max-w-screen-xl items-center rounded-full bg-[#ffffff] transition-all duration-200 ease-out",
               isSearchSummary ? "shadow-xl ring-1 ring-[#000000]/5" : "shadow-lg"
@@ -823,10 +820,11 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                 </div>
               </div>
             )}
+            </div>
             <Button
               variant="outline"
               onClick={onOpenFilters}
-              className="absolute left-full ml-3 top-1/2 -translate-y-1/2 active:-translate-y-1/2 flex items-center gap-2 rounded-full border-[#dadada] bg-[#ffffff] text-[#000000] hover:bg-[#e9e9e9] transition-colors"
+              className="ml-3 flex items-center gap-2 rounded-full border-[#dadada] bg-[#ffffff] text-[#000000] hover:bg-[#e9e9e9] transition-colors"
             >
               <SlidersHorizontal className="h-4 w-4" />
               <span>Filters</span>
