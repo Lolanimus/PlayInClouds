@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { ListingCard, listings } from "@/components/listings"
 
 const markers = [
@@ -8,7 +9,36 @@ const markers = [
   { id: 2, lat: 40.7508, lng: -73.9935, title: "Rehearsal Space in Fashion District" },
   { id: 3, lat: 40.7520, lng: -73.9890, title: "Creative Studio Space" },
   { id: 4, lat: 40.7545, lng: -73.9845, title: "Cozy Meeting Room" },
+  { id: 5, lat: 40.7468, lng: -74.0014, title: "Industrial Loft Rehearsal Room" },
+  { id: 6, lat: 40.7489, lng: -73.9993, title: "Minimalist Creative Hub" },
+  { id: 7, lat: 40.7567, lng: -73.9778, title: "Sunlit Practice Studio" },
+  { id: 8, lat: 40.7196, lng: -74.0089, title: "Premium Meeting & Jam Space" },
 ]
+
+function PriceMarker({
+  price,
+  onClick,
+}: {
+  price: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+      className={[
+        "inline-flex items-center justify-center rounded-full border px-3 py-1 text-sm font-semibold shadow-sm transition-colors",
+        "border-[#d9d9d9] bg-[#f5f5f5] text-[#000000] hover:bg-[#f5f5f5]",
+      ].join(" ")}
+      aria-label={`Open listing ${price}`}
+    >
+      {price}
+    </button>
+  )
+}
 
 export function MapView() {
   const mapRef = useRef<HTMLDivElement>(null)
@@ -17,6 +47,9 @@ export function MapView() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
+
+    const markerRoots: Root[] = []
+    const markerOverlays: any[] = []
 
     const loadGoogleMaps = () => {
       if (window.google?.maps) {
@@ -80,23 +113,61 @@ export function MapView() {
       })
 
       markers.forEach((marker) => {
-        const mapMarker = new window.google.maps.Marker({
-          position: { lat: marker.lat, lng: marker.lng },
-          map,
-          title: marker.title,
-          icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: "#ff5a5f",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 2,
-          },
-        })
+        const listing = listings.find((item) => item.id === marker.id)
+        const price = listing?.price.split(" ")[0] ?? "$--"
 
-        mapMarker.addListener("click", () => {
-          setActiveListingId(marker.id)
-        })
+        const container = document.createElement("div")
+        const root = createRoot(container)
+        markerRoots.push(root)
+
+        class PriceOverlay extends window.google.maps.OverlayView {
+          private div: HTMLDivElement | null = null
+
+          onAdd() {
+            this.div = document.createElement("div")
+            this.div.style.position = "absolute"
+            this.div.style.transform = "translate(-50%, -50%)"
+
+            this.div.addEventListener("click", (event) => {
+              event.stopPropagation()
+            })
+
+            root.render(
+              <PriceMarker
+                price={price}
+                onClick={() => setActiveListingId(marker.id)}
+              />
+            )
+
+            this.div.appendChild(container)
+            this.getPanes()?.overlayMouseTarget?.appendChild(this.div)
+          }
+
+          draw() {
+            if (!this.div) return
+
+            const projection = this.getProjection()
+            if (!projection) return
+
+            const position = projection.fromLatLngToDivPixel(
+              new window.google.maps.LatLng(marker.lat, marker.lng)
+            )
+
+            if (!position) return
+
+            this.div.style.left = `${position.x}px`
+            this.div.style.top = `${position.y}px`
+          }
+
+          onRemove() {
+            this.div?.remove()
+            this.div = null
+          }
+        }
+
+        const overlay = new PriceOverlay()
+        overlay.setMap(map)
+        markerOverlays.push(overlay)
       })
 
       map.addListener("click", () => {
@@ -107,6 +178,11 @@ export function MapView() {
     }
 
     loadGoogleMaps()
+
+    return () => {
+      markerOverlays.forEach((overlay) => overlay.setMap(null))
+      markerRoots.forEach((root) => root.unmount())
+    }
   }, [])
 
   const activeListing = activeListingId

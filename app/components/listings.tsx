@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
+import { useNavigate } from "react-router"
 
 export const listings = [
   {
@@ -58,14 +59,72 @@ export const listings = [
       "https://images.unsplash.com/photo-1497215842964-222b430dc094?w=400&h=300&fit=crop",
     ],
   },
+  {
+    id: 5,
+    title: "Industrial Loft Rehearsal Room",
+    subtitle: "Open Layout • SoHo • Manhattan",
+    category: "Rehearsals, Workshops, Recording",
+    price: "$38 CAD/hour",
+    distance: "1.8 km away",
+    rating: 4.7,
+    reviews: 18,
+    images: [
+      "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&h=300&fit=crop",
+    ],
+  },
+  {
+    id: 6,
+    title: "Minimalist Creative Hub",
+    subtitle: "Bright Space • Chelsea • Manhattan",
+    category: "Content, Meetings, Events",
+    price: "$42 CAD/hour",
+    distance: "2.4 km away",
+    rating: 4.9,
+    reviews: 31,
+    images: [
+      "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=400&h=300&fit=crop&sat=-20",
+    ],
+  },
+  {
+    id: 7,
+    title: "Sunlit Practice Studio",
+    subtitle: "Quiet • Upper West Side • Manhattan",
+    category: "Practice, Classes, Coaching",
+    price: "$28 CAD/hour",
+    distance: "3.1 km away",
+    rating: 4.6,
+    reviews: 14,
+    images: [
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1493666438817-866a91353ca9?w=400&h=300&fit=crop",
+    ],
+  },
+  {
+    id: 8,
+    title: "Premium Meeting & Jam Space",
+    subtitle: "Full Equipment • Tribeca • Manhattan",
+    category: "Jam Sessions, Meetings, Productions",
+    price: "$55 CAD/hour",
+    distance: "1.2 km away",
+    rating: 5.0,
+    reviews: 27,
+    images: [
+      "https://images.unsplash.com/photo-1517502884422-41eaead166d4?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&h=300&fit=crop",
+    ],
+  },
 ]
 
 export function ListingCard({
   listing,
   onClose,
+  onClick,
 }: {
   listing: (typeof listings)[0]
   onClose?: () => void
+  onClick?: () => void
 }) {
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
@@ -84,7 +143,10 @@ export function ListingCard({
   }
 
   return (
-    <div className="relative bg-[#ffffff] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+    <div
+      onClick={onClick}
+      className="relative bg-[#ffffff] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+    >
       {onClose && (
         <button
           onClick={(e) => {
@@ -165,10 +227,16 @@ export function ListingCard({
 }
 
 export function Listings() {
+  const navigate = useNavigate()
+
   return (
     <div className="grid grid-cols-2 gap-4 p-4 overflow-y-auto">
       {listings.map((listing) => (
-        <ListingCard key={listing.id} listing={listing} />
+        <ListingCard
+          key={listing.id}
+          listing={listing}
+          onClick={() => navigate(`/listing/${listing.id}`)}
+        />
       ))}
     </div>
   )
