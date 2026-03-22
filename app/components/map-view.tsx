@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { ListingCard, listings } from "@/components/listings"
 
 const markers = [
   { id: 1, lat: 40.7484, lng: -73.9967, title: "Rehearsal Space in Fashion District" },
@@ -12,6 +13,7 @@ const markers = [
 export function MapView() {
   const mapRef = useRef<HTMLDivElement>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
+  const [activeListingId, setActiveListingId] = useState<number | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -92,13 +94,13 @@ export function MapView() {
           },
         })
 
-        const infoWindow = new window.google.maps.InfoWindow({
-          content: `<div style="padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 500;">${marker.title}</div>`,
-        })
-
         mapMarker.addListener("click", () => {
-          infoWindow.open(map, mapMarker)
+          setActiveListingId(marker.id)
         })
+      })
+
+      map.addListener("click", () => {
+        setActiveListingId(null)
       })
 
       setMapLoaded(true)
@@ -107,9 +109,21 @@ export function MapView() {
     loadGoogleMaps()
   }, [])
 
+  const activeListing = activeListingId
+    ? listings.find((listing) => listing.id === activeListingId) ?? null
+    : null
+
   return (
     <div className="relative w-full h-full bg-[#e9e9e9] rounded-lg overflow-hidden">
       <div ref={mapRef} className="w-full h-full" />
+      {activeListing && (
+        <div className="absolute left-4 top-4 z-20 w-[min(20rem,calc(100%-2rem))]">
+          <ListingCard
+            listing={activeListing}
+            onClose={() => setActiveListingId(null)}
+          />
+        </div>
+      )}
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#f5f5f5]">
           <div className="text-center">
@@ -124,6 +138,6 @@ export function MapView() {
 
 declare global {
   interface Window {
-    google: typeof google
+    google: any
   }
 }

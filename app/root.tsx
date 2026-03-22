@@ -31,8 +31,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orestbida/cookieconsent@3.1.0/dist/cookieconsent.css"></link>
       </head>
       <body>
+        <script type="module" src="./cookieconsent-config.js"></script>
         {children}
         <ScrollRestoration />
         <Scripts />

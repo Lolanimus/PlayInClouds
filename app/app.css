@@ -124,4 +124,20 @@
     @apply bg-background text-foreground;
     font-family: var(--font-var);
   }
+   #cc-main {
+     /** Change font **/
+     --cc-font-family: var(--font-var);
+
+     /** Change button primary color to black **/
+     --cc-btn-primary-bg: #000000;
+     --cc-btn-primary-border-color: #000000;
+     --cc-btn-primary-hover-bg: #f5f5f5;
+     --cc-btn-primary-hover-border-color: #f5f5f5;
+
+     /** Also make toggles the same color as the button **/
+     --cc-toggle-on-bg: var(--cc-btn-primary-bg);
+
+     /** Make the buttons a bit rounder **/
+     --cc-btn-border-radius: 10px;
+ }
 }

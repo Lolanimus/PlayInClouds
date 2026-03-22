@@ -24,9 +24,15 @@ type GoogleAutocompleteResponse = {
   }>
 }
 
+type GoogleGeolocationResponse = {
+  location?: {
+    lat?: number
+    lng?: number
+  }
+}
+
 type GoogleGeocodeResponse = {
   results?: Array<{
-    formatted_address?: string
     address_components?: Array<{
       long_name?: string
       short_name?: string
@@ -188,6 +194,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const closingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const pendingFieldRef = useRef<"where" | "when" | "who" | null>(null)
+  const didAttemptIpAutoFillRef = useRef(false)
 
   const transitionToField = useCallback((nextField: "where" | "when" | "who" | null) => {
     const currentField = activeFieldRef.current
@@ -261,59 +268,70 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   }, [transitionToField])
 
   useEffect(() => {
-    if (location || locationSearch || !GOOGLE_MAPS_API_KEY) return
-    if (typeof window === "undefined" || !("geolocation" in navigator)) return
+    if (didAttemptIpAutoFillRef.current) return
+    if (location || locationSearch) return
 
-    let isCancelled = false
+    didAttemptIpAutoFillRef.current = true
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        if (isCancelled) return
+    const controller = new AbortController()
 
-        try {
-          const { latitude, longitude } = position.coords
-          const response = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&result_type=locality|administrative_area_level_3&key=${GOOGLE_MAPS_API_KEY}`
-          )
+    const fetchCityByGoogle = async () => {
+      try {
+        if (!GOOGLE_MAPS_API_KEY) return
 
-          if (!response.ok) return
+        const geolocateResponse = await fetch(`https://www.googleapis.com/geolocation/v1/geolocate?key=${GOOGLE_MAPS_API_KEY}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            considerIp: true,
+          }),
+          signal: controller.signal,
+        })
 
-          const data = (await response.json()) as GoogleGeocodeResponse
-          const bestResult = data.results?.[0]
-          if (!bestResult) return
+        if (!geolocateResponse.ok) return
 
-          const components = bestResult.address_components ?? []
-          const cityComponent = components.find((component) =>
-            component.types?.includes("locality") || component.types?.includes("postal_town")
-          )
-          const countryComponent = components.find((component) => component.types?.includes("country"))
+        const geolocateData = (await geolocateResponse.json()) as GoogleGeolocationResponse
+        const lat = geolocateData.location?.lat
+        const lng = geolocateData.location?.lng
 
-          const cityName = cityComponent?.long_name?.trim()
-          const countryName = countryComponent?.short_name?.trim()
-          const resolvedLocation =
-            cityName && countryName
-              ? `${cityName}, ${countryName}`
-              : cityName || bestResult.formatted_address?.trim() || ""
+        if (typeof lat !== "number" || typeof lng !== "number") return
 
-          if (!isCancelled && resolvedLocation) {
-            setLocation(resolvedLocation)
+        const geocodeResponse = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&result_type=locality|postal_town|administrative_area_level_3&key=${GOOGLE_MAPS_API_KEY}`,
+          {
+            signal: controller.signal,
           }
-        } catch {
-          // ignore geocoding errors; user can still type manually
-        }
-      },
-      () => {
-        // ignore geolocation errors; user can still type manually
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 8000,
-        maximumAge: 600000,
+        )
+
+        if (!geocodeResponse.ok) return
+
+        const geocodeData = (await geocodeResponse.json()) as GoogleGeocodeResponse
+        const components = geocodeData.results?.[0]?.address_components ?? []
+
+        const city = components.find((component) =>
+          (component.types ?? []).some((type) =>
+            type === "locality" || type === "postal_town" || type === "administrative_area_level_3"
+          )
+        )?.long_name?.trim()
+
+        const country = components.find((component) =>
+          (component.types ?? []).includes("country")
+        )?.short_name?.trim()
+
+        if (!city) return
+
+        setLocation(country ? `${city}, ${country}` : city)
+      } catch {
+        // ignore IP lookup errors; user can still type manually
       }
-    )
+    }
+
+    fetchCityByGoogle()
 
     return () => {
-      isCancelled = true
+      controller.abort()
     }
   }, [location, locationSearch])
 

@@ -29,5 +29,5 @@ type RouteFiles = {
 
 type RouteModules = {
   "root": typeof import("./app/root.tsx");
-  "routes/home": typeof import("./app/routes/home.js");
+  "routes/home": typeof import("./app/routes/home.tsx");
 };

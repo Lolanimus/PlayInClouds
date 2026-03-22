@@ -1,8 +1,9 @@
 "use client"
 
-import { Image, Star } from "lucide-react"
+import { useState } from "react"
+import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
 
-const listings = [
+export const listings = [
   {
     id: 1,
     title: "Rehearsal Space in Fashion District",
@@ -59,22 +60,81 @@ const listings = [
   },
 ]
 
-function ListingCard({ listing }: { listing: (typeof listings)[0] }) {
+export function ListingCard({
+  listing,
+  onClose,
+}: {
+  listing: (typeof listings)[0]
+  onClose?: () => void
+}) {
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
+
+  const hasMultipleImages = listing.images.length > 1
+
+  const showPrevImage = () => {
+    setActiveImageIndex((prev) =>
+      prev === 0 ? listing.images.length - 1 : prev - 1
+    )
+  }
+
+  const showNextImage = () => {
+    setActiveImageIndex((prev) =>
+      prev === listing.images.length - 1 ? 0 : prev + 1
+    )
+  }
+
   return (
-    <div className="bg-[#ffffff] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+    <div className="relative bg-[#ffffff] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+      {onClose && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onClose()
+          }}
+          aria-label="Close listing card"
+          className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-[#ffffff] text-[#000000] shadow-sm hover:bg-[#f5f5f5]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
       <div className="relative aspect-[4/3]">
         <img
-          src={listing.images[0]}
+          src={listing.images[activeImageIndex]}
           alt={listing.title}
-          className="object-cover"
+          className="h-full w-full object-cover"
         />
-        {listing.images.length > 1 && (
+        {hasMultipleImages && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                showPrevImage()
+              }}
+              aria-label="Previous photo"
+              className="absolute left-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-[#ffffff] text-[#000000] shadow-sm hover:bg-[#f5f5f5]"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                showNextImage()
+              }}
+              aria-label="Next photo"
+              className="absolute right-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-[#ffffff] text-[#000000] shadow-sm hover:bg-[#f5f5f5]"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        )}
+        {hasMultipleImages && (
           <div className="absolute bottom-2 left-2 flex gap-1">
             {listing.images.map((_, idx) => (
               <div
                 key={idx}
                 className={`w-1.5 h-1.5 rounded-full ${
-                  idx === 0 ? "bg-[#ffffff]" : "bg-[#ffffff]/50"
+                  idx === activeImageIndex ? "bg-[#ffffff]" : "bg-[#ffffff]/50"
                 }`}
               />
             ))}
