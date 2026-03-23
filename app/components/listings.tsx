@@ -1,12 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
-import { useNavigate } from "react-router"
+import { useNavigate, useSearchParams } from "react-router"
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
 export const listings = [
   {
     id: 1,
+    lat: 40.7484,
+    lng: -73.9967,
+    city: "New York, NY, USA",
     title: "Rehearsal Space in Fashion District",
     subtitle: "Full Service • Fashion District • Manhattan",
     category: "Rehearsals, Film/Photo, Meetups",
@@ -21,6 +26,9 @@ export const listings = [
   },
   {
     id: 2,
+    lat: 40.7508,
+    lng: -73.9935,
+    city: "New York, NY, USA",
     title: "Rehearsal Space in Fashion District",
     subtitle: "Full Service • Fashion District • Manhattan",
     category: "Rehearsals, Film/Photo, Meetups",
@@ -35,6 +43,9 @@ export const listings = [
   },
   {
     id: 3,
+    lat: 40.752,
+    lng: -73.989,
+    city: "New York, NY, USA",
     title: "Creative Studio Space",
     subtitle: "Modern • Downtown • Manhattan",
     category: "Workshops, Events, Meetings",
@@ -48,6 +59,9 @@ export const listings = [
   },
   {
     id: 4,
+    lat: 40.7545,
+    lng: -73.9845,
+    city: "New York, NY, USA",
     title: "Cozy Meeting Room",
     subtitle: "Private • Midtown • Manhattan",
     category: "Meetings, Interviews",
@@ -61,6 +75,9 @@ export const listings = [
   },
   {
     id: 5,
+    lat: 40.7468,
+    lng: -74.0014,
+    city: "New York, NY, USA",
     title: "Industrial Loft Rehearsal Room",
     subtitle: "Open Layout • SoHo • Manhattan",
     category: "Rehearsals, Workshops, Recording",
@@ -75,6 +92,9 @@ export const listings = [
   },
   {
     id: 6,
+    lat: 40.7489,
+    lng: -73.9993,
+    city: "New York, NY, USA",
     title: "Minimalist Creative Hub",
     subtitle: "Bright Space • Chelsea • Manhattan",
     category: "Content, Meetings, Events",
@@ -89,6 +109,9 @@ export const listings = [
   },
   {
     id: 7,
+    lat: 40.7567,
+    lng: -73.9778,
+    city: "New York, NY, USA",
     title: "Sunlit Practice Studio",
     subtitle: "Quiet • Upper West Side • Manhattan",
     category: "Practice, Classes, Coaching",
@@ -103,6 +126,9 @@ export const listings = [
   },
   {
     id: 8,
+    lat: 40.7196,
+    lng: -74.0089,
+    city: "New York, NY, USA",
     title: "Premium Meeting & Jam Space",
     subtitle: "Full Equipment • Tribeca • Manhattan",
     category: "Jam Sessions, Meetings, Productions",
@@ -115,16 +141,61 @@ export const listings = [
       "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&h=300&fit=crop",
     ],
   },
+  {
+    id: 9,
+    lat: 42.9755,
+    lng: -81.3009,
+    city: "London, ON, Canada",
+    title: "Rehearsal Space in Fashion District",
+    subtitle: "Full Service • Fashion District • Manhattan",
+    category: "Rehearsals, Film/Photo, Meetups",
+    price: "$30 CAD/hour",
+    distance: "1 km away",
+    rating: 5.0,
+    reviews: 9,
+    images: [
+      "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=300&fit=crop",
+      "https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=400&h=300&fit=crop",
+    ],
+  },
 ]
+
+export const listingAvailability: Record<number, { days: number[]; startHour: number; endHour: number }> = {
+  1: { days: [1, 2, 3, 4, 5], startHour: 9, endHour: 20 },
+  2: { days: [1, 2, 3, 4, 5], startHour: 8, endHour: 18 },
+  3: { days: [2, 3, 4, 5, 6], startHour: 10, endHour: 22 },
+  4: { days: [1, 2, 3, 4, 5, 6], startHour: 7, endHour: 17 },
+  5: { days: [3, 4, 5, 6, 0], startHour: 12, endHour: 23 },
+  6: { days: [1, 2, 3, 4, 5], startHour: 9, endHour: 21 },
+  7: { days: [0, 6], startHour: 8, endHour: 16 },
+  8: { days: [4, 5, 6], startHour: 14, endHour: 23 },
+  9: { days: [1, 2, 3, 4, 5], startHour: 9, endHour: 19 },
+}
+
+const parseDateFromQuery = (value: string | null) => {
+  if (!value) return null
+  const [yearRaw, monthRaw, dayRaw] = value.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+
+  const date = new Date(year, month - 1, day)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+}
 
 export function ListingCard({
   listing,
   onClose,
   onClick,
+  distanceLabel,
 }: {
   listing: (typeof listings)[0]
   onClose?: () => void
   onClick?: () => void
+  distanceLabel?: string | null
 }) {
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
@@ -219,7 +290,9 @@ export function ListingCard({
         <p className="text-xs text-[#6a6a6a] mb-2 truncate">{listing.category}</p>
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-[#000000]">{listing.price}</span>
-          <span className="text-xs text-[#6a6a6a]">{listing.distance}</span>
+          {distanceLabel ? (
+            <span className="text-xs text-[#6a6a6a]">{distanceLabel}</span>
+          ) : null}
         </div>
       </div>
     </div>
@@ -228,16 +301,296 @@ export function ListingCard({
 
 export function Listings() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [hasUserGeolocation, setHasUserGeolocation] = useState(false)
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [userGeoCity, setUserGeoCity] = useState<string | null>(null)
+  const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const whereQuery = searchParams.get("where")?.trim().toLowerCase() ?? ""
+  const priceMaxParam = Number(searchParams.get("priceMax"))
+  const distanceMaxParam = Number(searchParams.get("distanceMax"))
+  const selectedDateParam = parseDateFromQuery(searchParams.get("date"))
+  const selectedStartParam = Number(searchParams.get("start"))
+  const selectedDurationParam = Number(searchParams.get("duration"))
+  const hasSelectedSlot =
+    selectedDateParam &&
+    Number.isFinite(selectedStartParam) &&
+    selectedStartParam >= 0 &&
+    selectedStartParam <= 23 &&
+    Number.isFinite(selectedDurationParam) &&
+    selectedDurationParam >= 1 &&
+    selectedDurationParam <= 12
+  const currentSearch = searchParams.toString()
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setHasUserGeolocation(true)
+        setUserCoords({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        })
+      },
+      () => {
+        setHasUserGeolocation(false)
+        setUserCoords(null)
+        setUserGeoCity(null)
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 5 * 60 * 1000,
+      }
+    )
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId)
+    }
+  }, [])
+
+  useEffect(() => {
+    const where = searchParams.get("where")?.trim()
+    if (!where || !GOOGLE_MAPS_API_KEY) {
+      setSearchCoords(null)
+      return
+    }
+
+    const controller = new AbortController()
+
+    const resolveSearchCoords = async () => {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(where)}&key=${GOOGLE_MAPS_API_KEY}`,
+          { signal: controller.signal }
+        )
+
+        if (!response.ok) {
+          setSearchCoords(null)
+          return
+        }
+
+        const data = (await response.json()) as {
+          results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>
+        }
+
+        const lat = data.results?.[0]?.geometry?.location?.lat
+        const lng = data.results?.[0]?.geometry?.location?.lng
+
+        if (typeof lat !== "number" || typeof lng !== "number") {
+          setSearchCoords(null)
+          return
+        }
+
+        setSearchCoords({ lat, lng })
+      } catch {
+        setSearchCoords(null)
+      }
+    }
+
+    resolveSearchCoords()
+
+    return () => {
+      controller.abort()
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!hasUserGeolocation || !userCoords) return
+    if (!GOOGLE_MAPS_API_KEY) {
+      setUserGeoCity(null)
+      return
+    }
+
+    const controller = new AbortController()
+
+    const resolveUserCity = async () => {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${userCoords.lat},${userCoords.lng}&result_type=locality|postal_town|administrative_area_level_3&key=${GOOGLE_MAPS_API_KEY}`,
+          { signal: controller.signal }
+        )
+
+        if (!response.ok) {
+          setUserGeoCity(null)
+          return
+        }
+
+        const data = (await response.json()) as {
+          results?: Array<{
+            address_components?: Array<{
+              long_name?: string
+              types?: string[]
+            }>
+          }>
+        }
+
+        const components = data.results?.[0]?.address_components ?? []
+        const city = components.find((component) =>
+          (component.types ?? []).some((type) =>
+            type === "locality" || type === "postal_town" || type === "administrative_area_level_3"
+          )
+        )?.long_name
+
+        setUserGeoCity(city ? city.trim().toLowerCase() : null)
+      } catch {
+        setUserGeoCity(null)
+      }
+    }
+
+    resolveUserCity()
+
+    return () => {
+      controller.abort()
+    }
+  }, [hasUserGeolocation, userCoords])
+
+  const getCityName = (value: string) => value.split(",")[0]?.trim().toLowerCase() ?? ""
+  const parseListingPrice = (value: string) => {
+    const match = value.match(/\$\s*(\d+(?:\.\d+)?)/)
+    if (!match) return Number.POSITIVE_INFINITY
+    return Number(match[1])
+  }
+  const parseListingDistance = (value: string) => {
+    const match = value.match(/(\d+(?:\.\d+)?)\s*km/i)
+    if (!match) return Number.POSITIVE_INFINITY
+    return Number(match[1])
+  }
+
+  const toRadians = (value: number) => (value * Math.PI) / 180
+  const getDistanceKm = (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const earthRadiusKm = 6371
+    const deltaLat = toRadians(to.lat - from.lat)
+    const deltaLng = toRadians(to.lng - from.lng)
+
+    const a =
+      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+      Math.cos(toRadians(from.lat)) *
+        Math.cos(toRadians(to.lat)) *
+        Math.sin(deltaLng / 2) *
+        Math.sin(deltaLng / 2)
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return earthRadiusKm * c
+  }
+
+  const searchedCity = getCityName(searchParams.get("where")?.trim() ?? "")
+
+  const getDistanceLabel = (listing: (typeof listings)[0]) => {
+    if (!hasUserGeolocation || !userCoords) return null
+    if (!searchedCity || !userGeoCity) return null
+    if (userGeoCity !== searchedCity) return null
+
+    const distanceKm = getDistanceKm(userCoords, { lat: listing.lat, lng: listing.lng })
+    if (!Number.isFinite(distanceKm)) return null
+
+    if (distanceKm < 1) return "<1 km away"
+    return `${distanceKm.toFixed(1)} km away`
+  }
+
+  const getFilterDistanceKm = (listing: (typeof listings)[0]) => {
+    if (searchCoords) {
+      return getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
+    }
+
+    if (hasUserGeolocation && userCoords) {
+      return getDistanceKm(userCoords, { lat: listing.lat, lng: listing.lng })
+    }
+
+    return parseListingDistance(listing.distance)
+  }
+
+  const filteredListings = listings
+    .filter((listing) => {
+      if (!whereQuery) return true
+      return [listing.title, listing.subtitle, listing.category, listing.city]
+        .join(" ")
+        .toLowerCase()
+        .includes(whereQuery)
+    })
+    .filter((listing) => {
+      if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
+      return parseListingPrice(listing.price) <= priceMaxParam
+    })
+    .filter((listing) => {
+      if (!Number.isFinite(distanceMaxParam) || distanceMaxParam < 0) return true
+
+      const distanceKm = getFilterDistanceKm(listing)
+      if (!Number.isFinite(distanceKm)) return false
+      return distanceKm <= distanceMaxParam
+    })
+
+  const isAvailableInSelectedSlot = (listing: (typeof listings)[0]) => {
+    if (!hasSelectedSlot || !selectedDateParam) return false
+
+    const availability = listingAvailability[listing.id]
+    if (!availability) return true
+
+    const selectedDay = selectedDateParam.getDay()
+    const requestedStart = selectedStartParam
+    const requestedEnd = selectedStartParam + selectedDurationParam
+
+    return (
+      availability.days.includes(selectedDay) &&
+      requestedStart >= availability.startHour &&
+      requestedEnd <= availability.endHour
+    )
+  }
+
+  const availableNowListings = hasSelectedSlot
+    ? filteredListings.filter(isAvailableInSelectedSlot)
+    : filteredListings
+  const availableOtherTimeListings = hasSelectedSlot
+    ? filteredListings.filter((listing) => !isAvailableInSelectedSlot(listing))
+    : []
 
   return (
-    <div className="grid grid-cols-2 gap-4 p-4 overflow-y-auto">
-      {listings.map((listing) => (
-        <ListingCard
-          key={listing.id}
-          listing={listing}
-          onClick={() => navigate(`/listing/${listing.id}`)}
-        />
-      ))}
+    <div className="p-4 overflow-y-auto space-y-4">
+      {hasSelectedSlot && (
+        <div className="rounded-xl border border-[#0f6130] bg-[#eaf8ef] p-3">
+          <p className="text-sm font-medium text-[#000000]">Available at your selected day & time</p>
+          <p className="text-xs text-[#6a6a6a] mt-1">Listings below are available first. Then we show options available at other times.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        {availableNowListings.map((listing) => (
+          <ListingCard
+            key={listing.id}
+            listing={listing}
+            distanceLabel={getDistanceLabel(listing)}
+            onClick={() =>
+              navigate(
+                `/listing/${listing.id}${currentSearch ? `?${currentSearch}` : ""}`
+              )
+            }
+          />
+        ))}
+      </div>
+
+      {hasSelectedSlot && availableOtherTimeListings.length > 0 && (
+        <>
+          <div className="rounded-xl border border-[#000000] bg-[#efefef] p-3">
+            <p className="text-sm font-medium text-[#000000]">Available at other times</p>
+            <p className="text-xs text-[#4a4a4a] mt-1">These listings are not available for your selected slot, but are available at a different time.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {availableOtherTimeListings.map((listing) => (
+              <ListingCard
+                key={listing.id}
+                listing={listing}
+                distanceLabel={getDistanceLabel(listing)}
+                onClick={() =>
+                  navigate(
+                    `/listing/${listing.id}${currentSearch ? `?${currentSearch}` : ""}`
+                  )
+                }
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
