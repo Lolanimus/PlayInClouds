@@ -200,6 +200,16 @@ function isSameDay(a: Date, b: Date) {
 }
 
 export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const nextBookableHourToday =
+    now.getMinutes() > 0 || now.getSeconds() > 0 || now.getMilliseconds() > 0
+      ? now.getHours() + 1
+      : now.getHours()
+  const hasBookableHourToday = nextBookableHourToday <= 23
+
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeField, setActiveField] = useState<"where" | "when" | "who" | null>(null)
   const [closingField, setClosingField] = useState<"where" | "when" | "who" | null>(null)
@@ -209,10 +219,14 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const [locationSuggestions, setLocationSuggestions] = useState<CitySuggestion[]>([])
   const [isLoadingLocations, setIsLoadingLocations] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() =>
+    hasBookableHourToday ? todayStart : tomorrowStart
+  )
   const [participantCount, setParticipantCount] = useState(1)
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 2)) // March 2026
-  const [startHour, setStartHour] = useState<number | null>(() => new Date().getHours())
+  const [currentMonth, setCurrentMonth] = useState(currentMonthStart)
+  const [startHour, setStartHour] = useState<number | null>(() =>
+    hasBookableHourToday ? nextBookableHourToday : 0
+  )
   const [duration, setDuration] = useState(1)
   const headerRef = useRef<HTMLDivElement>(null)
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
@@ -298,6 +312,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     const dateFromUrl = parseDateFromQuery(searchParams.get("date"))
     const startFromUrl = Number(searchParams.get("start"))
     const durationFromUrl = Number(searchParams.get("duration"))
+    const participantsFromUrl = Number(searchParams.get("participants"))
 
     if (whereFromUrl) {
       setLocation(whereFromUrl)
@@ -306,8 +321,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     }
 
     if (dateFromUrl) {
-      setSelectedDate(dateFromUrl)
-      setCurrentMonth(new Date(dateFromUrl.getFullYear(), dateFromUrl.getMonth(), 1))
+      if (dateFromUrl.getTime() >= todayStart.getTime()) {
+        setSelectedDate(dateFromUrl)
+        setCurrentMonth(new Date(dateFromUrl.getFullYear(), dateFromUrl.getMonth(), 1))
+      }
     }
 
     if (Number.isFinite(startFromUrl) && startFromUrl >= 0 && startFromUrl <= 23) {
@@ -316,6 +333,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
 
     if (Number.isFinite(durationFromUrl) && durationFromUrl >= 1 && durationFromUrl <= 12) {
       setDuration(durationFromUrl)
+    }
+
+    if (Number.isFinite(participantsFromUrl) && participantsFromUrl >= 1 && participantsFromUrl <= 10) {
+      setParticipantCount(participantsFromUrl)
     }
 
     didInitFromUrlRef.current = true
@@ -343,8 +364,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
       nextSearchParams.delete("duration")
     }
 
+    nextSearchParams.set("participants", String(participantCount))
+
     setSearchParams(nextSearchParams, { replace: true })
-  }, [location, locationSearch, searchParams, selectedDate, startHour, duration, setSearchParams])
+  }, [location, locationSearch, searchParams, selectedDate, startHour, duration, participantCount, setSearchParams])
 
   useEffect(() => {
     if (didAttemptIpAutoFillRef.current) return
@@ -485,7 +508,9 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   }, [locationSearch])
 
   const prevMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))
+    const previousMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+    if (previousMonth.getTime() < currentMonthStart.getTime()) return
+    setCurrentMonth(previousMonth)
   }
 
   const nextMonth = () => {
@@ -493,8 +518,13 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   }
 
   const monthName = currentMonth.toLocaleString("default", { month: "long", year: "numeric" })
+  const canGoPrevMonth = currentMonth.getTime() > currentMonthStart.getTime()
   const daysInMonth = getDaysInMonth(currentMonth.getFullYear(), currentMonth.getMonth())
   const firstDay = getFirstDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth())
+  const isSelectedDateToday = selectedDate ? isSameDay(selectedDate, now) : false
+  const timePickerMinHour = isSelectedDateToday
+    ? Math.min(nextBookableHourToday, 23)
+    : 0
 
   const calendarDays = []
   for (let i = 0; i < firstDay; i++) {
@@ -521,6 +551,16 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         day: "numeric",
       })
     : ""
+
+  useEffect(() => {
+    if (!selectedDate) return
+    const currentNow = new Date()
+    if (!isSameDay(selectedDate, currentNow)) return
+    if (startHour === null) return
+    if (startHour >= timePickerMinHour) return
+
+    setStartHour(Math.min(timePickerMinHour, 23))
+  }, [selectedDate, startHour, timePickerMinHour])
 
   const whenSummary =
     selectedDateLabel && selectedTimeLabel
@@ -778,7 +818,8 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                       <div className="flex gap-1">
                         <button
                           onClick={prevMonth}
-                          className="p-1 hover:bg-[#e9e9e9] rounded"
+                          disabled={!canGoPrevMonth}
+                          className="p-1 hover:bg-[#e9e9e9] rounded disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <ChevronLeft className="h-4 w-4 text-[#6a6a6a]" />
                         </button>
@@ -799,16 +840,44 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                       {calendarDays.map((day, idx) => (
                         <button
                           key={idx}
-                          disabled={!day}
+                          disabled={(() => {
+                            if (!day) return true
+
+                            const candidateDate = new Date(
+                              currentMonth.getFullYear(),
+                              currentMonth.getMonth(),
+                              day
+                            )
+
+                            const isPastDate = candidateDate.getTime() < todayStart.getTime()
+                            const isTodayWithNoTimes =
+                              isSameDay(candidateDate, now) && !hasBookableHourToday
+
+                            return isPastDate || isTodayWithNoTimes
+                          })()}
                           onClick={() => {
                             if (!day) return
-                            setSelectedDate(
-                              new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day)
+
+                            const candidateDate = new Date(
+                              currentMonth.getFullYear(),
+                              currentMonth.getMonth(),
+                              day
                             )
+
+                            if (candidateDate.getTime() < todayStart.getTime()) return
+                            if (isSameDay(candidateDate, now) && !hasBookableHourToday) return
+
+                            setSelectedDate(candidateDate)
+
+                            if (isSameDay(candidateDate, now) && startHour !== null && startHour < nextBookableHourToday) {
+                              setStartHour(Math.min(nextBookableHourToday, 23))
+                            }
                           }}
                           className={cn(
                             "h-8 w-8 text-sm rounded-full transition-colors",
-                            day ? "hover:bg-[#e9e9e9] text-[#000000]" : "invisible",
+                            day
+                              ? "hover:bg-[#e9e9e9] text-[#000000] disabled:text-[#c9c9c9] disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                              : "invisible",
                             day &&
                               selectedDate &&
                               isSameDay(
@@ -831,6 +900,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                         <p className="text-xs font-medium text-[#6a6a6a] mb-2 text-center">Start</p>
                         <IOSTimePicker
                           value={startHour}
+                          minHour={timePickerMinHour}
                           maxHour={23}
                           onChange={setStartHour}
                         />
