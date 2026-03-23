@@ -2,26 +2,26 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { ListingCard, listings } from "@/components/listings"
+import { useNavigate, useSearchParams } from "react-router"
+import { ListingCard, listingAvailability, listings } from "@/components/listings"
 
-const markers = [
-  { id: 1, lat: 40.7484, lng: -73.9967, title: "Rehearsal Space in Fashion District" },
-  { id: 2, lat: 40.7508, lng: -73.9935, title: "Rehearsal Space in Fashion District" },
-  { id: 3, lat: 40.7520, lng: -73.9890, title: "Creative Studio Space" },
-  { id: 4, lat: 40.7545, lng: -73.9845, title: "Cozy Meeting Room" },
-  { id: 5, lat: 40.7468, lng: -74.0014, title: "Industrial Loft Rehearsal Room" },
-  { id: 6, lat: 40.7489, lng: -73.9993, title: "Minimalist Creative Hub" },
-  { id: 7, lat: 40.7567, lng: -73.9778, title: "Sunlit Practice Studio" },
-  { id: 8, lat: 40.7196, lng: -74.0089, title: "Premium Meeting & Jam Space" },
-]
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
 function PriceMarker({
   price,
+  isActive,
+  isAvailableInSelectedSlot,
+  hasSelectedSlot,
   onClick,
 }: {
   price: string
+  isActive: boolean
+  isAvailableInSelectedSlot: boolean
+  hasSelectedSlot: boolean
   onClick: () => void
 }) {
+  const isOtherTime = hasSelectedSlot && !isAvailableInSelectedSlot
+
   return (
     <button
       type="button"
@@ -31,7 +31,17 @@ function PriceMarker({
       }}
       className={[
         "inline-flex items-center justify-center rounded-full border px-3 py-1 text-sm font-semibold shadow-sm transition-colors",
-        "border-[#d9d9d9] bg-[#f5f5f5] text-[#000000] hover:bg-[#f5f5f5]",
+        isActive
+          ? hasSelectedSlot
+            ? isAvailableInSelectedSlot
+              ? "border-[#0f6130] bg-[#0f6130] text-[#ffffff]"
+              : "border-[#000000] bg-[#000000] text-[#ffffff]"
+            : "border-[#000000] bg-[#000000] text-[#ffffff]"
+          : isOtherTime
+            ? "border-[#000000] bg-[#efefef] text-[#4a4a4a] hover:bg-[#e5e5e5]"
+            : hasSelectedSlot
+              ? "border-[#1f8f4a] bg-[#eaf8ef] text-[#0f6130] hover:bg-[#ddf2e5]"
+              : "border-[#ffffff] bg-[#f5f5f5] text-[#000000] hover:bg-[#f5f5f5]",
       ].join(" ")}
       aria-label={`Open listing ${price}`}
     >
@@ -40,16 +50,153 @@ function PriceMarker({
   )
 }
 
+const parseDateFromQuery = (value: string | null) => {
+  if (!value) return null
+  const [yearRaw, monthRaw, dayRaw] = value.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+
+  const date = new Date(year, month - 1, day)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+}
+
 export function MapView() {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const mapRef = useRef<HTMLDivElement>(null)
+  const mapInstanceRef = useRef<any>(null)
+  const markerEntriesRef = useRef<Array<{ id: number; price: string; root: Root }>>([])
+  const isTearingDownRef = useRef(false)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [activeListingId, setActiveListingId] = useState<number | null>(null)
+  const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const currentSearch = searchParams.toString()
+  const whereQuery = searchParams.get("where")?.trim().toLowerCase() ?? ""
+  const priceMaxParam = Number(searchParams.get("priceMax"))
+  const distanceMaxParam = Number(searchParams.get("distanceMax"))
+  const selectedDateParam = parseDateFromQuery(searchParams.get("date"))
+  const selectedStartParam = Number(searchParams.get("start"))
+  const selectedDurationParam = Number(searchParams.get("duration"))
+  const hasSelectedSlot =
+    selectedDateParam &&
+    Number.isFinite(selectedStartParam) &&
+    selectedStartParam >= 0 &&
+    selectedStartParam <= 23 &&
+    Number.isFinite(selectedDurationParam) &&
+    selectedDurationParam >= 1 &&
+    selectedDurationParam <= 12
+
+  const parseListingPrice = (value: string) => {
+    const match = value.match(/\$\s*(\d+(?:\.\d+)?)/)
+    if (!match) return Number.POSITIVE_INFINITY
+    return Number(match[1])
+  }
+
+  const parseListingDistance = (value: string) => {
+    const match = value.match(/(\d+(?:\.\d+)?)\s*km/i)
+    if (!match) return Number.POSITIVE_INFINITY
+    return Number(match[1])
+  }
+
+  const toRadians = (value: number) => (value * Math.PI) / 180
+  const getDistanceKm = (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const earthRadiusKm = 6371
+    const deltaLat = toRadians(to.lat - from.lat)
+    const deltaLng = toRadians(to.lng - from.lng)
+
+    const a =
+      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+      Math.cos(toRadians(from.lat)) *
+        Math.cos(toRadians(to.lat)) *
+        Math.sin(deltaLng / 2) *
+        Math.sin(deltaLng / 2)
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return earthRadiusKm * c
+  }
+
+  const filteredListings = listings
+    .filter((listing) => {
+      if (!whereQuery) return true
+      return [listing.title, listing.subtitle, listing.category, listing.city]
+        .join(" ")
+        .toLowerCase()
+        .includes(whereQuery)
+    })
+    .filter((listing) => {
+      if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
+      return parseListingPrice(listing.price) <= priceMaxParam
+    })
+    .filter((listing) => {
+      if (!Number.isFinite(distanceMaxParam) || distanceMaxParam < 0) return true
+
+      const distanceKm = searchCoords
+        ? getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
+        : parseListingDistance(listing.distance)
+
+      if (!Number.isFinite(distanceKm)) return false
+      return distanceKm <= distanceMaxParam
+    })
+
+  const isAvailableInSelectedSlot = (listingId: number) => {
+    if (!hasSelectedSlot || !selectedDateParam) return true
+
+    const availability = listingAvailability[listingId]
+    if (!availability) return true
+
+    const selectedDay = selectedDateParam.getDay()
+    const requestedStart = selectedStartParam
+    const requestedEnd = selectedStartParam + selectedDurationParam
+
+    return (
+      availability.days.includes(selectedDay) &&
+      requestedStart >= availability.startHour &&
+      requestedEnd <= availability.endHour
+    )
+  }
+
+  const availableNowListingIds = new Set(
+    filteredListings
+      .filter((listing) => isAvailableInSelectedSlot(listing.id))
+      .map((listing) => listing.id)
+  )
+  const filteredListingIds = new Set(filteredListings.map((listing) => listing.id))
+
+  const renderMarkerButtons = () => {
+    if (isTearingDownRef.current) return
+
+    markerEntriesRef.current.forEach(({ id, price, root }) => {
+      if (!filteredListingIds.has(id)) {
+        root.render(<></>)
+        return
+      }
+
+      const isAvailableNow = availableNowListingIds.has(id)
+
+      root.render(
+        <PriceMarker
+          price={price}
+          isActive={activeListingId === id}
+          isAvailableInSelectedSlot={isAvailableNow}
+          hasSelectedSlot={Boolean(hasSelectedSlot)}
+          onClick={() => setActiveListingId(id)}
+        />
+      )
+    })
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return
 
+    isTearingDownRef.current = false
+
     const markerRoots: Root[] = []
     const markerOverlays: any[] = []
+    markerEntriesRef.current = []
 
     const loadGoogleMaps = () => {
       if (window.google?.maps) {
@@ -111,14 +258,15 @@ export function MapView() {
           position: window.google.maps.ControlPosition.RIGHT_CENTER,
         },
       })
+      mapInstanceRef.current = map
 
-      markers.forEach((marker) => {
-        const listing = listings.find((item) => item.id === marker.id)
-        const price = listing?.price.split(" ")[0] ?? "$--"
+      listings.forEach((listing) => {
+        const price = listing.price.split(" ")[0] ?? "$--"
 
         const container = document.createElement("div")
         const root = createRoot(container)
         markerRoots.push(root)
+        markerEntriesRef.current.push({ id: listing.id, price, root })
 
         class PriceOverlay extends window.google.maps.OverlayView {
           private div: HTMLDivElement | null = null
@@ -135,7 +283,10 @@ export function MapView() {
             root.render(
               <PriceMarker
                 price={price}
-                onClick={() => setActiveListingId(marker.id)}
+                isActive={activeListingId === listing.id}
+                isAvailableInSelectedSlot={availableNowListingIds.has(listing.id)}
+                hasSelectedSlot={Boolean(hasSelectedSlot)}
+                onClick={() => setActiveListingId(listing.id)}
               />
             )
 
@@ -150,7 +301,7 @@ export function MapView() {
             if (!projection) return
 
             const position = projection.fromLatLngToDivPixel(
-              new window.google.maps.LatLng(marker.lat, marker.lng)
+              new window.google.maps.LatLng(listing.lat, listing.lng)
             )
 
             if (!position) return
@@ -180,23 +331,104 @@ export function MapView() {
     loadGoogleMaps()
 
     return () => {
+      isTearingDownRef.current = true
       markerOverlays.forEach((overlay) => overlay.setMap(null))
-      markerRoots.forEach((root) => root.unmount())
+      markerEntriesRef.current = []
+      mapInstanceRef.current = null
+
+      // Defer unmount to avoid unmounting a root during an in-progress React render.
+      setTimeout(() => {
+        markerRoots.forEach((root) => root.unmount())
+      }, 0)
     }
   }, [])
 
+  useEffect(() => {
+    const where = searchParams.get("where")?.trim()
+    if (!where) {
+      setSearchCoords(null)
+      return
+    }
+    if (!mapLoaded) return
+    if (!mapInstanceRef.current) return
+    if (!window.google?.maps || !GOOGLE_MAPS_API_KEY) return
+
+    const controller = new AbortController()
+
+    const centerMapToSearch = async () => {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(where)}&key=${GOOGLE_MAPS_API_KEY}`,
+          { signal: controller.signal }
+        )
+
+        if (!response.ok) return
+
+        const data = (await response.json()) as {
+          results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>
+        }
+
+        const lat = data.results?.[0]?.geometry?.location?.lat
+        const lng = data.results?.[0]?.geometry?.location?.lng
+
+        if (typeof lat !== "number" || typeof lng !== "number") return
+
+        setSearchCoords({ lat, lng })
+
+        const target = new window.google.maps.LatLng(lat, lng)
+        mapInstanceRef.current.panTo(target)
+        mapInstanceRef.current.setZoom(12)
+      } catch {
+        setSearchCoords(null)
+        // ignore geocode failures for map centering
+      }
+    }
+
+    centerMapToSearch()
+
+    return () => {
+      controller.abort()
+    }
+  }, [searchParams, mapLoaded])
+
+  useEffect(() => {
+    if (activeListingId && !filteredListingIds.has(activeListingId)) {
+      setActiveListingId(null)
+      return
+    }
+
+    renderMarkerButtons()
+  }, [searchParams, searchCoords, activeListingId])
+
   const activeListing = activeListingId
-    ? listings.find((listing) => listing.id === activeListingId) ?? null
+    ? filteredListings.find((listing) => listing.id === activeListingId) ?? null
     : null
 
   return (
     <div className="relative w-full h-full bg-[#e9e9e9] rounded-lg overflow-hidden">
       <div ref={mapRef} className="w-full h-full" />
+      {hasSelectedSlot && (
+        <div className="absolute right-4 top-4 z-20 rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-3 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-[#2a2a2a]">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#1f8f4a]" />
+            <span>Available at selected time</span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-[#2a2a2a]">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#9e9e9e]" />
+            <span>Available at other times</span>
+          </div>
+        </div>
+      )}
       {activeListing && (
         <div className="absolute left-4 top-4 z-20 w-[min(20rem,calc(100%-2rem))]">
           <ListingCard
             listing={activeListing}
             onClose={() => setActiveListingId(null)}
+            onClick={() =>
+              navigate(
+                `/listing/${activeListing.id}${currentSearch ? `?${currentSearch}` : ""}`
+              )
+            }
           />
         </div>
       )}
