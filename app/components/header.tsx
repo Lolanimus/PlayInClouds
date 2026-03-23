@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
+import { useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -33,6 +34,7 @@ type GoogleGeolocationResponse = {
 
 type GoogleGeocodeResponse = {
   results?: Array<{
+    formatted_address?: string
     address_components?: Array<{
       long_name?: string
       short_name?: string
@@ -168,6 +170,27 @@ function formatHour(hour: number) {
   return `${hour.toString().padStart(2, "0")}:00`
 }
 
+function formatDateForQuery(date: Date) {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, "0")
+  const day = `${date.getDate()}`.padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function parseDateFromQuery(value: string | null) {
+  if (!value) return null
+  const [yearRaw, monthRaw, dayRaw] = value.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+
+  const parsed = new Date(year, month - 1, day)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed
+}
+
 function isSameDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -177,6 +200,7 @@ function isSameDay(a: Date, b: Date) {
 }
 
 export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [activeField, setActiveField] = useState<"where" | "when" | "who" | null>(null)
   const [closingField, setClosingField] = useState<"where" | "when" | "who" | null>(null)
   const [isSearchSummary, setIsSearchSummary] = useState(false)
@@ -195,6 +219,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const closingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const pendingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const didAttemptIpAutoFillRef = useRef(false)
+  const didInitFromUrlRef = useRef(false)
 
   const transitionToField = useCallback((nextField: "where" | "when" | "who" | null) => {
     const currentField = activeFieldRef.current
@@ -268,6 +293,60 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   }, [transitionToField])
 
   useEffect(() => {
+    if (didInitFromUrlRef.current) return
+    const whereFromUrl = searchParams.get("where")?.trim()
+    const dateFromUrl = parseDateFromQuery(searchParams.get("date"))
+    const startFromUrl = Number(searchParams.get("start"))
+    const durationFromUrl = Number(searchParams.get("duration"))
+
+    if (whereFromUrl) {
+      setLocation(whereFromUrl)
+      setLocationSearch("")
+      setIsSearchSummary(true)
+    }
+
+    if (dateFromUrl) {
+      setSelectedDate(dateFromUrl)
+      setCurrentMonth(new Date(dateFromUrl.getFullYear(), dateFromUrl.getMonth(), 1))
+    }
+
+    if (Number.isFinite(startFromUrl) && startFromUrl >= 0 && startFromUrl <= 23) {
+      setStartHour(startFromUrl)
+    }
+
+    if (Number.isFinite(durationFromUrl) && durationFromUrl >= 1 && durationFromUrl <= 12) {
+      setDuration(durationFromUrl)
+    }
+
+    didInitFromUrlRef.current = true
+  }, [searchParams])
+
+  const applySearch = useCallback(() => {
+    const where = (location || locationSearch).trim()
+    const nextSearchParams = new URLSearchParams(searchParams)
+
+    if (where) {
+      nextSearchParams.set("where", where)
+      setLocation(where)
+      setLocationSearch("")
+    } else {
+      nextSearchParams.delete("where")
+    }
+
+    if (selectedDate && startHour !== null) {
+      nextSearchParams.set("date", formatDateForQuery(selectedDate))
+      nextSearchParams.set("start", String(startHour))
+      nextSearchParams.set("duration", String(duration))
+    } else {
+      nextSearchParams.delete("date")
+      nextSearchParams.delete("start")
+      nextSearchParams.delete("duration")
+    }
+
+    setSearchParams(nextSearchParams, { replace: true })
+  }, [location, locationSearch, searchParams, selectedDate, startHour, duration, setSearchParams])
+
+  useEffect(() => {
     if (didAttemptIpAutoFillRef.current) return
     if (location || locationSearch) return
 
@@ -308,21 +387,17 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         if (!geocodeResponse.ok) return
 
         const geocodeData = (await geocodeResponse.json()) as GoogleGeocodeResponse
-        const components = geocodeData.results?.[0]?.address_components ?? []
+        const formattedAddress = geocodeData.results?.[0]?.formatted_address?.trim()
 
-        const city = components.find((component) =>
-          (component.types ?? []).some((type) =>
-            type === "locality" || type === "postal_town" || type === "administrative_area_level_3"
-          )
-        )?.long_name?.trim()
+        if (!formattedAddress) return
 
-        const country = components.find((component) =>
-          (component.types ?? []).includes("country")
-        )?.short_name?.trim()
+        setLocation(formattedAddress)
+        setLocationSearch("")
+        setIsSearchSummary(true)
 
-        if (!city) return
-
-        setLocation(country ? `${city}, ${country}` : city)
+        const nextSearchParams = new URLSearchParams(searchParams)
+        nextSearchParams.set("where", formattedAddress)
+        setSearchParams(nextSearchParams, { replace: true })
       } catch {
         // ignore IP lookup errors; user can still type manually
       }
@@ -333,7 +408,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     return () => {
       controller.abort()
     }
-  }, [location, locationSearch])
+  }, [location, locationSearch, searchParams, setSearchParams])
 
   useEffect(() => {
     const trimmedQuery = locationSearch.trim()
@@ -377,6 +452,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         }
 
         const data = (await response.json()) as GoogleAutocompleteResponse
+
         const parsedSuggestions: CitySuggestion[] = (data.suggestions ?? [])
           .map((item) => item.placePrediction)
           .filter((prediction): prediction is NonNullable<typeof prediction> => Boolean(prediction?.placeId && prediction?.text?.text))
@@ -388,7 +464,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         const uniqueSuggestions = Array.from(
           new Map(parsedSuggestions.map((item) => [item.id, item])).values()
         ).slice(0, 6)
-
+        
         setLocationSuggestions(uniqueSuggestions)
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
@@ -632,6 +708,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                       return
                     }
 
+                    applySearch()
                     transitionToField(null)
                     setIsSearchSummary(true)
                   }}

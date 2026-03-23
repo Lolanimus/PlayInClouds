@@ -1,11 +1,14 @@
-import { Link, useParams } from "react-router"
+import { Link, useParams, useSearchParams } from "react-router"
 import { ChevronLeft, Heart, Share, Star } from "lucide-react"
 import { listings } from "@/components/listings"
 import { Button } from "@/components/ui/button"
 
 export default function ListingDetailsPage() {
+  const [searchParams] = useSearchParams()
   const { id } = useParams()
   const listing = listings.find((item) => item.id === Number(id))
+  const currentSearch = searchParams.toString()
+  const homeTo = currentSearch ? `/?${currentSearch}` : "/"
 
   if (!listing) {
     return (
@@ -15,7 +18,7 @@ export default function ListingDetailsPage() {
             <h1 className="text-2xl font-semibold text-[#000000]">Listing not found</h1>
             <p className="mt-2 text-sm text-[#6a6a6a]">The listing you are looking for does not exist.</p>
             <Link
-              to="/"
+              to={homeTo}
               className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#dadada] px-4 py-2 text-sm text-[#000000] hover:bg-[#f5f5f5]"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -33,7 +36,7 @@ export default function ListingDetailsPage() {
         <div className="mx-auto max-w-6xl">
         <div className="mb-4 flex items-center justify-between gap-4">
           <Link
-            to="/"
+            to={homeTo}
             className="inline-flex items-center gap-2 rounded-full border border-[#dadada] bg-[#ffffff] px-4 py-2 text-sm text-[#000000] hover:bg-[#e9e9e9]"
           >
             <ChevronLeft className="h-4 w-4" />
