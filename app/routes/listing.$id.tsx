@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react"
-import { Link, useParams, useSearchParams } from "react-router"
+import { Link, useParams } from "react-router"
 import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
-import { listingAvailability, listings } from "@/components/listings"
+import { listings } from "@/components/listings"
+import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import { Button } from "@/components/ui/button"
+import { useSearchStore } from "@/store/search-store"
 
 type DaySlot = {
   date: Date
@@ -62,13 +64,14 @@ function getDateKey(date: Date) {
 }
 
 export default function ListingDetailsPage() {
-  const [searchParams] = useSearchParams()
-  const participantsParamRaw = searchParams.get("participants")
-  const participantsFromUrl = Number(participantsParamRaw)
+  const selectedDateParam = useSearchStore((state) => state.date)
+  const selectedStartParam = useSearchStore((state) => state.startHour)
+  const selectedDurationParam = useSearchStore((state) => state.duration)
+  const participantsParam = useSearchStore((state) => state.participants)
   const [isBookingOpen, setIsBookingOpen] = useState(false)
   const [guestCount, setGuestCount] = useState(() =>
-    Number.isFinite(participantsFromUrl) && participantsFromUrl >= 1 && participantsFromUrl <= 20
-      ? participantsFromUrl
+    Number.isFinite(participantsParam) && participantsParam >= 1 && participantsParam <= 20
+      ? participantsParam
       : 1
   )
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null)
@@ -77,8 +80,7 @@ export default function ListingDetailsPage() {
   const now = new Date()
   const { id } = useParams()
   const listing = listings.find((item) => item.id === Number(id))
-  const currentSearch = searchParams.toString()
-  const homeTo = currentSearch ? `/?${currentSearch}` : "/"
+  const homeTo = "/"
 
   const upcomingDays = useMemo(() => getBookingWindowDays(1), [])
   const bookingWindowEndLabel = useMemo(() => {
@@ -88,11 +90,11 @@ export default function ListingDetailsPage() {
   }, [upcomingDays])
 
   useEffect(() => {
-    if (!Number.isFinite(participantsFromUrl)) return
-    if (participantsFromUrl < 1 || participantsFromUrl > 20) return
+    if (!Number.isFinite(participantsParam)) return
+    if (participantsParam < 1 || participantsParam > 20) return
 
-    setGuestCount(participantsFromUrl)
-  }, [participantsParamRaw, participantsFromUrl])
+    setGuestCount(participantsParam)
+  }, [participantsParam])
 
   if (!listing) {
     return (
@@ -123,18 +125,18 @@ export default function ListingDetailsPage() {
 
   const bookedSlotKeys = useMemo(() => {
     const booked = new Set<string>()
+    const listingBookedByWeekday = listingBookedHours[listing.id] ?? {}
 
     upcomingDays.forEach((day, dayIndex) => {
-      for (let hour = availability.startHour; hour < availability.endHour; hour += 1) {
-        if (!availability.days.includes(day.date.getDay())) continue
+      const weekday = day.date.getDay()
+      const bookedHoursForDay = listingBookedByWeekday[weekday] ?? []
 
-        // Deterministic mocked booking pattern so the UI consistently shows
-        // some slots as already rented.
-        const seed = (listing.id * 97 + (dayIndex + 1) * 31 + hour * 17) % 13
-        if (seed === 0 || seed === 4) {
+      bookedHoursForDay.forEach((hour) => {
+        if (!availability.days.includes(weekday)) return
+        if (hour < availability.startHour || hour >= availability.endHour) return
+
           booked.add(getSlotKey(dayIndex, hour))
-        }
-      }
+      })
     })
 
     return booked
@@ -177,23 +179,23 @@ export default function ListingDetailsPage() {
   const handleTimeCellClick = (day: DaySlot, dayIndex: number, hour: number) => {
     if (!canBookCell(day, dayIndex, hour)) return
 
-    if (selectedStartHour === null || selectedDayIndex === null || selectedEndHour !== null) {
+    if (selectedStartHour === null || selectedDayIndex === null) {
       setSelectedDayIndex(dayIndex)
       setSelectedStartHour(hour)
-      setSelectedEndHour(null)
+      setSelectedEndHour(hour + 1)
       return
     }
 
     if (dayIndex !== selectedDayIndex) {
       setSelectedDayIndex(dayIndex)
       setSelectedStartHour(hour)
-      setSelectedEndHour(null)
+      setSelectedEndHour(hour + 1)
       return
     }
 
     if (hour <= selectedStartHour) {
       setSelectedStartHour(hour)
-      setSelectedEndHour(null)
+      setSelectedEndHour(hour + 1)
       return
     }
 
@@ -205,7 +207,7 @@ export default function ListingDetailsPage() {
 
     if (!isContinuousAvailability) {
       setSelectedStartHour(hour)
-      setSelectedEndHour(null)
+      setSelectedEndHour(hour + 1)
       return
     }
 
@@ -219,13 +221,14 @@ export default function ListingDetailsPage() {
       : null
 
   useEffect(() => {
-    const dateParam = searchParams.get("date")
-    const startParam = Number(searchParams.get("start"))
-    const durationParam = Number(searchParams.get("duration"))
+    const dateParam = selectedDateParam ? getDateKey(selectedDateParam) : null
+    const startParam = selectedStartParam
+    const durationParam = selectedDurationParam
     let didApplyFromUrl = false
 
     if (
       dateParam &&
+      startParam !== null &&
       Number.isFinite(startParam) &&
       Number.isFinite(durationParam) &&
       startParam >= 0 &&
@@ -277,7 +280,7 @@ export default function ListingDetailsPage() {
         return
       }
     }
-  }, [searchParams, upcomingDays, bookedSlotKeys, selectedDayIndex, selectedStartHour, selectedEndHour])
+  }, [selectedDateParam, selectedStartParam, selectedDurationParam, upcomingDays, bookedSlotKeys, selectedDayIndex, selectedStartHour, selectedEndHour])
 
   return (
     <div className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5]">

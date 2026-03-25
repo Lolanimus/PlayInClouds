@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import { SlidersHorizontal, X } from "lucide-react"
-import { useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useSearchStore } from "@/store/search-store"
 
 const filters = [
   { id: "nearby", label: "Nearby", active: true },
@@ -62,7 +62,10 @@ export function FiltersModal({
   isOpen: boolean
   onClose: () => void
 }) {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const priceMax = useSearchStore((state) => state.priceMax)
+  const distanceMax = useSearchStore((state) => state.distanceMax)
+  const setPriceMax = useSearchStore((state) => state.setPriceMax)
+  const setDistanceMax = useSearchStore((state) => state.setDistanceMax)
   const MODAL_ANIMATION_MS = 200
   const [priceRange, setPriceRange] = useState([10, 200])
   const [distanceRange, setDistanceRange] = useState([0, 50])
@@ -77,22 +80,19 @@ export function FiltersModal({
   useEffect(() => {
     if (!isOpen) return
 
-    const priceMaxFromUrl = Number(searchParams.get("priceMax"))
-    const distanceMaxFromUrl = Number(searchParams.get("distanceMax"))
-
     setPriceRange([
       defaultPriceMin,
-      Number.isFinite(priceMaxFromUrl) && priceMaxFromUrl >= defaultPriceMin
-        ? priceMaxFromUrl
+      Number.isFinite(priceMax) && priceMax >= defaultPriceMin
+        ? priceMax
         : defaultPriceMax,
     ])
     setDistanceRange([
       0,
-      Number.isFinite(distanceMaxFromUrl) && distanceMaxFromUrl >= 0
-        ? distanceMaxFromUrl
+      Number.isFinite(distanceMax) && distanceMax >= 0
+        ? distanceMax
         : defaultDistanceMax,
     ])
-  }, [isOpen, searchParams])
+  }, [isOpen, priceMax, distanceMax])
 
   useEffect(() => {
     if (isOpen) {
@@ -121,18 +121,14 @@ export function FiltersModal({
   if (!isVisible) return null
 
   const applyFilters = () => {
-    const nextSearchParams = new URLSearchParams(searchParams)
-    nextSearchParams.set("priceMax", String(priceRange[1]))
-    nextSearchParams.set("distanceMax", String(distanceRange[1]))
-    setSearchParams(nextSearchParams, { replace: true })
+    setPriceMax(priceRange[1])
+    setDistanceMax(distanceRange[1])
     onClose()
   }
 
   const clearFilters = () => {
-    const nextSearchParams = new URLSearchParams(searchParams)
-    nextSearchParams.delete("priceMax")
-    nextSearchParams.delete("distanceMax")
-    setSearchParams(nextSearchParams, { replace: true })
+    setPriceMax(defaultPriceMax)
+    setDistanceMax(defaultDistanceMax)
     setPriceRange([defaultPriceMin, defaultPriceMax])
     setDistanceRange([0, defaultDistanceMax])
     onClose()

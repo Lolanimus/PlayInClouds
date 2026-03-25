@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { useNavigate, useSearchParams } from "react-router"
-import { ListingCard, listingAvailability, listings } from "@/components/listings"
+import { useNavigate } from "react-router"
+import { ListingCard, listings } from "@/components/listings"
+import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
+import { useSearchStore } from "@/store/search-store"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
@@ -50,22 +52,13 @@ function PriceMarker({
   )
 }
 
-const parseDateFromQuery = (value: string | null) => {
-  if (!value) return null
-  const [yearRaw, monthRaw, dayRaw] = value.split("-")
-  const year = Number(yearRaw)
-  const month = Number(monthRaw)
-  const day = Number(dayRaw)
-
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
-
-  const date = new Date(year, month - 1, day)
-  if (Number.isNaN(date.getTime())) return null
-  return date
-}
-
 export function MapView() {
-  const [searchParams] = useSearchParams()
+  const whereValue = useSearchStore((state) => state.where)
+  const priceMaxParam = useSearchStore((state) => state.priceMax)
+  const distanceMaxParam = useSearchStore((state) => state.distanceMax)
+  const selectedDateParam = useSearchStore((state) => state.date)
+  const selectedStartParam = useSearchStore((state) => state.startHour)
+  const selectedDurationParam = useSearchStore((state) => state.duration)
   const navigate = useNavigate()
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
@@ -74,19 +67,12 @@ export function MapView() {
   const [mapLoaded, setMapLoaded] = useState(false)
   const [activeListingId, setActiveListingId] = useState<number | null>(null)
   const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const currentSearch = searchParams.toString()
-  const whereQuery = searchParams.get("where")?.trim().toLowerCase() ?? ""
-  const priceMaxParam = Number(searchParams.get("priceMax"))
-  const distanceMaxParam = Number(searchParams.get("distanceMax"))
-  const selectedDateParam = parseDateFromQuery(searchParams.get("date"))
-  const selectedStartParam = Number(searchParams.get("start"))
-  const selectedDurationParam = Number(searchParams.get("duration"))
+  const whereQuery = whereValue.trim().toLowerCase()
   const hasSelectedSlot =
     selectedDateParam &&
-    Number.isFinite(selectedStartParam) &&
+    selectedStartParam !== null &&
     selectedStartParam >= 0 &&
     selectedStartParam <= 23 &&
-    Number.isFinite(selectedDurationParam) &&
     selectedDurationParam >= 1 &&
     selectedDurationParam <= 12
 
@@ -143,7 +129,7 @@ export function MapView() {
     })
 
   const isAvailableInSelectedSlot = (listingId: number) => {
-    if (!hasSelectedSlot || !selectedDateParam) return true
+    if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return true
 
     const availability = listingAvailability[listingId]
     if (!availability) return true
@@ -151,11 +137,17 @@ export function MapView() {
     const selectedDay = selectedDateParam.getDay()
     const requestedStart = selectedStartParam
     const requestedEnd = selectedStartParam + selectedDurationParam
+    const bookedHoursForDay = listingBookedHours[listingId]?.[selectedDay] ?? []
+    const hasBookedHourInRange = Array.from(
+      { length: selectedDurationParam },
+      (_, idx) => requestedStart + idx
+    ).some((hour) => bookedHoursForDay.includes(hour))
 
     return (
       availability.days.includes(selectedDay) &&
       requestedStart >= availability.startHour &&
-      requestedEnd <= availability.endHour
+      requestedEnd <= availability.endHour &&
+      !hasBookedHourInRange
     )
   }
 
@@ -344,7 +336,7 @@ export function MapView() {
   }, [])
 
   useEffect(() => {
-    const where = searchParams.get("where")?.trim()
+    const where = whereValue.trim()
     if (!where) {
       setSearchCoords(null)
       return
@@ -389,7 +381,7 @@ export function MapView() {
     return () => {
       controller.abort()
     }
-  }, [searchParams, mapLoaded])
+  }, [whereValue, mapLoaded])
 
   useEffect(() => {
     if (activeListingId && !filteredListingIds.has(activeListingId)) {
@@ -398,7 +390,7 @@ export function MapView() {
     }
 
     renderMarkerButtons()
-  }, [searchParams, searchCoords, activeListingId])
+  }, [whereValue, priceMaxParam, distanceMaxParam, selectedDateParam, selectedStartParam, selectedDurationParam, searchCoords, activeListingId])
 
   const activeListing = activeListingId
     ? filteredListings.find((listing) => listing.id === activeListingId) ?? null
@@ -424,11 +416,7 @@ export function MapView() {
           <ListingCard
             listing={activeListing}
             onClose={() => setActiveListingId(null)}
-            onClick={() =>
-              navigate(
-                `/listing/${activeListing.id}${currentSearch ? `?${currentSearch}` : ""}`
-              )
-            }
+            onClick={() => navigate(`/listing/${activeListing.id}`)}
           />
         </div>
       )}

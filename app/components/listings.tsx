@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
-import { useNavigate, useSearchParams } from "react-router"
+import { useNavigate } from "react-router"
+import { useSearchStore } from "@/store/search-store"
+import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
@@ -160,32 +162,6 @@ export const listings = [
   },
 ]
 
-export const listingAvailability: Record<number, { days: number[]; startHour: number; endHour: number }> = {
-  1: { days: [1, 2, 3, 4, 5], startHour: 9, endHour: 20 },
-  2: { days: [1, 2, 3, 4, 5], startHour: 8, endHour: 18 },
-  3: { days: [2, 3, 4, 5, 6], startHour: 10, endHour: 22 },
-  4: { days: [1, 2, 3, 4, 5, 6], startHour: 7, endHour: 17 },
-  5: { days: [3, 4, 5, 6, 0], startHour: 12, endHour: 23 },
-  6: { days: [1, 2, 3, 4, 5], startHour: 9, endHour: 21 },
-  7: { days: [0, 6], startHour: 8, endHour: 16 },
-  8: { days: [4, 5, 6], startHour: 14, endHour: 23 },
-  9: { days: [1, 2, 3, 4, 5], startHour: 9, endHour: 19 },
-}
-
-const parseDateFromQuery = (value: string | null) => {
-  if (!value) return null
-  const [yearRaw, monthRaw, dayRaw] = value.split("-")
-  const year = Number(yearRaw)
-  const month = Number(monthRaw)
-  const day = Number(dayRaw)
-
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
-
-  const date = new Date(year, month - 1, day)
-  if (Number.isNaN(date.getTime())) return null
-  return date
-}
-
 export function ListingCard({
   listing,
   onClose,
@@ -301,26 +277,24 @@ export function ListingCard({
 
 export function Listings() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const whereValue = useSearchStore((state) => state.where)
+  const priceMaxParam = useSearchStore((state) => state.priceMax)
+  const distanceMaxParam = useSearchStore((state) => state.distanceMax)
+  const selectedDateParam = useSearchStore((state) => state.date)
+  const selectedStartParam = useSearchStore((state) => state.startHour)
+  const selectedDurationParam = useSearchStore((state) => state.duration)
   const [hasUserGeolocation, setHasUserGeolocation] = useState(false)
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [userGeoCity, setUserGeoCity] = useState<string | null>(null)
   const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const whereQuery = searchParams.get("where")?.trim().toLowerCase() ?? ""
-  const priceMaxParam = Number(searchParams.get("priceMax"))
-  const distanceMaxParam = Number(searchParams.get("distanceMax"))
-  const selectedDateParam = parseDateFromQuery(searchParams.get("date"))
-  const selectedStartParam = Number(searchParams.get("start"))
-  const selectedDurationParam = Number(searchParams.get("duration"))
+  const whereQuery = whereValue.trim().toLowerCase()
   const hasSelectedSlot =
     selectedDateParam &&
-    Number.isFinite(selectedStartParam) &&
+    selectedStartParam !== null &&
     selectedStartParam >= 0 &&
     selectedStartParam <= 23 &&
-    Number.isFinite(selectedDurationParam) &&
     selectedDurationParam >= 1 &&
     selectedDurationParam <= 12
-  const currentSearch = searchParams.toString()
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return
@@ -351,7 +325,7 @@ export function Listings() {
   }, [])
 
   useEffect(() => {
-    const where = searchParams.get("where")?.trim()
+    const where = whereValue.trim()
     if (!where || !GOOGLE_MAPS_API_KEY) {
       setSearchCoords(null)
       return
@@ -394,7 +368,7 @@ export function Listings() {
     return () => {
       controller.abort()
     }
-  }, [searchParams])
+  }, [whereValue])
 
   useEffect(() => {
     if (!hasUserGeolocation || !userCoords) return
@@ -475,7 +449,7 @@ export function Listings() {
     return earthRadiusKm * c
   }
 
-  const searchedCity = getCityName(searchParams.get("where")?.trim() ?? "")
+  const searchedCity = getCityName(whereValue.trim())
 
   const getDistanceLabel = (listing: (typeof listings)[0]) => {
     if (!hasUserGeolocation || !userCoords) return null
@@ -522,7 +496,7 @@ export function Listings() {
     })
 
   const isAvailableInSelectedSlot = (listing: (typeof listings)[0]) => {
-    if (!hasSelectedSlot || !selectedDateParam) return false
+    if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return false
 
     const availability = listingAvailability[listing.id]
     if (!availability) return true
@@ -530,11 +504,17 @@ export function Listings() {
     const selectedDay = selectedDateParam.getDay()
     const requestedStart = selectedStartParam
     const requestedEnd = selectedStartParam + selectedDurationParam
+    const bookedHoursForDay = listingBookedHours[listing.id]?.[selectedDay] ?? []
+    const hasBookedHourInRange = Array.from(
+      { length: selectedDurationParam },
+      (_, idx) => requestedStart + idx
+    ).some((hour) => bookedHoursForDay.includes(hour))
 
     return (
       availability.days.includes(selectedDay) &&
       requestedStart >= availability.startHour &&
-      requestedEnd <= availability.endHour
+      requestedEnd <= availability.endHour &&
+      !hasBookedHourInRange
     )
   }
 
@@ -560,11 +540,7 @@ export function Listings() {
             key={listing.id}
             listing={listing}
             distanceLabel={getDistanceLabel(listing)}
-            onClick={() =>
-              navigate(
-                `/listing/${listing.id}${currentSearch ? `?${currentSearch}` : ""}`
-              )
-            }
+            onClick={() => navigate(`/listing/${listing.id}`)}
           />
         ))}
       </div>
@@ -581,11 +557,7 @@ export function Listings() {
                 key={listing.id}
                 listing={listing}
                 distanceLabel={getDistanceLabel(listing)}
-                onClick={() =>
-                  navigate(
-                    `/listing/${listing.id}${currentSearch ? `?${currentSearch}` : ""}`
-                  )
-                }
+                onClick={() => navigate(`/listing/${listing.id}`)}
               />
             ))}
           </div>

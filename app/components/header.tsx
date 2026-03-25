@@ -2,9 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
-import { useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useSearchStore } from "@/store/search-store"
 
 const HOUR_HEIGHT = 40
 const VISIBLE_ITEMS = 5
@@ -170,27 +170,6 @@ function formatHour(hour: number) {
   return `${hour.toString().padStart(2, "0")}:00`
 }
 
-function formatDateForQuery(date: Date) {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, "0")
-  const day = `${date.getDate()}`.padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
-function parseDateFromQuery(value: string | null) {
-  if (!value) return null
-  const [yearRaw, monthRaw, dayRaw] = value.split("-")
-  const year = Number(yearRaw)
-  const month = Number(monthRaw)
-  const day = Number(dayRaw)
-
-  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
-
-  const parsed = new Date(year, month - 1, day)
-  if (Number.isNaN(parsed.getTime())) return null
-  return parsed
-}
-
 function isSameDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -210,30 +189,37 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
       : now.getHours()
   const hasBookableHourToday = nextBookableHourToday <= 23
 
-  const [searchParams, setSearchParams] = useSearchParams()
+  const where = useSearchStore((state) => state.where)
+  const storeDate = useSearchStore((state) => state.date)
+  const storeStartHour = useSearchStore((state) => state.startHour)
+  const storeDuration = useSearchStore((state) => state.duration)
+  const storeParticipants = useSearchStore((state) => state.participants)
+  const setWhere = useSearchStore((state) => state.setWhere)
+  const setStoreDate = useSearchStore((state) => state.setDate)
+  const setStoreStartHour = useSearchStore((state) => state.setStartHour)
+  const setStoreDuration = useSearchStore((state) => state.setDuration)
+  const setStoreParticipants = useSearchStore((state) => state.setParticipants)
+
   const [activeField, setActiveField] = useState<"where" | "when" | "who" | null>(null)
   const [closingField, setClosingField] = useState<"where" | "when" | "who" | null>(null)
   const [isSearchSummary, setIsSearchSummary] = useState(false)
-  const [location, setLocation] = useState("")
+  const [location, setLocation] = useState(where)
   const [locationSearch, setLocationSearch] = useState("")
   const [locationSuggestions, setLocationSuggestions] = useState<CitySuggestion[]>([])
   const [isLoadingLocations, setIsLoadingLocations] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(() =>
-    hasBookableHourToday ? todayStart : tomorrowStart
-  )
-  const [participantCount, setParticipantCount] = useState(1)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(storeDate ?? (hasBookableHourToday ? todayStart : tomorrowStart))
+  const [participantCount, setParticipantCount] = useState(storeParticipants)
   const [currentMonth, setCurrentMonth] = useState(currentMonthStart)
-  const [startHour, setStartHour] = useState<number | null>(() =>
-    hasBookableHourToday ? nextBookableHourToday : 0
+  const [startHour, setStartHour] = useState<number | null>(
+    storeStartHour ?? (hasBookableHourToday ? nextBookableHourToday : 0)
   )
-  const [duration, setDuration] = useState(1)
+  const [duration, setDuration] = useState(storeDuration)
   const headerRef = useRef<HTMLDivElement>(null)
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const closingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const pendingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const didAttemptIpAutoFillRef = useRef(false)
-  const didInitFromUrlRef = useRef(false)
 
   const transitionToField = useCallback((nextField: "where" | "when" | "who" | null) => {
     const currentField = activeFieldRef.current
@@ -307,67 +293,26 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   }, [transitionToField])
 
   useEffect(() => {
-    if (didInitFromUrlRef.current) return
-    const whereFromUrl = searchParams.get("where")?.trim()
-    const dateFromUrl = parseDateFromQuery(searchParams.get("date"))
-    const startFromUrl = Number(searchParams.get("start"))
-    const durationFromUrl = Number(searchParams.get("duration"))
-    const participantsFromUrl = Number(searchParams.get("participants"))
-
-    if (whereFromUrl) {
-      setLocation(whereFromUrl)
-      setLocationSearch("")
-      setIsSearchSummary(true)
-    }
-
-    if (dateFromUrl) {
-      if (dateFromUrl.getTime() >= todayStart.getTime()) {
-        setSelectedDate(dateFromUrl)
-        setCurrentMonth(new Date(dateFromUrl.getFullYear(), dateFromUrl.getMonth(), 1))
-      }
-    }
-
-    if (Number.isFinite(startFromUrl) && startFromUrl >= 0 && startFromUrl <= 23) {
-      setStartHour(startFromUrl)
-    }
-
-    if (Number.isFinite(durationFromUrl) && durationFromUrl >= 1 && durationFromUrl <= 12) {
-      setDuration(durationFromUrl)
-    }
-
-    if (Number.isFinite(participantsFromUrl) && participantsFromUrl >= 1 && participantsFromUrl <= 10) {
-      setParticipantCount(participantsFromUrl)
-    }
-
-    didInitFromUrlRef.current = true
-  }, [searchParams])
+    setLocation(where)
+    setIsSearchSummary(Boolean(where))
+  }, [where])
 
   const applySearch = useCallback(() => {
-    const where = (location || locationSearch).trim()
-    const nextSearchParams = new URLSearchParams(searchParams)
+    const resolvedWhere = (location || locationSearch).trim()
 
-    if (where) {
-      nextSearchParams.set("where", where)
-      setLocation(where)
+    if (resolvedWhere) {
+      setWhere(resolvedWhere)
+      setLocation(resolvedWhere)
       setLocationSearch("")
     } else {
-      nextSearchParams.delete("where")
+      setWhere("")
     }
 
-    if (selectedDate && startHour !== null) {
-      nextSearchParams.set("date", formatDateForQuery(selectedDate))
-      nextSearchParams.set("start", String(startHour))
-      nextSearchParams.set("duration", String(duration))
-    } else {
-      nextSearchParams.delete("date")
-      nextSearchParams.delete("start")
-      nextSearchParams.delete("duration")
-    }
-
-    nextSearchParams.set("participants", String(participantCount))
-
-    setSearchParams(nextSearchParams, { replace: true })
-  }, [location, locationSearch, searchParams, selectedDate, startHour, duration, participantCount, setSearchParams])
+    setStoreDate(selectedDate)
+    setStoreStartHour(startHour)
+    setStoreDuration(duration)
+    setStoreParticipants(participantCount)
+  }, [location, locationSearch, selectedDate, startHour, duration, participantCount, setWhere, setStoreDate, setStoreStartHour, setStoreDuration, setStoreParticipants])
 
   useEffect(() => {
     if (didAttemptIpAutoFillRef.current) return
@@ -418,9 +363,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         setLocationSearch("")
         setIsSearchSummary(true)
 
-        const nextSearchParams = new URLSearchParams(searchParams)
-        nextSearchParams.set("where", formattedAddress)
-        setSearchParams(nextSearchParams, { replace: true })
+        setWhere(formattedAddress)
       } catch {
         // ignore IP lookup errors; user can still type manually
       }
@@ -431,7 +374,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     return () => {
       controller.abort()
     }
-  }, [location, locationSearch, searchParams, setSearchParams])
+  }, [location, locationSearch, setWhere])
 
   useEffect(() => {
     const trimmedQuery = locationSearch.trim()
