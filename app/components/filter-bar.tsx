@@ -25,7 +25,7 @@ export function FilterBar({ onOpenFilters }: { onOpenFilters?: () => void }) {
     <div className="flex items-center justify-between px-4 py-3 bg-[#ffffff] border-b border-[#e9e9e9]">
       <div className="flex items-center gap-2">
         {filters.map((filter) => (
-          <button
+          <Button
             key={filter.id}
             onClick={() => toggleFilter(filter.id)}
             className={cn(
@@ -34,9 +34,11 @@ export function FilterBar({ onOpenFilters }: { onOpenFilters?: () => void }) {
                 ? "bg-[#000000] text-[#ffffff]"
                 : "bg-[#f5f5f5] text-[#000000] hover:bg-[#e9e9e9]"
             )}
+            variant="ghost"
+            type="button"
           >
             {filter.label}
-          </button>
+          </Button>
         ))}
         <div className="w-8 h-8 rounded-full bg-[#e9e9e9] flex items-center justify-center ml-2">
           <span className="text-xs font-medium text-[#6a6a6a]">JD</span>
@@ -155,12 +157,15 @@ export function FiltersModal({
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-[#000000]">Filters</h2>
-          <button
+          <Button
             onClick={onClose}
-            className="p-2 hover:bg-[#f5f5f5] rounded-full transition-colors"
+            className="h-9 w-9 rounded-full p-0 hover:bg-[#f5f5f5]"
+            variant="ghost"
+            size="icon"
+            type="button"
           >
             <X className="h-5 w-5 text-[#6a6a6a]" />
-          </button>
+          </Button>
         </div>
 
         <div className="mb-6">
