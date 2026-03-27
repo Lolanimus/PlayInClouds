@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router"
 import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
 import { listings } from "@/components/listings"
@@ -77,6 +77,7 @@ export default function ListingDetailsPage() {
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null)
   const [selectedStartHour, setSelectedStartHour] = useState<number | null>(null)
   const [selectedEndHour, setSelectedEndHour] = useState<number | null>(null)
+  const hasInitializedSelectionRef = useRef(false)
   const now = new Date()
   const { id } = useParams()
   const listing = listings.find((item) => item.id === Number(id))
@@ -221,6 +222,8 @@ export default function ListingDetailsPage() {
       : null
 
   useEffect(() => {
+    if (hasInitializedSelectionRef.current) return
+
     const dateParam = selectedDateParam ? getDateKey(selectedDateParam) : null
     const startParam = selectedStartParam
     const durationParam = selectedDurationParam
@@ -256,8 +259,10 @@ export default function ListingDetailsPage() {
       }
     }
 
-    if (didApplyFromUrl) return
-    if (selectedDayIndex !== null || selectedStartHour !== null || selectedEndHour !== null) return
+    if (didApplyFromUrl) {
+      hasInitializedSelectionRef.current = true
+      return
+    }
 
     const currentNow = new Date()
     const todayKey = getDateKey(currentNow)
@@ -277,10 +282,13 @@ export default function ListingDetailsPage() {
         setSelectedDayIndex(dayIndex)
         setSelectedStartHour(hour)
         setSelectedEndHour(hour + 1)
+        hasInitializedSelectionRef.current = true
         return
       }
     }
-  }, [selectedDateParam, selectedStartParam, selectedDurationParam, upcomingDays, bookedSlotKeys, selectedDayIndex, selectedStartHour, selectedEndHour])
+
+    hasInitializedSelectionRef.current = true
+  }, [selectedDateParam, selectedStartParam, selectedDurationParam, upcomingDays, bookedSlotKeys])
 
   return (
     <div className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5]">
