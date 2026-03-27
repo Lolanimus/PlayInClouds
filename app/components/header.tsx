@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Link, useNavigate } from "react-router"
+import { Link, useLocation, useNavigate } from "react-router"
 import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -183,6 +183,7 @@ function isSameDay(a: Date, b: Date) {
 
 export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const navigate = useNavigate()
+  const routeLocation = useLocation()
   const user = useUser()
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -553,11 +554,13 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
       <div className="relative flex items-center justify-between pl-8">
         {/* Logo */}
         <div className="w-30 flex-shrink-0">
-          <img
-            src="/AirDrums_Logo.svg"
-            alt="AirDrums"
-            className="size-full"
-          />
+          <Link to="/" aria-label="Go to home page" className="block">
+            <img
+              src="/AirDrums_Logo.svg"
+              alt="AirDrums"
+              className="size-full"
+            />
+          </Link>
         </div>
 
         {/* Search Bar */}
@@ -704,6 +707,15 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                   size="icon"
                   onClick={(e) => {
                     e.stopPropagation()
+
+                    if (routeLocation.pathname !== "/") {
+                      applySearch()
+                      transitionToField(null)
+                      setIsSearchSummary(true)
+                      navigate("/")
+                      return
+                    }
+
                     if (isSearchSummary && activeFieldRef.current === null) {
                       setIsSearchSummary(false)
                       transitionToField("where")
