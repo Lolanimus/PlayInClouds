@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Link } from "react-router"
+import { Link, useSearchParams } from "react-router"
 import { signup } from "~/api/auth"
 import { queryClient } from "~/queries/queries"
 import { errorStore, useError, useErrorActions } from "~/store/error_state"
@@ -28,6 +28,7 @@ import {
 } from "~/components/ui/input-group"
 
 export default function SignupPage() {
+  const [searchParams] = useSearchParams()
   const [formData, setFormData] = useState<UserSignup>({
     email: "",
     first_name: "",
@@ -40,6 +41,8 @@ export default function SignupPage() {
   const [isHydrated, setIsHydrated] = useState(false)
   const error = useError();
   const { setError } = useErrorActions();
+  const redirectParam = searchParams.get("redirect")
+  const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : null
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -182,7 +185,10 @@ export default function SignupPage() {
         </CardContent>
 
         <CardFooter className="justify-center text-sm text-muted-foreground">
-          <Link className="underline-offset-4 hover:underline" to="/login">
+          <Link
+            className="underline-offset-4 hover:underline"
+            to={safeRedirect ? `/login?redirect=${encodeURIComponent(safeRedirect)}` : "/login"}
+          >
             Already have an account? Login
           </Link>
         </CardFooter>

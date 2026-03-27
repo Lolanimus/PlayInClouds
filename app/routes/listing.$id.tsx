@@ -1,10 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
+import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { listings } from "@/components/listings"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import { Button } from "@/components/ui/button"
 import { useSearchStore } from "@/store/search-store"
+import { useUser } from "@/store/user_state"
 
 type DaySlot = {
   date: Date
@@ -65,11 +67,13 @@ function getDateKey(date: Date) {
 
 export default function ListingDetailsPage() {
   const navigate = useNavigate()
+  const user = useUser()
   const selectedDateParam = useSearchStore((state) => state.date)
   const selectedStartParam = useSearchStore((state) => state.startHour)
   const selectedDurationParam = useSearchStore((state) => state.duration)
   const participantsParam = useSearchStore((state) => state.participants)
   const [isBookingOpen, setIsBookingOpen] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [guestCount, setGuestCount] = useState(() =>
     Number.isFinite(participantsParam) && participantsParam >= 1 && participantsParam <= 20
       ? participantsParam
@@ -234,7 +238,14 @@ export default function ListingDetailsPage() {
       guests: String(guestCount),
     })
 
-    navigate(`/payment?${params.toString()}`)
+    const target = `/payment?${params.toString()}`
+
+    if (!user) {
+      setIsAuthModalOpen(true)
+      return
+    }
+
+    navigate(target)
   }
 
   useEffect(() => {
@@ -537,6 +548,45 @@ export default function ListingDetailsPage() {
           </div>
         </div>
       )}
+
+      <AuthRequiredModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLogin={() => {
+          if (!listing || !selectedDay || selectedStartHour === null || selectedEndHour === null) {
+            navigate(`/login?redirect=${encodeURIComponent(`/listing/${listing?.id ?? ""}`)}`)
+            return
+          }
+
+          const params = new URLSearchParams({
+            listingId: String(listing.id),
+            date: getDateKey(selectedDay.date),
+            start: String(selectedStartHour),
+            end: String(selectedEndHour),
+            guests: String(guestCount),
+          })
+
+          navigate(`/login?redirect=${encodeURIComponent(`/payment?${params.toString()}`)}`)
+        }}
+        onSignup={() => {
+          if (!listing || !selectedDay || selectedStartHour === null || selectedEndHour === null) {
+            navigate(`/signup?redirect=${encodeURIComponent(`/listing/${listing?.id ?? ""}`)}`)
+            return
+          }
+
+          const params = new URLSearchParams({
+            listingId: String(listing.id),
+            date: getDateKey(selectedDay.date),
+            start: String(selectedStartHour),
+            end: String(selectedEndHour),
+            guests: String(guestCount),
+          })
+
+          navigate(`/signup?redirect=${encodeURIComponent(`/payment?${params.toString()}`)}`)
+        }}
+        title="Login required to continue"
+        description="Please log in or sign up to continue to checkout."
+      />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router"
+import { Link, useNavigate, useSearchParams } from "react-router"
 import { Button } from "~/components/ui/button"
 import { login } from "~/api/auth"
 import { queryClient } from "~/queries/queries"
@@ -24,7 +24,11 @@ import { Input } from "~/components/ui/input"
 
 export default function AuthPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const user = useUser()
+    const redirectParam = searchParams.get("redirect")
+    const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : "/dashboard"
+
   const [formData, setFormData] = useState<UserLogin>({
     email: "",
     password: "",
@@ -54,9 +58,9 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (user) {
-      navigate("/dashboard", { replace: true })
+      navigate(safeRedirect, { replace: true })
     }
-  }, [user, navigate])
+  }, [user, navigate, safeRedirect])
 
   return (
     <main className="min-h-[calc(100vh-5.5rem)] bg-muted/40 px-4 py-10">
@@ -112,7 +116,10 @@ export default function AuthPage() {
         </CardContent>
 
         <CardFooter className="flex-col items-center gap-1 pt-4 text-sm text-muted-foreground">
-          <Link className="underline-offset-4 hover:underline" to="/signup">
+          <Link
+            className="underline-offset-4 hover:underline"
+            to={safeRedirect !== "/dashboard" ? `/signup?redirect=${encodeURIComponent(safeRedirect)}` : "/signup"}
+          >
             Don’t have an account? Sign up
           </Link>
           <Link className="underline-offset-4 hover:underline" to="/">

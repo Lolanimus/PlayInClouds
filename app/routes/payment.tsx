@@ -1,7 +1,9 @@
+import { useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { ChevronLeft, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { listings } from "@/components/listings"
 import { useUser } from "@/store/user_state"
 import { useReservationsActions } from "@/store/reservations_state"
@@ -28,6 +30,7 @@ function formatDateRange(dateKey: string, start: number, end: number) {
 export default function PaymentPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const { addReservation } = useReservationsActions()
   const [params] = useSearchParams()
   const listingId = Number(params.get("listingId"))
@@ -68,7 +71,10 @@ export default function PaymentPage() {
   const total = Number((subtotal + processingFee).toFixed(2))
 
   const handleBuy = () => {
-    if (!user) return
+    if (!user) {
+      setIsAuthModalOpen(true)
+      return
+    }
 
     addReservation({
       id: `${user.id}-${listing.id}-${Date.now()}`,
@@ -160,19 +166,29 @@ export default function PaymentPage() {
                 </Button>
                 <Button
                   onClick={handleBuy}
-                  disabled={!user}
-                  className="h-11 rounded-xl bg-[#000000] px-8 text-[#ffffff] hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:bg-[#bdbdbd]"
+                  className="h-11 rounded-xl bg-[#000000] px-8 text-[#ffffff] hover:bg-[#2a2a2a]"
                 >
                   Buy now · ${total.toFixed(2)} CAD
                 </Button>
               </div>
-              {!user && (
-                <p className="mt-3 text-sm text-[#6a6a6a]">Please log in to complete your reservation.</p>
-              )}
+              {!user && <p className="mt-3 text-sm text-[#6a6a6a]">You’ll need to log in before purchase.</p>}
             </CardContent>
           </Card>
         </main>
       </div>
+
+      <AuthRequiredModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLogin={() => {
+          navigate(`/login?redirect=${encodeURIComponent(`/payment?${params.toString()}`)}`)
+        }}
+        onSignup={() => {
+          navigate(`/signup?redirect=${encodeURIComponent(`/payment?${params.toString()}`)}`)
+        }}
+        title="Log in to complete purchase"
+        description="This action requires an account. Log in or sign up to complete your reservation."
+      />
     </div>
   )
 }
