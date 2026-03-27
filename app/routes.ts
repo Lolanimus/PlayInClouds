@@ -5,5 +5,6 @@ export default [
 	route("login", "routes/auth.tsx"),
 	route("signup", "routes/signup.tsx"),
 	route("dashboard", "routes/dashboard.tsx"),
+	route("payment", "routes/payment.tsx"),
 	route("listing/:id", "routes/listing.$id.tsx"),
 ] satisfies RouteConfig;

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useParams } from "react-router"
+import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
 import { listings } from "@/components/listings"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
@@ -64,6 +64,7 @@ function getDateKey(date: Date) {
 }
 
 export default function ListingDetailsPage() {
+  const navigate = useNavigate()
   const selectedDateParam = useSearchStore((state) => state.date)
   const selectedStartParam = useSearchStore((state) => state.startHour)
   const selectedDurationParam = useSearchStore((state) => state.duration)
@@ -220,6 +221,21 @@ export default function ListingDetailsPage() {
     selectedDay && selectedStartHour !== null && selectedEndHour !== null
       ? `${selectedDay.dayLabel}, ${selectedDay.monthDayLabel} · ${formatHourLabel(selectedStartHour)}–${formatHourLabel(selectedEndHour)}`
       : null
+
+  const handleContinueToPayment = () => {
+    if (!listing || !selectedDay) return
+    if (selectedStartHour === null || selectedEndHour === null) return
+
+    const params = new URLSearchParams({
+      listingId: String(listing.id),
+      date: getDateKey(selectedDay.date),
+      start: String(selectedStartHour),
+      end: String(selectedEndHour),
+      guests: String(guestCount),
+    })
+
+    navigate(`/payment?${params.toString()}`)
+  }
 
   useEffect(() => {
     if (hasInitializedSelectionRef.current) return
@@ -510,6 +526,7 @@ export default function ListingDetailsPage() {
 
                   <Button
                     disabled={!selectedSlotLabel}
+                    onClick={handleContinueToPayment}
                     className="h-10 rounded-lg bg-[#000000] px-6 text-[#ffffff] hover:bg-[#333333] disabled:cursor-not-allowed disabled:bg-[#bdbdbd]"
                   >
                     Continue
