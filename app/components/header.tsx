@@ -1,10 +1,13 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { Link, useNavigate } from "react-router"
 import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { signout } from "@/api/auth"
 import { useSearchStore } from "@/store/search-store"
+import { useUser } from "@/store/user_state"
 
 const HOUR_HEIGHT = 40
 const VISIBLE_ITEMS = 5
@@ -179,6 +182,8 @@ function isSameDay(a: Date, b: Date) {
 }
 
 export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
+  const navigate = useNavigate()
+  const user = useUser()
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
@@ -215,7 +220,9 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     storeStartHour ?? (hasBookableHourToday ? nextBookableHourToday : 0)
   )
   const [duration, setDuration] = useState(storeDuration)
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
+  const userMenuRef = useRef<HTMLDivElement>(null)
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const closingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const pendingFieldRef = useRef<"where" | "when" | "who" | null>(null)
@@ -270,10 +277,22 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     transitionToField(null)
   }
 
+  const handleLogout = async () => {
+    await signout()
+    setIsUserMenuOpen(false)
+    navigate("/")
+  }
+
   const handleClickOutside = (e: MouseEvent) => {
     const currentActiveField = activeFieldRef.current
-    if (headerRef.current && !headerRef.current.contains(e.target as Node) && currentActiveField) {
+    const target = e.target as Node
+
+    if (headerRef.current && !headerRef.current.contains(target) && currentActiveField) {
       transitionToField(null)
+    }
+
+    if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+      setIsUserMenuOpen(false)
     }
   }
 
@@ -930,13 +949,57 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
           >
             Become a Host
           </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-10 w-10 text-[#ffffff] hover:bg-[#ffffff]/10 flex-shrink-0"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+          <div ref={userMenuRef} className="relative">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsUserMenuOpen((prev) => !prev)}
+              className="h-10 w-10 text-[#ffffff] hover:bg-[#ffffff]/10 flex-shrink-0"
+              aria-label="Open user menu"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+
+            {isUserMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 min-w-36 rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-1 shadow-xl z-[90]">
+                {user ? (
+                  <>
+                    <Link
+                      to="/dashboard"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Dashboard
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleLogout()}
+                      className="block w-full rounded-lg px-4 py-2 text-left text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Log out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <a
+                      href="/login"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Login
+                    </a>
+                    <a
+                      href="/signup"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Sign up
+                    </a>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
