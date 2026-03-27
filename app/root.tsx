@@ -11,6 +11,7 @@ import { useState } from "react";
 import type { Route } from "./+types/root";
 import { Header } from "./components/header";
 import { FiltersModal } from "./components/filter-bar";
+import { useAuth } from "./hooks/useAuth";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -48,6 +49,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  useAuth();
 
   return (
     <>
