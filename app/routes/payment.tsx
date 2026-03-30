@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { listings } from "@/components/listings"
+import { useGetListing } from "@/hooks/useListings"
+import { useHostListings } from "@/store/host_listings_state"
 import { useUser } from "@/store/user_state"
 import { useReservationsActions } from "@/store/reservations_state"
+import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 function parseHourlyPrice(price: string) {
   const match = price.match(/\$\s*(\d+(?:\.\d+)?)/)
@@ -30,16 +33,54 @@ function formatDateRange(dateKey: string, start: number, end: number) {
 export default function PaymentPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const hostListings = useHostListings()
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const { addReservation } = useReservationsActions()
   const [params] = useSearchParams()
-  const listingId = Number(params.get("listingId"))
+  const listingIdParam = params.get("listingId") ?? ""
+  const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(listingIdParam)
+  const listingQuery = useGetListing(isUuidId ? listingIdParam : undefined)
   const dateKey = params.get("date") ?? ""
   const startHour = Number(params.get("start"))
   const endHour = Number(params.get("end"))
   const guests = Number(params.get("guests") ?? "1")
 
-  const listing = listings.find((item) => item.id === listingId)
+  const localListing = [...hostListings, ...listings].find((item) => String(item.id) === listingIdParam)
+  const remoteListing = listingQuery.data as ApiListing | null
+
+  const listing = remoteListing
+    ? {
+        id: remoteListing.id,
+        title: remoteListing.title,
+        subtitle: remoteListing.subtitle,
+        images: remoteListing.images ?? [],
+        rating: remoteListing.average_rating,
+        reviews: remoteListing.review_count,
+        priceNumber: remoteListing.price,
+      }
+    : localListing
+      ? {
+          id: localListing.id,
+          title: localListing.title,
+          subtitle: localListing.subtitle,
+          images: localListing.images,
+          rating: localListing.rating,
+          reviews: localListing.reviews,
+          priceNumber: parseHourlyPrice(localListing.price),
+        }
+      : null
+
+  if (isUuidId && listingQuery.isLoading) {
+    return (
+      <div className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5] px-4 py-8 md:px-8">
+        <Card className="mx-auto max-w-4xl border-[#e9e9e9] bg-[#ffffff]">
+          <CardHeader>
+            <CardTitle className="text-2xl text-[#000000]">Loading payment details...</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+    )
+  }
 
   if (!listing || !dateKey || !Number.isFinite(startHour) || !Number.isFinite(endHour) || endHour <= startHour) {
     return (
@@ -65,7 +106,7 @@ export default function PaymentPage() {
   }
 
   const hours = endHour - startHour
-  const hourlyRate = parseHourlyPrice(listing.price)
+  const hourlyRate = listing.priceNumber
   const subtotal = Number((hourlyRate * hours).toFixed(2))
   const processingFee = Number((subtotal * 0.075).toFixed(2))
   const total = Number((subtotal + processingFee).toFixed(2))
@@ -119,7 +160,7 @@ export default function PaymentPage() {
 
             <CardContent className="space-y-0 px-0">
               <div className="flex gap-3">
-                <img src={listing.images[0]} alt={listing.title} className="h-20 w-20 rounded-xl object-cover" />
+                <img src={listing.images[0] ?? ""} alt={listing.title} className="h-20 w-20 rounded-xl object-cover" />
                 <div className="min-w-0">
                   <p className="truncate text-2xl font-semibold text-[#000000]">{listing.title}</p>
                   <p className="truncate text-sm text-[#6a6a6a]">{listing.subtitle}</p>

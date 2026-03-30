@@ -3,7 +3,7 @@ import { create } from "zustand"
 export type ReservationRecord = {
   id: string
   userId: string
-  listingId: number
+  listingId: string | number
   listingTitle: string
   listingSubtitle: string
   listingImage: string
