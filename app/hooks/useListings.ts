@@ -1,5 +1,5 @@
 import * as listingEvents from "@/db_rpc/listings_rpc";
-import { uploadFile, getPublicUrl } from "@/api/blob";
+import { deleteFile, uploadFile, getPublicUrl } from "@/api/blob";
 import { queries } from "@/queries/queries";
 import supabase from "@/utils/supabase";
 import {
@@ -23,6 +23,41 @@ export const useListings = (opts?: {
   });
 
   return query;
+};
+
+const extractStorageObjectName = (value: string, bucket = "images"): string | null => {
+  if (!value?.trim()) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  const patterns = [
+    `/storage/v1/object/public/${bucket}/`,
+    `/object/public/${bucket}/`,
+    `/storage/v1/object/sign/${bucket}/`,
+    `/object/sign/${bucket}/`,
+  ];
+
+  for (const pattern of patterns) {
+    const idx = trimmed.indexOf(pattern);
+    if (idx >= 0) {
+      const objectWithQuery = trimmed.slice(idx + pattern.length);
+      const objectName = objectWithQuery.split("?")[0]?.split("#")[0] ?? "";
+      return objectName || null;
+    }
+  }
+
+  return null;
+};
+
+const cleanupStorageImages = async (images: string[]) => {
+  const objectNames = Array.from(
+    new Set(images.map((img) => extractStorageObjectName(img)).filter((v): v is string => Boolean(v)))
+  );
+
+  await Promise.all(objectNames.map((name) => deleteFile("images", name)));
 };
 
 export const useInfiniteListings = (
@@ -122,6 +157,9 @@ export const useUpdateListing = () => {
     mutationFn: async (args: any) => {
       console.info("Updating listing", args);
 
+      const previousListing = await listingEvents.getListing(args.p_id as string);
+      const previousImages = ((previousListing as any)?.images ?? []) as string[];
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -149,7 +187,17 @@ export const useUpdateListing = () => {
         }
         args.p_images = uploadedImageUrls;
       }
-      return await listingEvents.updateListing(args);
+
+      const nextImages = (args.p_images ?? []) as string[];
+      const removedImages = previousImages.filter((img) => !nextImages.includes(img));
+
+      const updated = await listingEvents.updateListing(args);
+
+      if (updated && removedImages.length > 0) {
+        await cleanupStorageImages(removedImages);
+      }
+
+      return updated;
     },
     onSuccess: () => {
       console.info("Listing updated, invalidating listings queries");
@@ -167,7 +215,17 @@ export const useDeleteListing = () => {
   return useMutation({
     mutationFn: async (p_id: string) => {
       console.info("Deleting listing", p_id);
-      return await listingEvents.deleteListing(p_id);
+
+      const listing = await listingEvents.getListing(p_id);
+      const listingImages = ((listing as any)?.images ?? []) as string[];
+
+      const deleted = await listingEvents.deleteListing(p_id);
+
+      if (deleted && listingImages.length > 0) {
+        await cleanupStorageImages(listingImages);
+      }
+
+      return deleted;
     },
     onSuccess: () => {
       console.info("Listing deleted, invalidating listings queries");
