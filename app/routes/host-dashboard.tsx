@@ -20,14 +20,15 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
+import { useDeleteListing, useListings } from "~/hooks/useListings"
 import { useUser } from "~/store/user_state"
-import { useHostListings, useHostListingsActions } from "~/store/host_listings_state"
+import type { Listing as ApiListing } from "~/types/custom/api.types"
 
 export default function HostDashboardPage() {
   const navigate = useNavigate()
   const user = useUser()
-  const listings = useHostListings()
-  const { removeListing } = useHostListingsActions()
+  const listingsQuery = useListings()
+  const deleteListingMutation = useDeleteListing()
 
   useEffect(() => {
     if (!user) {
@@ -37,16 +38,19 @@ export default function HostDashboardPage() {
 
   if (!user) return null
 
-  const handleDeleteListing = (listingId: number) => {
+  const allListings = ((listingsQuery.data as ApiListing[] | null) ?? [])
+  const listings = allListings.filter((listing) => listing.owner_id === user.id)
+
+  const handleDeleteListing = (listingId: string) => {
     if (confirm("Are you sure you want to delete this listing?")) {
-      removeListing(listingId)
+      deleteListingMutation.mutate(listingId)
     }
   }
 
   const totalPhotos = listings.reduce((acc, listing) => acc + listing.images.length, 0)
   const averageRating =
     listings.length > 0
-      ? (listings.reduce((acc, listing) => acc + listing.rating, 0) / listings.length).toFixed(1)
+      ? (listings.reduce((acc, listing) => acc + listing.average_rating, 0) / listings.length).toFixed(1)
       : "0.0"
 
   return (
@@ -73,6 +77,18 @@ export default function HostDashboardPage() {
             </CardHeader>
 
             <CardContent className="space-y-6 p-6" id="host-listings">
+              {listingsQuery.isLoading && (
+                <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3 text-sm text-[#6a6a6a]">
+                  Loading your listings...
+                </div>
+              )}
+
+              {listingsQuery.isError && (
+                <div className="rounded-xl border border-[#f1c3bd] bg-[#fff3f2] px-4 py-3 text-sm text-[#b42318]">
+                  Could not load listings. Please refresh.
+                </div>
+              )}
+
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
                   <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Active listings</p>
@@ -157,15 +173,15 @@ export default function HostDashboardPage() {
                           <div className="grid gap-3 sm:grid-cols-3">
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
                               <p className="text-xs text-[#6a6a6a]">Rate</p>
-                              <p className="font-semibold text-[#000000]">{listing.price}</p>
+                              <p className="font-semibold text-[#000000]">${listing.price} CAD/hour</p>
                             </div>
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
                               <p className="text-xs text-[#6a6a6a]">Distance</p>
-                              <p className="font-semibold text-[#000000]">{listing.distance}</p>
+                              <p className="font-semibold text-[#000000]">—</p>
                             </div>
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
                               <p className="text-xs text-[#6a6a6a]">Rating</p>
-                              <p className="font-semibold text-[#000000]">{listing.rating} ⭐</p>
+                              <p className="font-semibold text-[#000000]">{listing.average_rating} ⭐</p>
                             </div>
                           </div>
 
@@ -189,6 +205,7 @@ export default function HostDashboardPage() {
                             <Button
                               variant="outline"
                               onClick={() => handleDeleteListing(listing.id)}
+                              disabled={deleteListingMutation.isPending}
                               className="border-[#e74c3c] text-[#e74c3c] hover:bg-[#fff3f1]"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
