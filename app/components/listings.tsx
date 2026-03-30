@@ -4,16 +4,34 @@ import { useEffect, useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
 import { useNavigate } from "react-router"
 import { useSearchStore } from "@/store/search-store"
+import { useHostListings } from "@/store/host_listings_state"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
-export const listings = [
+export type ListingItem = {
+  id: number
+  lat: number
+  lng: number
+  address: string
+  title: string
+  subtitle: string
+  category: string
+  price: string
+  distance: string
+  rating: number
+  reviews: number
+  images: string[]
+  description?: string
+  amenities?: string[]
+}
+
+export const listings: ListingItem[] = [
   {
     id: 1,
     lat: 40.7484,
     lng: -73.9967,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Rehearsal Space in Fashion District",
     subtitle: "Full Service • Fashion District • Manhattan",
     category: "Rehearsals, Film/Photo, Meetups",
@@ -30,7 +48,7 @@ export const listings = [
     id: 2,
     lat: 40.7508,
     lng: -73.9935,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Rehearsal Space in Fashion District",
     subtitle: "Full Service • Fashion District • Manhattan",
     category: "Rehearsals, Film/Photo, Meetups",
@@ -47,7 +65,7 @@ export const listings = [
     id: 3,
     lat: 40.752,
     lng: -73.989,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Creative Studio Space",
     subtitle: "Modern • Downtown • Manhattan",
     category: "Workshops, Events, Meetings",
@@ -63,7 +81,7 @@ export const listings = [
     id: 4,
     lat: 40.7545,
     lng: -73.9845,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Cozy Meeting Room",
     subtitle: "Private • Midtown • Manhattan",
     category: "Meetings, Interviews",
@@ -79,7 +97,7 @@ export const listings = [
     id: 5,
     lat: 40.7468,
     lng: -74.0014,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Industrial Loft Rehearsal Room",
     subtitle: "Open Layout • SoHo • Manhattan",
     category: "Rehearsals, Workshops, Recording",
@@ -96,7 +114,7 @@ export const listings = [
     id: 6,
     lat: 40.7489,
     lng: -73.9993,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Minimalist Creative Hub",
     subtitle: "Bright Space • Chelsea • Manhattan",
     category: "Content, Meetings, Events",
@@ -113,7 +131,7 @@ export const listings = [
     id: 7,
     lat: 40.7567,
     lng: -73.9778,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Sunlit Practice Studio",
     subtitle: "Quiet • Upper West Side • Manhattan",
     category: "Practice, Classes, Coaching",
@@ -130,7 +148,7 @@ export const listings = [
     id: 8,
     lat: 40.7196,
     lng: -74.0089,
-    city: "New York, NY, USA",
+    address: "New York, NY, USA",
     title: "Premium Meeting & Jam Space",
     subtitle: "Full Equipment • Tribeca • Manhattan",
     category: "Jam Sessions, Meetings, Productions",
@@ -147,7 +165,7 @@ export const listings = [
     id: 9,
     lat: 42.9755,
     lng: -81.3009,
-    city: "London, ON, Canada",
+    address: "London, ON, Canada",
     title: "Rehearsal Space in Fashion District",
     subtitle: "Full Service • Fashion District • Manhattan",
     category: "Rehearsals, Film/Photo, Meetups",
@@ -168,7 +186,7 @@ export function ListingCard({
   onClick,
   distanceLabel,
 }: {
-  listing: (typeof listings)[0]
+  listing: ListingItem
   onClose?: () => void
   onClick?: () => void
   distanceLabel?: string | null
@@ -277,7 +295,10 @@ export function ListingCard({
 
 export function Listings() {
   const navigate = useNavigate()
+  const hostListings = useHostListings()
   const whereValue = useSearchStore((state) => state.where)
+    const allListings = [...hostListings, ...listings]
+
   const priceMaxParam = useSearchStore((state) => state.priceMax)
   const distanceMaxParam = useSearchStore((state) => state.distanceMax)
   const selectedDateParam = useSearchStore((state) => state.date)
@@ -451,7 +472,7 @@ export function Listings() {
 
   const searchedCity = getCityName(whereValue.trim())
 
-  const getDistanceLabel = (listing: (typeof listings)[0]) => {
+  const getDistanceLabel = (listing: ListingItem) => {
     if (!hasUserGeolocation || !userCoords) return null
     if (!searchedCity || !userGeoCity) return null
     if (userGeoCity !== searchedCity) return null
@@ -463,7 +484,7 @@ export function Listings() {
     return `${distanceKm.toFixed(1)} km away`
   }
 
-  const getFilterDistanceKm = (listing: (typeof listings)[0]) => {
+  const getFilterDistanceKm = (listing: ListingItem) => {
     if (searchCoords) {
       return getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
     }
@@ -475,10 +496,10 @@ export function Listings() {
     return parseListingDistance(listing.distance)
   }
 
-  const filteredListings = listings
+  const filteredListings = allListings
     .filter((listing) => {
       if (!whereQuery) return true
-      return [listing.title, listing.subtitle, listing.category, listing.city]
+      return [listing.title, listing.subtitle, listing.category, listing.address]
         .join(" ")
         .toLowerCase()
         .includes(whereQuery)
@@ -495,7 +516,7 @@ export function Listings() {
       return distanceKm <= distanceMaxParam
     })
 
-  const isAvailableInSelectedSlot = (listing: (typeof listings)[0]) => {
+  const isAvailableInSelectedSlot = (listing: ListingItem) => {
     if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return false
 
     const availability = listingAvailability[listing.id]

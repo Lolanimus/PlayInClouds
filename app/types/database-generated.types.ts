@@ -14,6 +14,119 @@ export type Database = {
   }
   public: {
     Tables: {
+      listings: {
+        Row: {
+          address: string
+          amenities: string[]
+          average_rating: number
+          category: Database["public"]["Enums"]["listing_category"]
+          created_at: string
+          description: string
+          id: string
+          images: string[]
+          lat: number
+          lng: number
+          owner_id: string
+          price: number
+          rating_sum: number
+          review_count: number
+          subtitle: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          amenities: string[]
+          average_rating?: number
+          category: Database["public"]["Enums"]["listing_category"]
+          created_at?: string
+          description: string
+          id?: string
+          images: string[]
+          lat: number
+          lng: number
+          owner_id: string
+          price: number
+          rating_sum?: number
+          review_count?: number
+          subtitle: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          amenities?: string[]
+          average_rating?: number
+          category?: Database["public"]["Enums"]["listing_category"]
+          created_at?: string
+          description?: string
+          id?: string
+          images?: string[]
+          lat?: number
+          lng?: number
+          owner_id?: string
+          price?: number
+          rating_sum?: number
+          review_count?: number
+          subtitle?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_listing_owner"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reviews: {
+        Row: {
+          created_at: string
+          id: string
+          listing_id: string
+          rating: number
+          text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          listing_id: string
+          rating: number
+          text: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          listing_id?: string
+          rating?: number
+          text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_listing"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_user"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user: {
         Row: {
           email: string | null
@@ -49,13 +162,76 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_listing: {
+        Args: {
+          p_amenities: string[]
+          p_address: string
+          p_category: Database["public"]["Enums"]["listing_category"]
+          p_description: string
+          p_images: string[]
+          p_lat: number
+          p_lng: number
+          p_price: number
+          p_subtitle: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      create_review: {
+        Args: {
+          p_listing_id: string
+          p_rating: number
+          p_text: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      delete_listing: { Args: { p_id: string }; Returns: boolean }
+      delete_review: { Args: { p_id: string }; Returns: boolean }
+      get_listing: { Args: { p_id: string }; Returns: Json }
+      get_review: { Args: { p_id: string }; Returns: Json }
       get_user_id_by_username: {
         Args: { target_username: string }
         Returns: string
       }
+      list_listings: {
+        Args: {
+          p_address: string | null
+          p_category: Database["public"]["Enums"]["listing_category"] | null
+          p_limit?: number
+          p_max_price: number | null
+          p_min_price: number | null
+          p_offset?: number
+        }
+        Returns: Json[]
+      }
+      list_reviews: {
+        Args: { p_limit?: number; p_listing_id: string | null; p_offset?: number }
+        Returns: Json[]
+      }
+      update_listing: {
+        Args: {
+          p_amenities?: string[]
+          p_address?: string
+          p_category?: Database["public"]["Enums"]["listing_category"]
+          p_description?: string
+          p_id: string
+          p_images?: string[]
+          p_lat?: number
+          p_lng?: number
+          p_price?: number
+          p_subtitle?: string
+          p_title?: string
+        }
+        Returns: Json
+      }
+      update_review: {
+        Args: { p_id: string; p_rating?: number; p_text?: string }
+        Returns: Json
+      }
     }
     Enums: {
-      [_ in never]: never
+      listing_category: "REHEARSAL_SPACE" | "RECORDING_STUDIO" | "OTHER"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -182,6 +358,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      listing_category: ["REHEARSAL_SPACE", "RECORDING_STUDIO", "OTHER"],
+    },
   },
 } as const

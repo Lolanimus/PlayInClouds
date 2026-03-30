@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useNavigate } from "react-router"
 import { ListingCard, listings } from "@/components/listings"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
+import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
@@ -53,7 +54,10 @@ function PriceMarker({
 }
 
 export function MapView() {
+  const hostListings = useHostListings()
   const whereValue = useSearchStore((state) => state.where)
+    const allListings = useMemo(() => [...hostListings, ...listings], [hostListings])
+
   const priceMaxParam = useSearchStore((state) => state.priceMax)
   const distanceMaxParam = useSearchStore((state) => state.distanceMax)
   const selectedDateParam = useSearchStore((state) => state.date)
@@ -105,10 +109,10 @@ export function MapView() {
     return earthRadiusKm * c
   }
 
-  const filteredListings = listings
+  const filteredListings = allListings
     .filter((listing) => {
       if (!whereQuery) return true
-      return [listing.title, listing.subtitle, listing.category, listing.city]
+      return [listing.title, listing.subtitle, listing.category, listing.address]
         .join(" ")
         .toLowerCase()
         .includes(whereQuery)
@@ -252,7 +256,7 @@ export function MapView() {
       })
       mapInstanceRef.current = map
 
-      listings.forEach((listing) => {
+      allListings.forEach((listing) => {
         const price = listing.price.split(" ")[0] ?? "$--"
 
         const container = document.createElement("div")
@@ -333,7 +337,7 @@ export function MapView() {
         markerRoots.forEach((root) => root.unmount())
       }, 0)
     }
-  }, [])
+  }, [allListings])
 
   useEffect(() => {
     const where = whereValue.trim()
@@ -390,7 +394,17 @@ export function MapView() {
     }
 
     renderMarkerButtons()
-  }, [whereValue, priceMaxParam, distanceMaxParam, selectedDateParam, selectedStartParam, selectedDurationParam, searchCoords, activeListingId])
+  }, [
+    whereValue,
+    priceMaxParam,
+    distanceMaxParam,
+    selectedDateParam,
+    selectedStartParam,
+    selectedDurationParam,
+    searchCoords,
+    activeListingId,
+    allListings,
+  ])
 
   const activeListing = activeListingId
     ? filteredListings.find((listing) => listing.id === activeListingId) ?? null
