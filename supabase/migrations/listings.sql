@@ -231,7 +231,23 @@ CREATE OR REPLACE FUNCTION list_listings(
 ) RETURNS SETOF jsonb AS $$
 BEGIN
         RETURN QUERY
-        SELECT to_jsonb(l) FROM public.listings l
+        SELECT
+            to_jsonb(l)
+            || jsonb_build_object(
+                'lat', j.lat,
+                'lng', j.lng,
+                'address', CASE
+                    WHEN strpos(l.address, ',') > 0 THEN ltrim(substr(l.address, strpos(l.address, ',') + 1))
+                    ELSE l.address
+                END
+            )
+        FROM public.listings l
+        CROSS JOIN LATERAL (
+            SELECT
+                -- keep marker clearly away from exact address (900m..1500m)
+                l.lat + (((900 + random() * 600) / 111320.0) * cos(random() * 2 * pi())) AS lat,
+                l.lng + (((900 + random() * 600) / (111320.0 * GREATEST(abs(cos(radians(l.lat))), 1e-6))) * sin(random() * 2 * pi())) AS lng
+        ) j
         WHERE (p_address IS NULL OR l.address = p_address)
             AND (p_category IS NULL OR l.category = p_category)
             AND (p_min_price IS NULL OR l.price >= p_min_price)
