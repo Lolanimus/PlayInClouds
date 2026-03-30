@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { useNavigate } from "react-router"
-import { ListingCard, listings } from "@/components/listings"
+import { ListingCard, type ListingItem } from "@/components/listings"
+import { useListings } from "@/hooks/useListings"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
+import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
@@ -55,8 +57,29 @@ function PriceMarker({
 
 export function MapView() {
   const hostListings = useHostListings()
+  const listingsQuery = useListings()
   const whereValue = useSearchStore((state) => state.where)
-    const allListings = useMemo(() => [...hostListings, ...listings], [hostListings])
+  const dbListings = useMemo(() => {
+    const rows = (listingsQuery.data as ApiListing[] | null) ?? []
+
+    return rows.map<ListingItem>((item) => ({
+      id: item.id,
+      lat: item.lat,
+      lng: item.lng,
+      address: item.address,
+      title: item.title,
+      subtitle: item.subtitle,
+      category: item.category,
+      price: `$${item.price} CAD/hour`,
+      distance: "",
+      rating: item.average_rating,
+      reviews: item.review_count,
+      images: item.images ?? [],
+      description: item.description,
+      amenities: item.amenities,
+    }))
+  }, [listingsQuery.data])
+  const allListings = useMemo(() => (dbListings.length > 0 ? dbListings : hostListings), [dbListings, hostListings])
 
   const priceMaxParam = useSearchStore((state) => state.priceMax)
   const distanceMaxParam = useSearchStore((state) => state.distanceMax)
@@ -66,10 +89,10 @@ export function MapView() {
   const navigate = useNavigate()
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
-  const markerEntriesRef = useRef<Array<{ id: number; price: string; root: Root }>>([])
+  const markerEntriesRef = useRef<Array<{ id: string; price: string; root: Root }>>([])
   const isTearingDownRef = useRef(false)
   const [mapLoaded, setMapLoaded] = useState(false)
-  const [activeListingId, setActiveListingId] = useState<number | null>(null)
+  const [activeListingId, setActiveListingId] = useState<string | null>(null)
   const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
   const whereQuery = whereValue.trim().toLowerCase()
   const hasSelectedSlot =
@@ -132,16 +155,19 @@ export function MapView() {
       return distanceKm <= distanceMaxParam
     })
 
-  const isAvailableInSelectedSlot = (listingId: number) => {
+  const isAvailableInSelectedSlot = (listingId: string) => {
     if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return true
 
-    const availability = listingAvailability[listingId]
+    const listingNumericId = Number(listingId)
+    if (!Number.isFinite(listingNumericId)) return true
+
+    const availability = listingAvailability[listingNumericId]
     if (!availability) return true
 
     const selectedDay = selectedDateParam.getDay()
     const requestedStart = selectedStartParam
     const requestedEnd = selectedStartParam + selectedDurationParam
-    const bookedHoursForDay = listingBookedHours[listingId]?.[selectedDay] ?? []
+    const bookedHoursForDay = listingBookedHours[listingNumericId]?.[selectedDay] ?? []
     const hasBookedHourInRange = Array.from(
       { length: selectedDurationParam },
       (_, idx) => requestedStart + idx
@@ -157,10 +183,10 @@ export function MapView() {
 
   const availableNowListingIds = new Set(
     filteredListings
-      .filter((listing) => isAvailableInSelectedSlot(listing.id))
-      .map((listing) => listing.id)
+      .filter((listing) => isAvailableInSelectedSlot(String(listing.id)))
+      .map((listing) => String(listing.id))
   )
-  const filteredListingIds = new Set(filteredListings.map((listing) => listing.id))
+  const filteredListingIds = new Set(filteredListings.map((listing) => String(listing.id)))
 
   const renderMarkerButtons = () => {
     if (isTearingDownRef.current) return
@@ -257,12 +283,13 @@ export function MapView() {
       mapInstanceRef.current = map
 
       allListings.forEach((listing) => {
+        const listingId = String(listing.id)
         const price = listing.price.split(" ")[0] ?? "$--"
 
         const container = document.createElement("div")
         const root = createRoot(container)
         markerRoots.push(root)
-        markerEntriesRef.current.push({ id: listing.id, price, root })
+        markerEntriesRef.current.push({ id: listingId, price, root })
 
         class PriceOverlay extends window.google.maps.OverlayView {
           private div: HTMLDivElement | null = null
@@ -279,10 +306,10 @@ export function MapView() {
             root.render(
               <PriceMarker
                 price={price}
-                isActive={activeListingId === listing.id}
-                isAvailableInSelectedSlot={availableNowListingIds.has(listing.id)}
+                isActive={activeListingId === listingId}
+                isAvailableInSelectedSlot={availableNowListingIds.has(listingId)}
                 hasSelectedSlot={Boolean(hasSelectedSlot)}
-                onClick={() => setActiveListingId(listing.id)}
+                onClick={() => setActiveListingId(listingId)}
               />
             )
 
@@ -407,7 +434,7 @@ export function MapView() {
   ])
 
   const activeListing = activeListingId
-    ? filteredListings.find((listing) => listing.id === activeListingId) ?? null
+    ? filteredListings.find((listing) => String(listing.id) === activeListingId) ?? null
     : null
 
   return (

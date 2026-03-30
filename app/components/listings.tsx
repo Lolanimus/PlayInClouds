@@ -1,16 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
 import { useNavigate } from "react-router"
+import { useListings } from "@/hooks/useListings"
 import { useSearchStore } from "@/store/search-store"
 import { useHostListings } from "@/store/host_listings_state"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
+import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
 
 export type ListingItem = {
-  id: number
+  id: number | string
   lat: number
   lng: number
   address: string
@@ -194,6 +196,7 @@ export function ListingCard({
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
   const hasMultipleImages = listing.images.length > 1
+  const activeImage = listing.images[activeImageIndex]
 
   const showPrevImage = () => {
     setActiveImageIndex((prev) =>
@@ -225,11 +228,17 @@ export function ListingCard({
         </button>
       )}
       <div className="relative aspect-[4/3]">
-        <img
-          src={listing.images[activeImageIndex]}
-          alt={listing.title}
-          className="h-full w-full object-cover"
-        />
+        {activeImage ? (
+          <img
+            src={activeImage}
+            alt={listing.title}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-[#efefef] text-[#9a9a9a]">
+            <Image className="h-6 w-6" />
+          </div>
+        )}
         {hasMultipleImages && (
           <>
             <button
@@ -296,8 +305,29 @@ export function ListingCard({
 export function Listings() {
   const navigate = useNavigate()
   const hostListings = useHostListings()
+  const listingsQuery = useListings()
   const whereValue = useSearchStore((state) => state.where)
-    const allListings = [...hostListings, ...listings]
+  const dbListings = useMemo(() => {
+    const rows = (listingsQuery.data as ApiListing[] | null) ?? []
+
+    return rows.map<ListingItem>((item) => ({
+      id: item.id,
+      lat: item.lat,
+      lng: item.lng,
+      address: item.address,
+      title: item.title,
+      subtitle: item.subtitle,
+      category: item.category,
+      price: `$${item.price} CAD/hour`,
+      distance: "",
+      rating: item.average_rating,
+      reviews: item.review_count,
+      images: item.images ?? [],
+      description: item.description,
+      amenities: item.amenities,
+    }))
+  }, [listingsQuery.data])
+  const allListings = dbListings.length > 0 ? dbListings : hostListings
 
   const priceMaxParam = useSearchStore((state) => state.priceMax)
   const distanceMaxParam = useSearchStore((state) => state.distanceMax)
@@ -519,13 +549,16 @@ export function Listings() {
   const isAvailableInSelectedSlot = (listing: ListingItem) => {
     if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return false
 
-    const availability = listingAvailability[listing.id]
+    const listingNumericId = Number(listing.id)
+    if (!Number.isFinite(listingNumericId)) return true
+
+    const availability = listingAvailability[listingNumericId]
     if (!availability) return true
 
     const selectedDay = selectedDateParam.getDay()
     const requestedStart = selectedStartParam
     const requestedEnd = selectedStartParam + selectedDurationParam
-    const bookedHoursForDay = listingBookedHours[listing.id]?.[selectedDay] ?? []
+    const bookedHoursForDay = listingBookedHours[listingNumericId]?.[selectedDay] ?? []
     const hasBookedHourInRange = Array.from(
       { length: selectedDurationParam },
       (_, idx) => requestedStart + idx
@@ -548,6 +581,18 @@ export function Listings() {
 
   return (
     <div className="p-4 overflow-y-auto space-y-4">
+      {listingsQuery.isLoading && (
+        <div className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-3 text-sm text-[#6a6a6a]">
+          Loading listings...
+        </div>
+      )}
+
+      {listingsQuery.isError && (
+        <div className="rounded-xl border border-[#f1c3bd] bg-[#fff3f2] p-3 text-sm text-[#b42318]">
+          Could not load listings from database.
+        </div>
+      )}
+
       {hasSelectedSlot && (
         <div className="rounded-xl border border-[#0f6130] bg-[#eaf8ef] p-3">
           <p className="text-sm font-medium text-[#000000]">Available at your selected day & time</p>
@@ -558,7 +603,7 @@ export function Listings() {
       <div className="grid grid-cols-2 gap-4">
         {availableNowListings.map((listing) => (
           <ListingCard
-            key={listing.id}
+            key={String(listing.id)}
             listing={listing}
             distanceLabel={getDistanceLabel(listing)}
             onClick={() => navigate(`/listing/${listing.id}`)}
@@ -575,7 +620,7 @@ export function Listings() {
           <div className="grid grid-cols-2 gap-4">
             {availableOtherTimeListings.map((listing) => (
               <ListingCard
-                key={listing.id}
+                key={String(listing.id)}
                 listing={listing}
                 distanceLabel={getDistanceLabel(listing)}
                 onClick={() => navigate(`/listing/${listing.id}`)}
