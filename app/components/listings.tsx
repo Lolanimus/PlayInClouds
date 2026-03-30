@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
 import { useNavigate } from "react-router"
 import { useListings } from "@/hooks/useListings"
+import { formatListingCategory } from "@/lib/utils"
 import { useSearchStore } from "@/store/search-store"
 import { useHostListings } from "@/store/host_listings_state"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
@@ -290,7 +291,7 @@ export function ListingCard({
           </div>
         </div>
         <p className="text-xs text-[#6a6a6a] mb-1 truncate">{listing.subtitle}</p>
-        <p className="text-xs text-[#6a6a6a] mb-2 truncate">{listing.category}</p>
+        <p className="text-xs text-[#6a6a6a] mb-2 truncate">{formatListingCategory(listing.category)}</p>
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-[#000000]">{listing.price}</span>
           {distanceLabel ? (

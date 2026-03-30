@@ -21,6 +21,7 @@ import {
   CardTitle,
 } from "~/components/ui/card"
 import { useDeleteListing, useListings } from "~/hooks/useListings"
+import { formatListingCategory } from "~/lib/utils"
 import { useUser } from "~/store/user_state"
 import type { Listing as ApiListing } from "~/types/custom/api.types"
 
@@ -54,8 +55,8 @@ export default function HostDashboardPage() {
       : "0.0"
 
   return (
-    <section className="h-full flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-      <Card className="h-full w-full overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
+    <section className="h-full min-h-0 overflow-y-auto p-4 md:p-6 lg:p-8">
+      <Card className="w-full overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
             <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -164,7 +165,7 @@ export default function HostDashboardPage() {
                               </p>
                             </div>
                             <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                              {listing.category}
+                              {formatListingCategory(listing.category)}
                             </Badge>
                           </div>
 

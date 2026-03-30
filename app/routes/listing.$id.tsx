@@ -4,6 +4,7 @@ import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { listings } from "@/components/listings"
 import { useGetListing } from "@/hooks/useListings"
+import { formatListingCategory } from "@/lib/utils"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import { Button } from "@/components/ui/button"
 import { useHostListings } from "@/store/host_listings_state"
@@ -467,7 +468,7 @@ export default function ListingDetailsPage() {
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-[#000000]">Hosted by AirDrums</h2>
               <p className="mt-2 text-sm text-[#6a6a6a]">
-                {listing.category} · Perfect for creators, teams, and rehearsals.
+                {formatListingCategory(listing.category)} · Perfect for creators, teams, and rehearsals.
               </p>
             </div>
 
