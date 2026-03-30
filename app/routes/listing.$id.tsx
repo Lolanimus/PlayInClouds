@@ -3,10 +3,13 @@ import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { listings } from "@/components/listings"
+import { useGetListing } from "@/hooks/useListings"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import { Button } from "@/components/ui/button"
+import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
 import { useUser } from "@/store/user_state"
+import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 type DaySlot = {
   date: Date
@@ -68,6 +71,7 @@ function getDateKey(date: Date) {
 export default function ListingDetailsPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const hostListings = useHostListings()
   const selectedDateParam = useSearchStore((state) => state.date)
   const selectedStartParam = useSearchStore((state) => state.startHour)
   const selectedDurationParam = useSearchStore((state) => state.duration)
@@ -85,7 +89,68 @@ export default function ListingDetailsPage() {
   const hasInitializedSelectionRef = useRef(false)
   const now = new Date()
   const { id } = useParams()
-  const listing = listings.find((item) => item.id === Number(id))
+  const isUuidId = useMemo(
+    () => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)),
+    [id]
+  )
+  const listingQuery = useGetListing(isUuidId ? id : undefined)
+  const localListing = useMemo(() => {
+    if (!id) return null
+    return [...hostListings, ...listings].find((item) => String(item.id) === id) ?? null
+  }, [hostListings, id])
+
+  const listing = useMemo(() => {
+    const remote = listingQuery.data as ApiListing | null
+
+    if (remote) {
+      return {
+        id: remote.id,
+        lat: remote.lat,
+        lng: remote.lng,
+        title: remote.title,
+        subtitle: remote.subtitle,
+        category: remote.category,
+        description: remote.description,
+        amenities: remote.amenities,
+        images: remote.images,
+        priceLabel: `$${remote.price} CAD/hour`,
+        priceNumber: remote.price,
+        rating: remote.average_rating,
+        reviews: remote.review_count,
+        distance: "",
+      }
+    }
+
+    if (localListing) {
+      return {
+        id: localListing.id,
+        lat: localListing.lat,
+        lng: localListing.lng,
+        title: localListing.title,
+        subtitle: localListing.subtitle,
+        category: localListing.category,
+        description: localListing.description,
+        amenities: localListing.amenities,
+        images: localListing.images,
+        priceLabel: localListing.price,
+        priceNumber: parseHourlyPrice(localListing.price),
+        rating: localListing.rating,
+        reviews: localListing.reviews,
+        distance: localListing.distance,
+      }
+    }
+
+    return null
+  }, [listingQuery.data, localListing])
+
+  const listingNumericId = useMemo(() => {
+    if (!listing) return -1
+    const n = Number(listing.id)
+    return Number.isFinite(n) ? n : -1
+  }, [listing])
+
+  const galleryImages = listing?.images?.filter(Boolean) ?? []
+  const primaryImage = galleryImages[0] ?? null
   const homeTo = "/"
 
   const upcomingDays = useMemo(() => getBookingWindowDays(1), [])
@@ -102,36 +167,16 @@ export default function ListingDetailsPage() {
     setGuestCount(participantsParam)
   }, [participantsParam])
 
-  if (!listing) {
-    return (
-      <div className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5]">
-        <main className="p-8">
-          <div className="mx-auto max-w-5xl rounded-2xl bg-[#ffffff] p-8 shadow-sm">
-            <h1 className="text-2xl font-semibold text-[#000000]">Listing not found</h1>
-            <p className="mt-2 text-sm text-[#6a6a6a]">The listing you are looking for does not exist.</p>
-            <Link
-              to={homeTo}
-              className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#dadada] px-4 py-2 text-sm text-[#000000] hover:bg-[#f5f5f5]"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Back to listings
-            </Link>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  const availability = listingAvailability[listing.id] ?? {
+  const availability = listingAvailability[listingNumericId] ?? {
     days: [0, 1, 2, 3, 4, 5, 6],
     startHour: 8,
     endHour: 22,
   }
-  const basePrice = parseHourlyPrice(listing.price)
+  const basePrice = listing?.priceNumber
 
   const bookedSlotKeys = useMemo(() => {
     const booked = new Set<string>()
-    const listingBookedByWeekday = listingBookedHours[listing.id] ?? {}
+    const listingBookedByWeekday = listingBookedHours[listingNumericId] ?? {}
 
     upcomingDays.forEach((day, dayIndex) => {
       const weekday = day.date.getDay()
@@ -146,7 +191,7 @@ export default function ListingDetailsPage() {
     })
 
     return booked
-  }, [upcomingDays, availability.days, availability.startHour, availability.endHour, listing.id])
+  }, [upcomingDays, availability.days, availability.startHour, availability.endHour, listingNumericId])
 
   const isBookedCell = (dayIndex: number, hour: number) => {
     return bookedSlotKeys.has(getSlotKey(dayIndex, hour))
@@ -317,6 +362,38 @@ export default function ListingDetailsPage() {
     hasInitializedSelectionRef.current = true
   }, [selectedDateParam, selectedStartParam, selectedDurationParam, upcomingDays, bookedSlotKeys])
 
+  if (isUuidId && listingQuery.isLoading) {
+    return (
+      <div className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5]">
+        <main className="p-8">
+          <div className="mx-auto max-w-5xl rounded-2xl bg-[#ffffff] p-8 shadow-sm">
+            <h1 className="text-2xl font-semibold text-[#000000]">Loading listing...</h1>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!listing) {
+    return (
+      <div className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5]">
+        <main className="p-8">
+          <div className="mx-auto max-w-5xl rounded-2xl bg-[#ffffff] p-8 shadow-sm">
+            <h1 className="text-2xl font-semibold text-[#000000]">Listing not found</h1>
+            <p className="mt-2 text-sm text-[#6a6a6a]">The listing you are looking for does not exist.</p>
+            <Link
+              to={homeTo}
+              className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#dadada] px-4 py-2 text-sm text-[#000000] hover:bg-[#f5f5f5]"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to listings
+            </Link>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5]">
       <main className="p-6 md:p-8">
@@ -352,33 +429,37 @@ export default function ListingDetailsPage() {
         </div>
 
         <section className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-4 md:grid-rows-2">
-          <img
-            src={listing.images[0]}
-            alt={listing.title}
-            className="h-72 w-full rounded-2xl object-cover md:col-span-2 md:row-span-2 md:h-full"
-          />
-          {(listing.images[1] ?? listing.images[0]) && (
+          {primaryImage ? (
             <img
-              src={listing.images[1] ?? listing.images[0]}
-              alt={`${listing.title} photo 2`}
-              className="h-36 w-full rounded-2xl object-cover md:h-full"
+              src={primaryImage}
+              alt={listing.title}
+              className="h-72 w-full rounded-2xl object-cover md:col-span-2 md:row-span-2 md:h-full"
             />
+          ) : (
+            <div className="flex h-72 w-full items-center justify-center rounded-2xl bg-[#efefef] text-sm text-[#8a8a8a] md:col-span-2 md:row-span-2 md:h-full">
+              No images available
+            </div>
           )}
-          <img
-            src={listing.images[0]}
-            alt={`${listing.title} photo 3`}
-            className="h-36 w-full rounded-2xl object-cover md:h-full"
-          />
-          <img
-            src={listing.images[0]}
-            alt={`${listing.title} photo 4`}
-            className="h-36 w-full rounded-2xl object-cover md:h-full"
-          />
-          <img
-            src={listing.images[0]}
-            alt={`${listing.title} photo 5`}
-            className="h-36 w-full rounded-2xl object-cover md:h-full"
-          />
+
+          {Array.from({ length: 4 }, (_, idx) => {
+            const image = galleryImages[idx + 1] ?? primaryImage
+
+            return image ? (
+              <img
+                key={`${image}-${idx}`}
+                src={image}
+                alt={`${listing.title} photo ${idx + 2}`}
+                className="h-36 w-full rounded-2xl object-cover md:h-full"
+              />
+            ) : (
+              <div
+                key={`empty-photo-${idx}`}
+                className="flex h-36 w-full items-center justify-center rounded-2xl bg-[#efefef] text-xs text-[#8a8a8a] md:h-full"
+              >
+                No image
+              </div>
+            )
+          })}
         </section>
 
         <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem]">
@@ -393,27 +474,30 @@ export default function ListingDetailsPage() {
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-[#000000]">About this space</h3>
               <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
-                This Airbnb-style listing page is set up for {listing.title}. The space is located in {listing.subtitle} and is ideal for sessions that need a clean,
-                flexible layout.
+                {listing.description ?? `This Airbnb-style listing page is set up for ${listing.title}. The space is located in ${listing.subtitle} and is ideal for sessions that need a clean, flexible layout.`}
               </p>
             </div>
 
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-[#000000]">What this place offers</h3>
               <ul className="mt-3 grid grid-cols-1 gap-2 text-sm text-[#4a4a4a] sm:grid-cols-2">
-                <li>• High-speed Wi-Fi</li>
-                <li>• Sound-treated environment</li>
-                <li>• Flexible seating</li>
-                <li>• Whiteboard + monitor</li>
-                <li>• Coffee & water</li>
-                <li>• Easy self check-in</li>
+                {(listing.amenities?.length ? listing.amenities : [
+                  "High-speed Wi-Fi",
+                  "Sound-treated environment",
+                  "Flexible seating",
+                  "Whiteboard + monitor",
+                  "Coffee & water",
+                  "Easy self check-in",
+                ]).map((amenity) => (
+                  <li key={amenity}>• {amenity}</li>
+                ))}
               </ul>
             </div>
           </div>
 
           <aside className="h-fit rounded-2xl bg-[#ffffff] p-6 shadow-md lg:sticky lg:top-6">
-            <p className="text-xl font-semibold text-[#000000]">{listing.price}</p>
-            <p className="mt-1 text-sm text-[#6a6a6a]">{listing.distance}</p>
+            <p className="text-xl font-semibold text-[#000000]">{listing.priceLabel}</p>
+            {listing.distance ? <p className="mt-1 text-sm text-[#6a6a6a]">{listing.distance}</p> : null}
 
             <Button
               onClick={() => setIsBookingOpen(true)}
