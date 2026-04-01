@@ -2,15 +2,16 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
-import { listings } from "@/components/listings"
 import { useGetListing } from "@/hooks/useListings"
+import { useReviews } from "@/hooks/useReviews"
+import { queries } from "@/queries/queries"
 import { formatListingCategory } from "@/lib/utils"
-import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import { Button } from "@/components/ui/button"
 import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
 import { useUser } from "@/store/user_state"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
+import { useQueries } from "@tanstack/react-query"
 
 type DaySlot = {
   date: Date
@@ -69,6 +70,22 @@ function getDateKey(date: Date) {
   return `${year}-${month}-${day}`
 }
 
+function getMonthStartKey(date: Date) {
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-01`
+}
+
+function formatReviewMonth(value?: string | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+}
+
+function getReviewPreview(text: string, max = 220) {
+  if (text.length <= max) return text
+  return `${text.slice(0, max).trimEnd()}...`
+}
+
 export default function ListingDetailsPage() {
   const navigate = useNavigate()
   const user = useUser()
@@ -87,17 +104,42 @@ export default function ListingDetailsPage() {
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null)
   const [selectedStartHour, setSelectedStartHour] = useState<number | null>(null)
   const [selectedEndHour, setSelectedEndHour] = useState<number | null>(null)
+  const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false)
   const hasInitializedSelectionRef = useRef(false)
   const now = new Date()
+  const upcomingDays = useMemo(() => getBookingWindowDays(1), [])
+  const monthStartsForWindow = useMemo(
+    () => Array.from(new Set(upcomingDays.map((day) => getMonthStartKey(day.date)))),
+    [upcomingDays]
+  )
   const { id } = useParams()
   const isUuidId = useMemo(
     () => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)),
     [id]
   )
   const listingQuery = useGetListing(isUuidId ? id : undefined)
+  const monthSlotsQueries = useQueries({
+    queries: (id ? monthStartsForWindow : []).map((monthStart) => ({
+      ...queries.hours.listMonthSlots({
+        p_listing_id: id,
+        p_month: monthStart,
+      }),
+      enabled: Boolean(id),
+    })),
+  })
+  const reviewsQuery = useReviews(
+    isUuidId && id
+      ? {
+          p_listing_id: id,
+          p_limit: 100,
+          p_offset: 0,
+        }
+      : undefined,
+    { enabled: Boolean(isUuidId && id) }
+  )
   const localListing = useMemo(() => {
     if (!id) return null
-    return [...hostListings, ...listings].find((item) => String(item.id) === id) ?? null
+    return hostListings.find((item) => String(item.id) === id) ?? null
   }, [hostListings, id])
 
   const listing = useMemo(() => {
@@ -144,17 +186,36 @@ export default function ListingDetailsPage() {
     return null
   }, [listingQuery.data, localListing])
 
-  const listingNumericId = useMemo(() => {
-    if (!listing) return -1
-    const n = Number(listing.id)
-    return Number.isFinite(n) ? n : -1
-  }, [listing])
-
   const galleryImages = listing?.images?.filter(Boolean) ?? []
   const primaryImage = galleryImages[0] ?? null
+  const reviews = useMemo(() => {
+    const rows = (reviewsQuery.data as Array<Record<string, unknown>> | null) ?? []
+
+    return rows
+      .map((row) => {
+        const ratingValue = Number(row.rating)
+
+        return {
+          id: String(row.id ?? ""),
+          rating: Number.isFinite(ratingValue) ? Math.max(0, Math.min(5, ratingValue)) : 0,
+          text: typeof row.text === "string" ? row.text : "",
+          createdAt: typeof row.created_at === "string" ? row.created_at : null,
+          author:
+            typeof row.user_name === "string"
+              ? row.user_name
+              : typeof row.username === "string"
+                ? row.username
+                : typeof row.author_name === "string"
+                  ? row.author_name
+                  : "Guest",
+        }
+      })
+      .filter((review) => review.id && review.text)
+  }, [reviewsQuery.data])
+  const previewReviews = reviews.slice(0, 6)
+  const reviewCountForLabel = reviews.length > 0 ? reviews.length : listing?.reviews ?? 0
   const homeTo = "/"
 
-  const upcomingDays = useMemo(() => getBookingWindowDays(1), [])
   const bookingWindowEndLabel = useMemo(() => {
     const lastDay = upcomingDays[upcomingDays.length - 1]
     if (!lastDay) return ""
@@ -168,31 +229,45 @@ export default function ListingDetailsPage() {
     setGuestCount(participantsParam)
   }, [participantsParam])
 
-  const availability = listingAvailability[listingNumericId] ?? {
-    days: [0, 1, 2, 3, 4, 5, 6],
-    startHour: 8,
-    endHour: 22,
-  }
-  const basePrice = listing?.priceNumber
+  const slotMap = useMemo(() => {
+    const rows = monthSlotsQueries.flatMap((query) =>
+      ((query.data as Array<Record<string, unknown>> | null) ?? [])
+    )
+
+    const map = new Map<string, { price: number | null; isBooked: boolean }>()
+
+    rows.forEach((row) => {
+      const rawDate = typeof row.date === "string" ? row.date : ""
+      const hour = typeof row.hour === "number" ? row.hour : -1
+      const dateKey = rawDate ? rawDate.slice(0, 10) : ""
+
+      if (!dateKey || hour < 0 || hour > 23) return
+
+      const key = `${dateKey}-${hour}`
+      map.set(key, {
+        price: typeof row.price === "number" ? row.price : null,
+        isBooked: Boolean(row.is_booked),
+      })
+    })
+
+    return map
+  }, [monthSlotsQueries])
 
   const bookedSlotKeys = useMemo(() => {
     const booked = new Set<string>()
-    const listingBookedByWeekday = listingBookedHours[listingNumericId] ?? {}
 
     upcomingDays.forEach((day, dayIndex) => {
-      const weekday = day.date.getDay()
-      const bookedHoursForDay = listingBookedByWeekday[weekday] ?? []
-
-      bookedHoursForDay.forEach((hour) => {
-        if (!availability.days.includes(weekday)) return
-        if (hour < availability.startHour || hour >= availability.endHour) return
-
+      const dayKey = getDateKey(day.date)
+      HOURS.forEach((hour) => {
+        const slot = slotMap.get(`${dayKey}-${hour}`)
+        if (slot?.isBooked) {
           booked.add(getSlotKey(dayIndex, hour))
+        }
       })
     })
 
     return booked
-  }, [upcomingDays, availability.days, availability.startHour, availability.endHour, listingNumericId])
+  }, [upcomingDays, slotMap])
 
   const isBookedCell = (dayIndex: number, hour: number) => {
     return bookedSlotKeys.has(getSlotKey(dayIndex, hour))
@@ -213,11 +288,13 @@ export default function ListingDetailsPage() {
   }
 
   const isBaseAvailabilityWindow = (day: DaySlot, hour: number) => {
-    return (
-      availability.days.includes(day.date.getDay()) &&
-      hour >= availability.startHour &&
-      hour < availability.endHour
-    )
+    const slot = slotMap.get(`${getDateKey(day.date)}-${hour}`)
+    return typeof slot?.price === "number" && Number.isFinite(slot.price) && slot.price > 0
+  }
+
+  const getSlotPrice = (day: DaySlot, hour: number) => {
+    const slot = slotMap.get(`${getDateKey(day.date)}-${hour}`)
+    return typeof slot?.price === "number" && Number.isFinite(slot.price) ? slot.price : null
   }
 
   const canBookCell = (day: DaySlot, dayIndex: number, hour: number) => {
@@ -422,10 +499,14 @@ export default function ListingDetailsPage() {
         <h1 className="text-2xl font-semibold text-[#000000] md:text-3xl">{listing.title}</h1>
 
         <div className="mt-2 flex items-center gap-2 text-sm text-[#6a6a6a]">
-          <Star className="h-4 w-4 fill-[#000000] text-[#000000]" />
-          <span className="text-[#000000]">{listing.rating}</span>
-          <span>({listing.reviews} reviews)</span>
-          <span>•</span>
+          {listing.reviews > 0 ? (
+            <>
+              <Star className="h-4 w-4 fill-[#000000] text-[#000000]" />
+              <span className="text-[#000000]">{listing.rating}</span>
+              <span>({listing.reviews} reviews)</span>
+              <span>•</span>
+            </>
+          ) : null}
           <span>{listing.subtitle}</span>
         </div>
 
@@ -466,7 +547,7 @@ export default function ListingDetailsPage() {
         <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem]">
           <div className="space-y-6">
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
-              <h2 className="text-xl font-semibold text-[#000000]">Hosted by AirDrums</h2>
+              <h2 className="text-xl font-semibold text-[#000000]">{listing.title}</h2>
               <p className="mt-2 text-sm text-[#6a6a6a]">
                 {formatListingCategory(listing.category)} · Perfect for creators, teams, and rehearsals.
               </p>
@@ -489,11 +570,58 @@ export default function ListingDetailsPage() {
                   "Whiteboard + monitor",
                   "Coffee & water",
                   "Easy self check-in",
-                ]).map((amenity) => (
+                ]).map((amenity: string) => (
                   <li key={amenity}>• {amenity}</li>
                 ))}
               </ul>
             </div>
+
+            {listing.reviews > 0 ? (
+              <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <Star className="h-5 w-5 fill-[#000000] text-[#000000]" />
+                  <h3 className="text-lg font-semibold text-[#000000]">
+                    {listing.rating} · {reviewCountForLabel} reviews
+                  </h3>
+                </div>
+
+                {reviewsQuery.isLoading ? (
+                  <p className="text-sm text-[#6a6a6a]">Loading reviews...</p>
+                ) : previewReviews.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      {previewReviews.map((review) => (
+                        <button
+                          key={review.id}
+                          type="button"
+                          onClick={() => setIsReviewsModalOpen(true)}
+                          className="rounded-xl border border-[#e9e9e9] p-4 text-left transition-colors hover:bg-[#f9f9f9]"
+                        >
+                          <p className="text-sm font-medium text-[#000000]">{review.author}</p>
+                          <p className="mt-1 text-xs text-[#6a6a6a]">
+                            {"★".repeat(Math.round(review.rating))}
+                            <span className="ml-2">{formatReviewMonth(review.createdAt)}</span>
+                          </p>
+                          <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">{getReviewPreview(review.text)}</p>
+                          <p className="mt-3 text-sm font-medium text-[#000000] underline">Show more</p>
+                        </button>
+                      ))}
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsReviewsModalOpen(true)}
+                      className="mt-5 rounded-xl border-[#dadada] bg-[#ffffff]"
+                    >
+                      Show all {reviewCountForLabel} reviews
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-sm text-[#6a6a6a]">No review comments available yet.</p>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <aside className="h-fit rounded-2xl bg-[#ffffff] p-6 shadow-md lg:sticky lg:top-6">
@@ -548,8 +676,8 @@ export default function ListingDetailsPage() {
                         </div>
                         {upcomingDays.map((day, dayIndex) => {
                           const isAvailable = canBookCell(day, dayIndex, hour)
-                          const isBooked = isBaseAvailabilityWindow(day, hour) && isBookedCell(dayIndex, hour)
-                          const rate = getHourRate(basePrice, hour)
+                          const isBooked = isBookedCell(dayIndex, hour)
+                          const rate = getSlotPrice(day, hour)
                           const isSameDay = selectedDayIndex === dayIndex
                           const isStart = isSameDay && selectedStartHour === hour
                           const isEnd = isSameDay && selectedEndHour !== null && selectedEndHour - 1 === hour
@@ -577,7 +705,7 @@ export default function ListingDetailsPage() {
                                   : "bg-[#efefef] text-[#9a9a9a] cursor-not-allowed",
                               ].join(" ")}
                             >
-                              {isAvailable ? `$${rate}` : isBooked ? "Booked" : "—"}
+                              {isAvailable && rate !== null ? `$${Math.round(rate)}` : isBooked ? "Booked" : "—"}
                             </button>
                           )
                         })}
@@ -633,6 +761,47 @@ export default function ListingDetailsPage() {
           </div>
         </div>
       )}
+
+      {isReviewsModalOpen ? (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-[#000000]/45 p-4">
+          <div className="relative h-[min(90vh,52rem)] w-[min(96vw,62rem)] rounded-2xl border border-[#dadada] bg-[#ffffff] shadow-2xl">
+            <button
+              type="button"
+              aria-label="Close reviews"
+              onClick={() => setIsReviewsModalOpen(false)}
+              className="absolute right-3 top-3 z-20 rounded-full border border-[#dadada] bg-[#ffffff] p-1.5 text-[#4a4a4a] hover:bg-[#f5f5f5]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex h-full flex-col">
+              <div className="border-b border-[#e9e9e9] px-5 py-4">
+                <h2 className="text-xl font-semibold text-[#000000]">{reviewCountForLabel} reviews</h2>
+                <p className="mt-1 text-sm text-[#6a6a6a]">{listing.title}</p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {reviews.length > 0 ? (
+                  <div className="space-y-5">
+                    {reviews.map((review) => (
+                      <article key={review.id} className="border-b border-[#ececec] pb-5 last:border-0">
+                        <p className="text-sm font-semibold text-[#000000]">{review.author}</p>
+                        <p className="mt-1 text-xs text-[#6a6a6a]">
+                          {"★".repeat(Math.round(review.rating))}
+                          <span className="ml-2">{formatReviewMonth(review.createdAt)}</span>
+                        </p>
+                        <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">{review.text}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#6a6a6a]">No review comments available yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <AuthRequiredModal
         isOpen={isAuthModalOpen}

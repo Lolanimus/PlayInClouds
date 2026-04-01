@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate } from "react-router"
+import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Crop, MapPin, Sparkles, UploadCloud, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { useHostListingsActions } from "@/store/host_listings_state"
-import { useCreateListing } from "@/hooks/useListings"
+import { processRpcRequest } from "@/api/helpers"
+import { useSetListingWeeklySlots } from "@/hooks/useHours"
+import { useCreateListing, useGetListing, useUpdateListing } from "@/hooks/useListings"
 import { useUser } from "@/store/user_state"
+import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 type CitySuggestion = {
   id: string
@@ -18,8 +20,10 @@ type CitySuggestion = {
 type AddressSuggestion = CitySuggestion
 
 type UploadedImage = {
-  file: File
+  file?: File
+  persistedUrl?: string
   previewUrl: string
+  isObjectUrl: boolean
 }
 
 type GoogleAutocompleteResponse = {
@@ -47,6 +51,9 @@ type GoogleGeocodeResponse = {
 type CropDragMode = "move" | "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
+const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
+const SLOT_COUNT = 7 * 24
 
 type ListingFormState = {
   title: string
@@ -69,10 +76,14 @@ const initialFormState: ListingFormState = {
 }
 
 export default function CreateListingPage() {
+  const { id } = useParams()
+  const isEditMode = Boolean(id)
   const navigate = useNavigate()
   const user = useUser()
-  const { addListing } = useHostListingsActions()
   const createListingMutation = useCreateListing()
+  const updateListingMutation = useUpdateListing()
+  const setListingWeeklySlotsMutation = useSetListingWeeklySlots()
+  const listingQuery = useGetListing(isEditMode ? id : undefined)
   const [form, setForm] = useState<ListingFormState>(initialFormState)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -81,6 +92,8 @@ export default function CreateListingPage() {
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false)
   const [addressError, setAddressError] = useState<string | null>(null)
   const [isAddressDropdownOpen, setIsAddressDropdownOpen] = useState(false)
+  const [weeklySlotPrices, setWeeklySlotPrices] = useState<string[]>(() => Array.from({ length: SLOT_COUNT }, () => initialFormState.hourlyRate))
+  const [bulkWeekPrice, setBulkWeekPrice] = useState(initialFormState.hourlyRate)
   const [cropImageIndex, setCropImageIndex] = useState<number | null>(null)
   const [isCropEditMode, setIsCropEditMode] = useState(false)
   const [cropSelection, setCropSelection] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -93,6 +106,7 @@ export default function CreateListingPage() {
     initial: { x: number; y: number; width: number; height: number }
   } | null>(null)
   const [isApplyingCrop, setIsApplyingCrop] = useState(false)
+  const hasLoadedWeeklySlotsRef = useRef(false)
   const cropImageRef = useRef<HTMLImageElement>(null)
 
   const MIN_CROP_SIZE = 4
@@ -110,17 +124,81 @@ export default function CreateListingPage() {
 
   useEffect(() => {
     if (!user) {
-      navigate(`/login?redirect=${encodeURIComponent("/host/create-listing")}`, { replace: true })
+      const redirect = isEditMode && id ? `/host/edit-listing/${id}` : "/host/create-listing"
+      navigate(`/login?redirect=${encodeURIComponent(redirect)}`, { replace: true })
     }
-  }, [user, navigate])
-
-  if (!user) return null
+  }, [user, navigate, isEditMode, id])
 
   useEffect(() => {
     return () => {
-      uploadedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl))
+      uploadedImages.forEach((image) => {
+        if (image.isObjectUrl) {
+          URL.revokeObjectURL(image.previewUrl)
+        }
+      })
     }
   }, [uploadedImages])
+
+  useEffect(() => {
+    if (!isEditMode || !listingQuery.data) return
+
+    const listing = listingQuery.data as ApiListing
+
+    setForm({
+      title: listing.title ?? "",
+      subtitle: listing.subtitle ?? "",
+      category: listing.category ?? "REHEARSAL_SPACE",
+      address: listing.address ?? "",
+      hourlyRate: String(listing.price ?? ""),
+      description: listing.description ?? "",
+      amenitiesRaw: (listing.amenities ?? []).join("\n"),
+    })
+
+    setUploadedImages(
+      (listing.images ?? []).map((url) => ({
+        persistedUrl: url,
+        previewUrl: url,
+        isObjectUrl: false,
+      }))
+    )
+  }, [isEditMode, listingQuery.data])
+
+  useEffect(() => {
+    if (!isEditMode || !id || hasLoadedWeeklySlotsRef.current) return
+
+    const loadWeeklySlots = async () => {
+      const weekDate = new Date().toISOString().slice(0, 10)
+      const rows = (await processRpcRequest("list_listing_week_slots", {
+        p_listing_id: id,
+        p_week: weekDate,
+      })) as Array<{ date?: string; hour?: number; price?: number | null }> | null
+
+      if (!rows || rows.length === 0) {
+        hasLoadedWeeklySlotsRef.current = true
+        return
+      }
+
+      const next = Array.from({ length: SLOT_COUNT }, () => "")
+
+      rows.forEach((row) => {
+        const date = typeof row.date === "string" ? row.date : ""
+        const hour = typeof row.hour === "number" ? row.hour : -1
+        const price = typeof row.price === "number" ? row.price : null
+
+        if (!date || hour < 0 || hour > 23 || price === null) return
+
+        const weekday = new Date(`${date}T00:00:00`).getDay()
+        const index = weekday * 24 + hour
+        if (index < 0 || index >= SLOT_COUNT) return
+        next[index] = String(price)
+      })
+
+      setWeeklySlotPrices(next)
+      hasLoadedWeeklySlotsRef.current = true
+    }
+
+    void loadWeeklySlots()
+  }, [isEditMode, id])
 
   useEffect(() => {
     const trimmedQuery = form.address.trim()
@@ -196,8 +274,6 @@ export default function CreateListingPage() {
     }
   }, [form.address])
 
-  if (!user) return null
-
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
 
@@ -226,13 +302,14 @@ export default function CreateListingPage() {
       ...imageFiles.map((file) => ({
         file,
         previewUrl: URL.createObjectURL(file),
+        isObjectUrl: true,
       })),
     ])
     event.target.value = ""
   }
 
   const submit = async () => {
-    if (isSubmitting || createListingMutation.isPending) return
+    if (isSubmitting || createListingMutation.isPending || updateListingMutation.isPending || setListingWeeklySlotsMutation.isPending) return
 
     setFormError(null)
 
@@ -247,6 +324,27 @@ export default function CreateListingPage() {
     if (!form.description.trim()) return setFormError("Description is required.")
     if (parsedAmenities.length === 0) return setFormError("Add at least one amenity.")
     if (!GOOGLE_MAPS_API_KEY) return setFormError("Missing Google Maps API key.")
+
+    const weeklySlotsPayload = [] as Array<{ weekday: number; hour: number; price: number }>
+    for (let index = 0; index < SLOT_COUNT; index += 1) {
+      const raw = weeklySlotPrices[index]?.trim() ?? ""
+      if (!raw) continue
+
+      const price = Number(raw)
+      if (!Number.isFinite(price) || price <= 0) {
+        return setFormError("Weekly hours table has invalid prices. Use positive numbers or leave empty for closed hours.")
+      }
+
+      weeklySlotsPayload.push({
+        weekday: Math.floor(index / 24),
+        hour: index % 24,
+        price,
+      })
+    }
+
+    if (weeklySlotsPayload.length === 0) {
+      return setFormError("Please set at least one working hour in the weekly hours table.")
+    }
 
     setIsSubmitting(true)
 
@@ -282,6 +380,51 @@ export default function CreateListingPage() {
       return
     }
 
+    const imagesPayload = uploadedImages
+      .map((image) => image.persistedUrl ?? image.file)
+      .filter((value): value is string | File => Boolean(value))
+
+    if (isEditMode && id) {
+      updateListingMutation.mutate(
+        {
+          p_id: id,
+          p_lat: lat,
+          p_lng: lng,
+          p_address: form.address.trim(),
+          p_title: form.title.trim(),
+          p_subtitle: form.subtitle.trim(),
+          p_category: form.category.trim(),
+          p_price: hourlyRate,
+          p_images: imagesPayload,
+          p_description: form.description.trim(),
+          p_amenities: parsedAmenities,
+        },
+        {
+          onSuccess: async (data: any) => {
+            const listingId = data?.id ?? id
+            const slotsSaved = await setListingWeeklySlotsMutation.mutateAsync({
+              p_listing_id: listingId,
+              p_slots: weeklySlotsPayload,
+            })
+
+            if (!slotsSaved) {
+              setFormError("Listing was updated, but weekly hours could not be saved.")
+              setIsSubmitting(false)
+              return
+            }
+
+            setIsSubmitting(false)
+            navigate(`/listing/${listingId}`)
+          },
+          onError: (error: any) => {
+            setFormError(error?.message || "Failed to update listing.")
+            setIsSubmitting(false)
+          },
+        }
+      )
+      return
+    }
+
     createListingMutation.mutate(
       {
         p_lat: lat,
@@ -291,15 +434,32 @@ export default function CreateListingPage() {
         p_subtitle: form.subtitle.trim(),
         p_category: form.category.trim(),
         p_price: hourlyRate,
-        p_images: uploadedImages.map((image) => image.file),
+        p_images: imagesPayload,
         p_description: form.description.trim(),
         p_amenities: parsedAmenities,
       },
       {
-        onSuccess: (data: any) => {
+        onSuccess: async (data: any) => {
+          const listingId = data?.id as string | undefined
+          if (!listingId) {
+            setFormError("Listing created but missing listing id for weekly hours save.")
+            setIsSubmitting(false)
+            return
+          }
+
+          const slotsSaved = await setListingWeeklySlotsMutation.mutateAsync({
+            p_listing_id: listingId,
+            p_slots: weeklySlotsPayload,
+          })
+
+          if (!slotsSaved) {
+            setFormError("Listing was created, but weekly hours could not be saved.")
+            setIsSubmitting(false)
+            return
+          }
+
           setIsSubmitting(false)
-          // Optionally, you can use returned data to navigate
-          navigate(`/listing/${data?.id ?? ""}`)
+          navigate(`/listing/${listingId}`)
         },
         onError: (error: any) => {
           setFormError(error?.message || "Failed to create listing.")
@@ -313,7 +473,7 @@ export default function CreateListingPage() {
     setUploadedImages((prev) => {
       const next = [...prev]
       const [removed] = next.splice(index, 1)
-      if (removed) {
+      if (removed?.isObjectUrl) {
         URL.revokeObjectURL(removed.previewUrl)
       }
       return next
@@ -478,7 +638,7 @@ export default function CreateListingPage() {
     setIsApplyingCrop(true)
 
     try {
-      const result = await new Promise<{ file: File; previewUrl: string }>((resolve, reject) => {
+      const result = await new Promise<UploadedImage>((resolve, reject) => {
         const image = new Image()
 
         image.onload = () => {
@@ -521,11 +681,12 @@ export default function CreateListingPage() {
                 return
               }
 
-              const originalName = source.file.name.replace(/\.[^/.]+$/, "")
+              const originalName = (source.file?.name ?? "listing-image").replace(/\.[^/.]+$/, "")
               const croppedFile = new File([blob], `${originalName}-cropped.jpg`, { type: "image/jpeg" })
               resolve({
                 file: croppedFile,
                 previewUrl: URL.createObjectURL(croppedFile),
+                isObjectUrl: true,
               })
             },
             "image/jpeg",
@@ -540,7 +701,9 @@ export default function CreateListingPage() {
       setUploadedImages((prev) => {
         return prev.map((img, idx) => {
           if (idx !== cropImageIndex) return img
-          URL.revokeObjectURL(img.previewUrl)
+          if (img.isObjectUrl) {
+            URL.revokeObjectURL(img.previewUrl)
+          }
           return result
         })
       })
@@ -555,6 +718,8 @@ export default function CreateListingPage() {
       setIsApplyingCrop(false)
     }
   }
+
+  if (!user) return null
 
   return (
     <main className="min-h-[calc(100vh-5.5rem)] bg-gradient-to-b from-[#f7f7f7] via-[#f3f3f3] to-[#ededed] px-4 py-8 md:px-8">
@@ -572,9 +737,11 @@ export default function CreateListingPage() {
               <Sparkles className="h-3.5 w-3.5" />
               Host setup
             </div>
-            <CardTitle className="text-3xl font-semibold text-[#000000]">List your space</CardTitle>
+            <CardTitle className="text-3xl font-semibold text-[#000000]">{isEditMode ? "Edit your space" : "List your space"}</CardTitle>
             <CardDescription className="text-[#6a6a6a]">
-              Fill all required fields to publish a complete listing page.
+              {isEditMode
+                ? "Update your listing details and save changes."
+                : "Fill all required fields to publish a complete listing page."}
             </CardDescription>
           </CardHeader>
 
@@ -697,7 +864,7 @@ export default function CreateListingPage() {
               {uploadedImages.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                   {uploadedImages.map((image, idx) => (
-                    <div key={`${idx}-${image.file.name}-${image.file.lastModified}`} className="group relative overflow-hidden rounded-xl border border-[#ececec] bg-[#ffffff]">
+                    <div key={`${idx}-${image.file?.name ?? image.persistedUrl ?? "image"}-${image.file?.lastModified ?? 0}`} className="group relative overflow-hidden rounded-xl border border-[#ececec] bg-[#ffffff]">
                       <button
                         type="button"
                         onClick={() => openCropper(idx)}
@@ -752,6 +919,113 @@ export default function CreateListingPage() {
               </div>
             </section>
 
+            <section className="rounded-2xl border border-[#ececec] bg-[#ffffff] p-4 md:p-5">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Weekly hours & pricing</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Set all"
+                    value={bulkWeekPrice}
+                    onChange={(e) => setBulkWeekPrice(e.target.value)}
+                    className="h-9 w-28"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => {
+                      const value = bulkWeekPrice.trim()
+                      if (!value) return
+                      setWeeklySlotPrices(Array.from({ length: SLOT_COUNT }, () => value))
+                    }}
+                  >
+                    Apply all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => setWeeklySlotPrices(Array.from({ length: SLOT_COUNT }, () => ""))}
+                  >
+                    Clear all
+                  </Button>
+                </div>
+              </div>
+
+              <p className="mb-3 text-xs text-[#6a6a6a]">
+                Enter a price for working hours. Leave empty to mark that hour as closed.
+              </p>
+
+              <div className="overflow-auto rounded-xl border border-[#e9e9e9]">
+                <table className="min-w-[780px] w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#fafafa]">
+                      <th className="sticky left-0 z-10 border-b border-r border-[#ececec] bg-[#fafafa] px-2 py-2 text-left font-medium text-[#6a6a6a]">Hour</th>
+                      {WEEK_DAYS.map((dayLabel) => (
+                        <th key={`day-header-${dayLabel}`} className="border-b border-r border-[#ececec] px-2 py-2 text-center font-medium text-[#6a6a6a]">
+                          {dayLabel}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {HOURS.map((hour) => (
+                      <tr key={`hour-row-${hour}`}>
+                        <td className="sticky left-0 z-10 border-b border-r border-[#ececec] bg-[#ffffff] px-2 py-2 font-medium text-[#000000]">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWeeklySlotPrices((prev) => {
+                                  const next = [...prev]
+                                  for (let weekday = 0; weekday < WEEK_DAYS.length; weekday += 1) {
+                                    next[weekday * 24 + hour] = ""
+                                  }
+                                  return next
+                                })
+                              }}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#dadada] text-[#7a7a7a] hover:border-[#000000] hover:text-[#000000]"
+                              aria-label={`Clear ${hour.toString().padStart(2, "0")}:00 for all days`}
+                              title="Clear this hour for all days"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                            <span>{hour.toString().padStart(2, "0")}:00</span>
+                          </div>
+                        </td>
+                        {WEEK_DAYS.map((dayLabel, weekday) => {
+                          const index = weekday * 24 + hour
+                          return (
+                            <td key={`${hour}-${dayLabel}`} className="border-b border-r border-[#f1f1f1] p-1">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                placeholder="—"
+                                value={weeklySlotPrices[index] ?? ""}
+                                onChange={(e) => {
+                                  const value = e.target.value
+                                  setWeeklySlotPrices((prev) => {
+                                    const next = [...prev]
+                                    next[index] = value
+                                    return next
+                                  })
+                                }}
+                                className="h-8 min-w-[72px] border-[#e6e6e6] px-2 text-center"
+                              />
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
             {formError ? (
               <div className="rounded-xl border border-[#f1c3bd] bg-[#fff3f2] px-4 py-3 text-sm text-[#b42318]">
                 {formError}
@@ -765,7 +1039,7 @@ export default function CreateListingPage() {
                 disabled={isSubmitting}
                 className="h-11 rounded-xl bg-[#000000] px-7 text-[#ffffff] shadow-sm hover:bg-[#1a1a1a]"
               >
-                {isSubmitting ? "Creating..." : "Create listing"}
+                {isSubmitting ? (isEditMode ? "Updating..." : "Creating...") : (isEditMode ? "Update listing" : "Create listing")}
               </Button>
             </div>
           </CardContent>
