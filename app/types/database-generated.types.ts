@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      listing_weekly_slots: {
+        Row: {
+          created_at: string
+          hour: number
+          id: string
+          listing_id: string
+          price: number
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          created_at?: string
+          hour: number
+          id?: string
+          listing_id: string
+          price: number
+          updated_at?: string
+          weekday: number
+        }
+        Update: {
+          created_at?: string
+          hour?: number
+          id?: string
+          listing_id?: string
+          price?: number
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_weekly_slots_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listings: {
         Row: {
           address: string
@@ -26,7 +64,7 @@ export type Database = {
           images: string[]
           lat: number
           lng: number
-          owner_id: string
+          owner_id: string | null
           price: number
           rating_sum: number
           review_count: number
@@ -45,7 +83,7 @@ export type Database = {
           images: string[]
           lat: number
           lng: number
-          owner_id: string
+          owner_id?: string | null
           price: number
           rating_sum?: number
           review_count?: number
@@ -64,7 +102,7 @@ export type Database = {
           images?: string[]
           lat?: number
           lng?: number
-          owner_id?: string
+          owner_id?: string | null
           price?: number
           rating_sum?: number
           review_count?: number
@@ -76,6 +114,60 @@ export type Database = {
           {
             foreignKeyName: "fk_listing_owner"
             columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          created_at: string
+          end_at: string
+          guests: number
+          id: string
+          listing_id: string
+          renter_id: string
+          start_at: string
+          status: Database["public"]["Enums"]["reservation_status"]
+          total_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_at: string
+          guests?: number
+          id?: string
+          listing_id: string
+          renter_id: string
+          start_at: string
+          status?: Database["public"]["Enums"]["reservation_status"]
+          total_price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_at?: string
+          guests?: number
+          id?: string
+          listing_id?: string
+          renter_id?: string
+          start_at?: string
+          status?: Database["public"]["Enums"]["reservation_status"]
+          total_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_renter_id_fkey"
+            columns: ["renter_id"]
             isOneToOne: false
             referencedRelation: "user"
             referencedColumns: ["id"]
@@ -164,8 +256,8 @@ export type Database = {
     Functions: {
       create_listing: {
         Args: {
-          p_amenities: string[]
           p_address: string
+          p_amenities: string[]
           p_category: Database["public"]["Enums"]["listing_category"]
           p_description: string
           p_images: string[]
@@ -174,6 +266,15 @@ export type Database = {
           p_price: number
           p_subtitle: string
           p_title: string
+        }
+        Returns: Json
+      }
+      create_reservation: {
+        Args: {
+          p_end_at: string
+          p_guests?: number
+          p_listing_id: string
+          p_start_at: string
         }
         Returns: Json
       }
@@ -194,25 +295,39 @@ export type Database = {
         Args: { target_username: string }
         Returns: string
       }
+      list_listing_month_slots: {
+        Args: { p_listing_id: string; p_month: string }
+        Returns: Json[]
+      }
+      list_listing_week_slots: {
+        Args: { p_listing_id: string; p_week: string }
+        Returns: Json[]
+      }
       list_listings: {
         Args: {
-          p_address: string | null
-          p_category: Database["public"]["Enums"]["listing_category"] | null
+          p_address: string
+          p_category: Database["public"]["Enums"]["listing_category"]
           p_limit?: number
-          p_max_price: number | null
-          p_min_price: number | null
+          p_max_price: number
+          p_min_price: number
           p_offset?: number
         }
         Returns: Json[]
       }
       list_reviews: {
-        Args: { p_limit?: number; p_listing_id: string | null; p_offset?: number }
+        Args: { p_limit?: number; p_listing_id: string; p_offset?: number }
         Returns: Json[]
       }
+      set_listing_weekly_slots:
+        | {
+            Args: { p_listing_id: string; p_slot_prices: number[] }
+            Returns: Json
+          }
+        | { Args: { p_listing_id: string; p_slots: Json }; Returns: Json }
       update_listing: {
         Args: {
-          p_amenities?: string[]
           p_address?: string
+          p_amenities?: string[]
           p_category?: Database["public"]["Enums"]["listing_category"]
           p_description?: string
           p_id: string
@@ -229,9 +344,19 @@ export type Database = {
         Args: { p_id: string; p_rating?: number; p_text?: string }
         Returns: Json
       }
+      upsert_listing_weekly_slot: {
+        Args: {
+          p_hour: number
+          p_listing_id: string
+          p_price: number
+          p_weekday: number
+        }
+        Returns: Json
+      }
     }
     Enums: {
       listing_category: "REHEARSAL_SPACE" | "RECORDING_STUDIO" | "OTHER"
+      reservation_status: "PENDING" | "CONFIRMED" | "CANCELLED"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -360,6 +485,7 @@ export const Constants = {
   public: {
     Enums: {
       listing_category: ["REHEARSAL_SPACE", "RECORDING_STUDIO", "OTHER"],
+      reservation_status: ["PENDING", "CONFIRMED", "CANCELLED"],
     },
   },
 } as const

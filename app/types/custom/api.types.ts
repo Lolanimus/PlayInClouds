@@ -35,3 +35,23 @@ export interface Review {
 	created_at: string;
 	updated_at: string;
 }
+
+export interface ListingHourSlot {
+	date: string;
+	hour: number;
+	price: number | null;
+	is_booked: boolean;
+}
+
+export interface Reservation {
+	id: string;
+	listing_id: string;
+	renter_id: string;
+	start_at: string;
+	end_at: string;
+	status: Database["public"]["Enums"]["reservation_status"];
+	total_price: number;
+	guests: number;
+	created_at: string;
+	updated_at: string;
+}
