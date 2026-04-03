@@ -14,14 +14,14 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
-import { useHostListings } from "~/store/host_listings_state"
-import { useReservations } from "~/store/reservations_state"
+import { useListings } from "~/hooks/useListings"
+import { useListHostMonthlyReservations } from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
+import type { Listing, Reservation } from "~/types/custom/api.types"
 
 type CalendarDay = {
   date: Date
   dateKey: string
-  inCurrentMonth: boolean
 }
 
 function toDateKey(date: Date) {
@@ -35,38 +35,67 @@ function getMonthLabel(date: Date) {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" })
 }
 
-function getCalendarGrid(monthCursor: Date): CalendarDay[] {
+function getCalendarGrid(monthCursor: Date): Array<CalendarDay | null> {
   const firstDayOfMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1)
-  const startOfGrid = new Date(firstDayOfMonth)
-  startOfGrid.setDate(startOfGrid.getDate() - startOfGrid.getDay())
+  const startWeekday = firstDayOfMonth.getDay()
+  const daysInMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0).getDate()
 
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(startOfGrid)
-    date.setDate(startOfGrid.getDate() + index)
+  const days: Array<CalendarDay | null> = []
 
-    return {
+  for (let i = 0; i < startWeekday; i += 1) {
+    days.push(null)
+  }
+
+  for (let dayNum = 1; dayNum <= daysInMonth; dayNum += 1) {
+    const date = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), dayNum)
+
+    days.push({
       date,
       dateKey: toDateKey(date),
-      inCurrentMonth: date.getMonth() === monthCursor.getMonth(),
-    }
-  })
+    })
+  }
+
+  return days
 }
 
 function formatHourLabel(hour: number) {
   return `${hour.toString().padStart(2, "0")}:00`
 }
 
+function toDateKeyFromIso(isoValue: string) {
+  const date = new Date(isoValue)
+  if (Number.isNaN(date.getTime())) return ""
+
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+function getHour(dateIso: string) {
+  const date = new Date(dateIso)
+  if (Number.isNaN(date.getTime())) return 0
+  return date.getHours()
+}
+
 export default function HostCalendarPage() {
   const navigate = useNavigate()
   const user = useUser()
-  const listings = useHostListings()
-  const reservations = useReservations()
+  const listingsQuery = useListings()
 
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()))
+
+  const monthlyReservationsQuery = useListHostMonthlyReservations(
+    {
+      p_host_id: user?.id ?? null,
+      p_month: monthCursor.getMonth() + 1,
+    },
+    { enabled: Boolean(user?.id) }
+  )
 
   useEffect(() => {
     if (!user) {
@@ -76,19 +105,31 @@ export default function HostCalendarPage() {
 
   if (!user) return null
 
-  const hostListingIds = useMemo(() => new Set(listings.map((listing) => String(listing.id))), [listings])
-
-  const hostReservations = useMemo(
-    () =>
-      reservations
-        .filter((reservation) => hostListingIds.has(String(reservation.listingId)))
-        .sort((a, b) => {
-          const aTs = new Date(`${a.dateKey}T${String(a.startHour).padStart(2, "0")}:00:00`).getTime()
-          const bTs = new Date(`${b.dateKey}T${String(b.startHour).padStart(2, "0")}:00:00`).getTime()
-          return aTs - bTs
-        }),
-    [reservations, hostListingIds],
+  const allListings = (listingsQuery.data as Listing[] | null) ?? []
+  const hostListings = allListings.filter((listing) => listing.owner_id === user.id)
+  const hostListingsById = useMemo(
+    () => new Map(hostListings.map((listing) => [listing.id, listing])),
+    [hostListings]
   )
+
+  const hostReservations = useMemo(() => {
+    const rows = (monthlyReservationsQuery.data ?? []) as Reservation[]
+
+    return rows
+      .filter((reservation) => hostListingsById.has(reservation.listing_id))
+      .map((reservation) => {
+        const listing = hostListingsById.get(reservation.listing_id)
+
+        return {
+          ...reservation,
+          dateKey: toDateKeyFromIso(reservation.start_at),
+          startHour: getHour(reservation.start_at),
+          endHour: getHour(reservation.end_at),
+          listingTitle: listing?.title ?? "Listing",
+        }
+      })
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+  }, [monthlyReservationsQuery.data, hostListingsById])
 
   const reservationsByDate = useMemo(() => {
     const grouped = new Map<string, typeof hostReservations>()
@@ -121,6 +162,18 @@ export default function HostCalendarPage() {
             </CardHeader>
 
             <CardContent className="p-4 md:p-6">
+              {monthlyReservationsQuery.isLoading && (
+                <div className="mb-4 rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3 text-sm text-[#6a6a6a]">
+                  Loading reservations...
+                </div>
+              )}
+
+              {monthlyReservationsQuery.isError && (
+                <div className="mb-4 rounded-xl border border-[#f1c3bd] bg-[#fff3f2] px-4 py-3 text-sm text-[#b42318]">
+                  Could not load host reservations. Please refresh.
+                </div>
+              )}
+
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
                 <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4 md:p-5">
                   <div className="mb-4 flex items-center justify-between">
@@ -162,7 +215,11 @@ export default function HostCalendarPage() {
                   </div>
 
                   <div className="mt-2 grid grid-cols-7 gap-2">
-                    {calendarGrid.map((day) => {
+                    {calendarGrid.map((day, index) => {
+                      if (!day) {
+                        return <div key={`empty-${index}`} className="min-h-[74px]" />
+                      }
+
                       const dayReservations = reservationsByDate.get(day.dateKey) ?? []
                       const isSelected = selectedDateKey === day.dateKey
 
@@ -174,9 +231,7 @@ export default function HostCalendarPage() {
                           className={`min-h-[74px] rounded-xl border p-2 text-left transition-colors ${
                             isSelected
                               ? "border-[#000000] bg-[#000000] text-[#ffffff]"
-                              : day.inCurrentMonth
-                                ? "border-[#e9e9e9] bg-[#ffffff] text-[#1f1f1f] hover:bg-[#f7f7f7]"
-                                : "border-[#ececec] bg-[#f8f8f8] text-[#9a9a9a] hover:bg-[#f2f2f2]"
+                              : "border-[#e9e9e9] bg-[#ffffff] text-[#1f1f1f] hover:bg-[#f7f7f7]"
                           }`}
                         >
                           <p className="text-sm font-medium">{day.date.getDate()}</p>
