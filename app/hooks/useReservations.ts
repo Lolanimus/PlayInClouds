@@ -1,6 +1,30 @@
 import * as reservationsEvents from "@/db_rpc/reservations_rpc";
 import { queries } from "@/queries/queries";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+export const useListUserFutureReservations = (
+  opts?: { p_renter_id?: string | null },
+  config?: { enabled?: boolean }
+) => {
+  const query = useQuery({
+    ...queries.reservations.listUserFuture(opts),
+    enabled: config?.enabled ?? true,
+  });
+
+  return query;
+};
+
+export const useListHostMonthlyReservations = (
+  opts?: { p_host_id?: string | null; p_month?: number },
+  config?: { enabled?: boolean }
+) => {
+  const query = useQuery({
+    ...queries.reservations.listHostMonthly(opts),
+    enabled: config?.enabled ?? true,
+  });
+
+  return query;
+};
 
 export const useCreateReservation = () => {
   const queryClient = useQueryClient();

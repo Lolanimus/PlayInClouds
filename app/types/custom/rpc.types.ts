@@ -37,6 +37,19 @@ export type Database = MergeDeep<
         list_listing_week_slots: {
           Returns: ListingHourSlot[]
         }
+        list_host_monthly_reservations: {
+          Args: {
+            p_host_id?: string | null
+            p_month?: number
+          }
+          Returns: Reservation[]
+        }
+        list_user_future_reservations: {
+          Args: {
+            p_renter_id?: string | null
+          }
+          Returns: Reservation[]
+        }
         list_listings: {
           Returns: Listing[]
         }

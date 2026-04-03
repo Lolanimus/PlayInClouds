@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { Link, useNavigate } from "react-router"
-import { ArrowRight, CalendarClock, Clock3, Users } from "lucide-react"
+import { ArrowRight, CalendarClock, Clock3, PlusCircle, Settings, Users } from "lucide-react"
 
 import { Button } from "~/components/ui/button"
 import { Badge } from "~/components/ui/badge"
@@ -12,20 +12,35 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
-import { useReservations } from "~/store/reservations_state"
+import { useListings } from "~/hooks/useListings"
+import { useListUserFutureReservations } from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
+import { useHostListings } from "~/store/host_listings_state"
 
-function formatHourLabel(hour: number) {
-  return `${hour.toString().padStart(2, "0")}:00`
-}
+function formatDateRange(startAtIso: string, endAtIso: string) {
+  const start = new Date(startAtIso)
+  const end = new Date(endAtIso)
 
-function formatDateRange(dateKey: string, start: number, end: number) {
-  const date = new Date(`${dateKey}T00:00:00`)
-  const dayLabel = Number.isNaN(date.getTime())
-    ? dateKey
-    : date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "Unknown date"
+  }
 
-  return `${dayLabel}, ${formatHourLabel(start)}–${formatHourLabel(end)}`
+  const dayLabel = start.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })
+  const timeLabel = `${start.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })}–${end.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })}`
+
+  return `${dayLabel}, ${timeLabel}`
 }
 
 function formatCurrency(value: number) {
@@ -36,26 +51,48 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function getReservationStatus(dateKey: string, endHour: number) {
-  const reservationEnd = new Date(`${dateKey}T00:00:00`)
+function getReservationStatus(endAtIso: string) {
+  const reservationEnd = new Date(endAtIso)
 
   if (Number.isNaN(reservationEnd.getTime())) {
     return "unknown" as const
   }
 
-  reservationEnd.setHours(endHour, 0, 0, 0)
-
   return reservationEnd.getTime() >= Date.now() ? "upcoming" as const : "past" as const
+}
+
+function getBookedHours(startAtIso: string, endAtIso: string) {
+  const start = new Date(startAtIso)
+  const end = new Date(endAtIso)
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 0
+  }
+
+  return Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60))
 }
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const user = useUser()
-  const reservations = useReservations()
+  const futureReservationsQuery = useListUserFutureReservations(
+    { p_renter_id: user?.id ?? null },
+    { enabled: Boolean(user?.id) }
+  )
+  const listingsQuery = useListings()
+  const hostListings = useHostListings()
 
-  const userReservations = user
-    ? reservations.filter((reservation) => reservation.userId === user.id)
-    : []
+  const listingsById = new Map((listingsQuery.data ?? []).map((listing) => [listing.id, listing]))
+  const userReservations = (futureReservationsQuery.data ?? []).map((reservation) => {
+    const listing = listingsById.get(reservation.listing_id)
+
+    return {
+      ...reservation,
+      listingTitle: listing?.title ?? "Listing",
+      listingSubtitle: listing?.subtitle ?? "",
+      listingImage: listing?.images?.[0] ?? "",
+    }
+  })
 
   useEffect(() => {
     if (!user) {
@@ -67,22 +104,33 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-[calc(100vh-5.5rem)] bg-muted/40 px-4 py-10">
-      <Card className="mx-auto w-full max-w-5xl border-[#e9e9e9] bg-[#ffffff] shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-3xl text-[#000000]">Dashboard</CardTitle>
-          <CardDescription>Welcome back. Manage your profile and reservations.</CardDescription>
+      <Card className="mx-auto w-full max-w-6xl overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
+        <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-3xl text-[#000000]">Dashboard</CardTitle>
+              <CardDescription>Welcome back. Manage your account, reservations, and hosting tools.</CardDescription>
+            </div>
+            <Badge variant="outline" className="w-fit border-[#dadada] bg-[#ffffff] text-[#000000]">
+              {userReservations.length} reservation{userReservations.length !== 1 ? "s" : ""}
+            </Badge>
+          </div>
         </CardHeader>
 
-        <CardContent className="space-y-6 pb-6 text-sm text-foreground">
-          <div className="grid gap-4 rounded-2xl border border-[#e9e9e9] bg-[#f8f8f8] p-4 md:grid-cols-2">
-            <p>
-              <span className="font-medium text-[#6a6a6a]">Email:</span>{" "}
-              <span className="text-[#000000]">{user.email ?? "—"}</span>
-            </p>
-            <p className="md:text-right">
-              <span className="font-medium text-[#6a6a6a]">User ID:</span>{" "}
-              <span className="text-[#000000]">{user.id}</span>
-            </p>
+        <CardContent className="space-y-6 p-6 text-sm text-foreground">
+          <div className="grid gap-3 rounded-2xl border border-[#e9e9e9] bg-[#f8f8f8] p-4 md:grid-cols-3">
+            <div className="rounded-xl bg-[#ffffff] px-3 py-2 shadow-sm">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#6a6a6a]">Email</p>
+              <p className="truncate text-sm text-[#000000]">{user.email ?? "—"}</p>
+            </div>
+            <div className="rounded-xl bg-[#ffffff] px-3 py-2 shadow-sm">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#6a6a6a]">Reservations</p>
+              <p className="text-sm text-[#000000]">{userReservations.length} total</p>
+            </div>
+            <div className="rounded-xl bg-[#ffffff] px-3 py-2 shadow-sm">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#6a6a6a]">Your listings</p>
+              <p className="text-sm text-[#000000]">{hostListings.length} total</p>
+            </div>
           </div>
 
           <div>
@@ -93,14 +141,26 @@ export default function DashboardPage() {
               </Badge>
             </div>
 
-            {userReservations.length === 0 ? (
+            {futureReservationsQuery.isLoading ? (
+              <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">Loading reservations...</p>
+              </div>
+            ) : null}
+
+            {futureReservationsQuery.isError ? (
+              <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">Failed to load reservations.</p>
+              </div>
+            ) : null}
+
+            {!futureReservationsQuery.isLoading && !futureReservationsQuery.isError && userReservations.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[#dadada] bg-[#fafafa] px-4 py-8 text-center">
-                <p className="text-sm text-muted-foreground">No reservations yet.</p>
+                <p className="text-sm text-muted-foreground">No upcoming reservations yet.</p>
                 <Button asChild className="mt-4 bg-[#000000] text-[#ffffff] hover:bg-[#1a1a1a]">
                   <Link to="/">Start exploring spaces</Link>
                 </Button>
               </div>
-            ) : (
+            ) : !futureReservationsQuery.isLoading && !futureReservationsQuery.isError ? (
               <div className="space-y-4">
                 {userReservations.map((reservation) => (
                   <div
@@ -110,14 +170,18 @@ export default function DashboardPage() {
                     <div className="flex flex-col gap-4 sm:flex-row">
                       <button
                         type="button"
-                        onClick={() => navigate(`/listing/${reservation.listingId}`)}
+                        onClick={() => navigate(`/listing/${reservation.listing_id}`)}
                         className="group relative h-32 w-full overflow-hidden rounded-xl sm:w-48"
                       >
-                        <img
-                          src={reservation.listingImage}
-                          alt={reservation.listingTitle}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
+                        {reservation.listingImage ? (
+                          <img
+                            src={reservation.listingImage}
+                            alt={reservation.listingTitle}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="h-full w-full bg-[#f0f0f0]" />
+                        )}
                         <div className="absolute inset-0 bg-gradient-to-t from-[#000000]/35 via-transparent to-transparent" />
                       </button>
 
@@ -127,7 +191,7 @@ export default function DashboardPage() {
                             {reservation.listingTitle}
                           </h3>
                           {(() => {
-                            const status = getReservationStatus(reservation.dateKey, reservation.endHour)
+                            const status = getReservationStatus(reservation.end_at)
 
                             if (status === "upcoming") {
                               return <Badge variant="success">Upcoming</Badge>
@@ -154,7 +218,7 @@ export default function DashboardPage() {
                         <div className="grid gap-2 text-sm text-[#000000] md:grid-cols-2">
                           <div className="flex items-center gap-2 rounded-lg bg-[#f8f8f8] px-3 py-2">
                             <CalendarClock className="h-4 w-4 text-[#6a6a6a]" />
-                            <span>{formatDateRange(reservation.dateKey, reservation.startHour, reservation.endHour)}</span>
+                            <span>{formatDateRange(reservation.start_at, reservation.end_at)}</span>
                           </div>
 
                           <div className="flex items-center gap-2 rounded-lg bg-[#f8f8f8] px-3 py-2">
@@ -164,19 +228,19 @@ export default function DashboardPage() {
 
                           <div className="flex items-center gap-2 rounded-lg bg-[#f8f8f8] px-3 py-2">
                             <Clock3 className="h-4 w-4 text-[#6a6a6a]" />
-                            <span>{reservation.endHour - reservation.startHour}h booked</span>
+                            <span>{getBookedHours(reservation.start_at, reservation.end_at)}h booked</span>
                           </div>
 
                           <div className="flex items-center justify-between rounded-lg bg-[#f8f8f8] px-3 py-2 font-medium">
                             <span className="text-[#6a6a6a]">Total</span>
-                            <span>{formatCurrency(reservation.total)}</span>
+                            <span>{formatCurrency(reservation.total_price)}</span>
                           </div>
                         </div>
 
                         <div className="mt-3 flex justify-end">
                           <Button
                             variant="ghost"
-                            onClick={() => navigate(`/listing/${reservation.listingId}`)}
+                            onClick={() => navigate(`/listing/${reservation.listing_id}`)}
                             className="h-8 gap-1 px-2 text-[#000000] hover:bg-[#f2f2f2]"
                           >
                             View listing
@@ -188,11 +252,45 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-            )}
+            ) : null}
+          </div>
+
+          <div>
+            <div className="rounded-2xl border border-[#e9e9e9] bg-gradient-to-b from-[#fafafa] to-[#f5f5f5] p-6">
+              <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full bg-[#000000] p-2 text-[#ffffff]">
+                      <Settings className="h-4 w-4" />
+                    </div>
+                    <p className="text-base font-semibold text-[#000000]">Host tools</p>
+                  </div>
+                  <p className="max-w-xl text-sm text-[#6a6a6a]">
+                    Open your host dashboard to manage listings, preview details, and keep your spaces up to date.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    onClick={() => navigate("/host/dashboard")}
+                    className="bg-[#000000] text-[#ffffff] shadow-sm hover:bg-[#1a1a1a]"
+                  >
+                    <Settings className="mr-2 h-4 w-4" />
+                    Open host dashboard
+                  </Button>
+                  <Button asChild variant="outline" className="border-[#dadada] bg-[#ffffff] text-[#000000] hover:bg-[#f2f2f2]">
+                    <Link to="/host/create-listing">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Add listing
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </CardContent>
 
-        <CardFooter>
+        <CardFooter className="border-t border-[#e9e9e9] px-6 py-6">
           <Button asChild variant="outline">
             <Link to="/">Back to home</Link>
           </Button>
