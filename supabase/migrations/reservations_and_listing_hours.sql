@@ -77,9 +77,6 @@ CREATE INDEX IF NOT EXISTS idx_reservations_renter_id
 CREATE INDEX IF NOT EXISTS idx_reservations_time
   ON public.reservations(start_at, end_at);
 
-CREATE INDEX IF NOT EXISTS idx_reservations_active_lookup
-  ON public.reservations(listing_id, status, start_at, end_at);
-
 -- =========================
 -- UPDATED_AT TRIGGERS
 -- =========================
@@ -175,6 +172,36 @@ ON public.reservations
 FOR EACH ROW
 WHEN (NEW.status IN ('PENDING', 'CONFIRMED'))
 EXECUTE FUNCTION public.validate_and_price_reservation_fn();
+
+-- Enforce reservation status transitions:
+-- PENDING   -> CONFIRMED | CANCELLED
+-- CONFIRMED -> CANCELLED
+-- CANCELLED -> CANCELLED only (terminal)
+CREATE OR REPLACE FUNCTION public.enforce_reservation_status_transition_fn()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status = OLD.status THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.status = 'CANCELLED' THEN
+    RAISE EXCEPTION 'Cancelled reservation cannot change status';
+  END IF;
+
+  IF OLD.status = 'CONFIRMED' AND NEW.status = 'PENDING' THEN
+    RAISE EXCEPTION 'Confirmed reservation cannot be changed back to pending';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = '';
+
+DROP TRIGGER IF EXISTS enforce_reservation_status_transition ON public.reservations;
+CREATE TRIGGER enforce_reservation_status_transition
+BEFORE UPDATE OF status
+ON public.reservations
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_reservation_status_transition_fn();
 
 -- =========================
 -- RPC FUNCTIONS
@@ -372,8 +399,12 @@ BEGIN
         FROM public.reservations r
         WHERE r.listing_id = p_listing_id
           AND r.status IN ('PENDING', 'CONFIRMED')
-          AND r.start_at < (b.slot_date::timestamp + make_interval(hours => b.hour + 1))::timestamptz
-          AND r.end_at > (b.slot_date::timestamp + make_interval(hours => b.hour))::timestamptz
+          AND tstzrange(r.start_at, r.end_at, '[)') &&
+              tstzrange(
+                (b.slot_date::timestamp + make_interval(hours => b.hour))::timestamptz,
+                (b.slot_date::timestamp + make_interval(hours => b.hour + 1))::timestamptz,
+                '[)'
+              )
       )
   )
   FROM base b
@@ -424,8 +455,12 @@ BEGIN
         FROM public.reservations r
         WHERE r.listing_id = p_listing_id
           AND r.status IN ('PENDING', 'CONFIRMED')
-          AND r.start_at < (b.slot_date::timestamp + make_interval(hours => b.hour + 1))::timestamptz
-          AND r.end_at > (b.slot_date::timestamp + make_interval(hours => b.hour))::timestamptz
+          AND tstzrange(r.start_at, r.end_at, '[)') &&
+              tstzrange(
+                (b.slot_date::timestamp + make_interval(hours => b.hour))::timestamptz,
+                (b.slot_date::timestamp + make_interval(hours => b.hour + 1))::timestamptz,
+                '[)'
+              )
       )
   )
   FROM base b
@@ -450,6 +485,152 @@ BEGIN
   RETURN to_jsonb(result);
 END;
 $$ LANGUAGE plpgsql SET search_path = '';
+
+-- List all future reservations for current authenticated renter
+CREATE OR REPLACE FUNCTION public.list_user_future_reservations(
+  p_renter_id UUID DEFAULT NULL
+)
+RETURNS SETOF jsonb AS $$
+DECLARE
+  v_uid UUID;
+BEGIN
+  v_uid := COALESCE(p_renter_id, auth.uid());
+
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  RETURN QUERY
+  SELECT to_jsonb(r)
+  FROM public.reservations r
+  WHERE r.renter_id = v_uid
+    AND r.status IN ('PENDING', 'CONFIRMED')
+    AND r.end_at > NOW()
+  ORDER BY r.start_at ASC;
+END;
+$$ LANGUAGE plpgsql SET search_path = '';
+
+-- List all reservations for a host in a specific month (current year)
+-- p_month: 1..12
+CREATE OR REPLACE FUNCTION public.list_host_monthly_reservations(
+  p_host_id UUID DEFAULT NULL,
+  p_month SMALLINT DEFAULT EXTRACT(MONTH FROM NOW())::SMALLINT
+)
+RETURNS SETOF jsonb AS $$
+DECLARE
+  v_host_id UUID;
+  v_year INTEGER;
+BEGIN
+  v_host_id := COALESCE(p_host_id, auth.uid());
+
+  IF v_host_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  IF p_month < 1 OR p_month > 12 THEN
+    RAISE EXCEPTION 'p_month must be between 1 and 12';
+  END IF;
+
+  v_year := EXTRACT(YEAR FROM NOW())::INTEGER;
+
+  RETURN QUERY
+  SELECT to_jsonb(r)
+  FROM public.reservations r
+  JOIN public.listings l
+    ON l.id = r.listing_id
+  WHERE l.owner_id = v_host_id
+    AND EXTRACT(YEAR FROM r.start_at)::INTEGER = v_year
+    AND EXTRACT(MONTH FROM r.start_at)::SMALLINT = p_month
+  ORDER BY r.start_at ASC;
+END;
+$$ LANGUAGE plpgsql SET search_path = '';
+
+-- Confirm reservation (host/owner only)
+CREATE OR REPLACE FUNCTION public.confirm_reservation(
+  p_reservation_id UUID
+) RETURNS jsonb AS $$
+DECLARE
+  v_uid UUID;
+  v_owner_id UUID;
+  result public.reservations%ROWTYPE;
+BEGIN
+  v_uid := auth.uid();
+
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  SELECT l.owner_id
+  INTO v_owner_id
+  FROM public.reservations r
+  JOIN public.listings l ON l.id = r.listing_id
+  WHERE r.id = p_reservation_id;
+
+  IF v_owner_id IS NULL THEN
+    RAISE EXCEPTION 'Reservation not found';
+  END IF;
+
+  IF v_owner_id <> v_uid THEN
+    RAISE EXCEPTION 'Only listing owner can confirm this reservation';
+  END IF;
+
+  UPDATE public.reservations r
+  SET status = 'CONFIRMED'
+  WHERE r.id = p_reservation_id
+    AND r.status <> 'CANCELLED'
+  RETURNING * INTO result;
+
+  IF result.id IS NULL THEN
+    RAISE EXCEPTION 'Reservation could not be confirmed';
+  END IF;
+
+  RETURN to_jsonb(result);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
+
+-- Cancel reservation (renter or listing owner)
+CREATE OR REPLACE FUNCTION public.cancel_reservation(
+  p_reservation_id UUID
+) RETURNS jsonb AS $$
+DECLARE
+  v_uid UUID;
+  v_renter_id UUID;
+  v_owner_id UUID;
+  result public.reservations%ROWTYPE;
+BEGIN
+  v_uid := auth.uid();
+
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  SELECT r.renter_id, l.owner_id
+  INTO v_renter_id, v_owner_id
+  FROM public.reservations r
+  JOIN public.listings l ON l.id = r.listing_id
+  WHERE r.id = p_reservation_id;
+
+  IF v_renter_id IS NULL THEN
+    RAISE EXCEPTION 'Reservation not found';
+  END IF;
+
+  IF v_uid <> v_renter_id AND v_uid <> v_owner_id THEN
+    RAISE EXCEPTION 'Only renter or listing owner can cancel this reservation';
+  END IF;
+
+  UPDATE public.reservations r
+  SET status = 'CANCELLED'
+  WHERE r.id = p_reservation_id
+    AND r.status <> 'CANCELLED'
+  RETURNING * INTO result;
+
+  IF result.id IS NULL THEN
+    RAISE EXCEPTION 'Reservation is already cancelled';
+  END IF;
+
+  RETURN to_jsonb(result);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 -- =========================
 -- RLS
