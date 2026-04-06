@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "~/components/ui/card"
 import { useListings } from "~/hooks/useListings"
-import { useListUserFutureReservations } from "~/hooks/useReservations"
+import { useListUserActiveReservations } from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
 import { useHostListings } from "~/store/host_listings_state"
 
@@ -51,14 +51,25 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function getReservationStatus(endAtIso: string) {
+function getReservationStatus(startAtIso: string, endAtIso: string) {
+  const reservationStart = new Date(startAtIso)
   const reservationEnd = new Date(endAtIso)
 
-  if (Number.isNaN(reservationEnd.getTime())) {
+  if (Number.isNaN(reservationStart.getTime()) || Number.isNaN(reservationEnd.getTime())) {
     return "unknown" as const
   }
 
-  return reservationEnd.getTime() >= Date.now() ? "upcoming" as const : "past" as const
+  const now = Date.now()
+
+  if (now < reservationStart.getTime()) {
+    return "upcoming" as const
+  }
+
+  if (now >= reservationStart.getTime() && now < reservationEnd.getTime()) {
+    return "ongoing" as const
+  }
+
+  return "past" as const
 }
 
 function getBookedHours(startAtIso: string, endAtIso: string) {
@@ -75,7 +86,7 @@ function getBookedHours(startAtIso: string, endAtIso: string) {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const user = useUser()
-  const futureReservationsQuery = useListUserFutureReservations(
+  const activeReservationsQuery = useListUserActiveReservations(
     { p_renter_id: user?.id ?? null },
     { enabled: Boolean(user?.id) }
   )
@@ -83,7 +94,7 @@ export default function DashboardPage() {
   const hostListings = useHostListings()
 
   const listingsById = new Map((listingsQuery.data ?? []).map((listing) => [listing.id, listing]))
-  const userReservations = (futureReservationsQuery.data ?? []).map((reservation) => {
+  const userReservations = (activeReservationsQuery.data ?? []).map((reservation) => {
     const listing = listingsById.get(reservation.listing_id)
 
     return {
@@ -141,26 +152,26 @@ export default function DashboardPage() {
               </Badge>
             </div>
 
-            {futureReservationsQuery.isLoading ? (
+            {activeReservationsQuery.isLoading ? (
               <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-8 text-center">
                 <p className="text-sm text-muted-foreground">Loading reservations...</p>
               </div>
             ) : null}
 
-            {futureReservationsQuery.isError ? (
+            {activeReservationsQuery.isError ? (
               <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-8 text-center">
                 <p className="text-sm text-muted-foreground">Failed to load reservations.</p>
               </div>
             ) : null}
 
-            {!futureReservationsQuery.isLoading && !futureReservationsQuery.isError && userReservations.length === 0 ? (
+            {!activeReservationsQuery.isLoading && !activeReservationsQuery.isError && userReservations.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[#dadada] bg-[#fafafa] px-4 py-8 text-center">
                 <p className="text-sm text-muted-foreground">No upcoming reservations yet.</p>
                 <Button asChild className="mt-4 bg-[#000000] text-[#ffffff] hover:bg-[#1a1a1a]">
                   <Link to="/">Start exploring spaces</Link>
                 </Button>
               </div>
-            ) : !futureReservationsQuery.isLoading && !futureReservationsQuery.isError ? (
+            ) : !activeReservationsQuery.isLoading && !activeReservationsQuery.isError ? (
               <div className="space-y-4">
                 {userReservations.map((reservation) => (
                   <div
@@ -191,10 +202,14 @@ export default function DashboardPage() {
                             {reservation.listingTitle}
                           </h3>
                           {(() => {
-                            const status = getReservationStatus(reservation.end_at)
+                            const status = getReservationStatus(reservation.start_at, reservation.end_at)
 
                             if (status === "upcoming") {
                               return <Badge variant="success">Upcoming</Badge>
+                            }
+
+                            if (status === "ongoing") {
+                              return <Badge variant="success">Ongoing</Badge>
                             }
 
                             if (status === "past") {
@@ -238,14 +253,23 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="mt-3 flex justify-end">
-                          <Button
-                            variant="ghost"
-                            onClick={() => navigate(`/listing/${reservation.listing_id}`)}
-                            className="h-8 gap-1 px-2 text-[#000000] hover:bg-[#f2f2f2]"
-                          >
-                            View listing
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => navigate(`/reservation/${reservation.id}`)}
+                              className="h-8 px-2"
+                            >
+                              Reservation details
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              onClick={() => navigate(`/listing/${reservation.listing_id}`)}
+                              className="h-8 gap-1 px-2 text-[#000000] hover:bg-[#f2f2f2]"
+                            >
+                              View listing
+                              <ArrowRight className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>

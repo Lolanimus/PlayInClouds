@@ -468,6 +468,76 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SET search_path = '';
 
+-- Get one reservation by id (visibility controlled by reservations RLS)
+CREATE OR REPLACE FUNCTION public.get_reservation(
+  p_reservation_id UUID
+) RETURNS jsonb AS $$
+DECLARE
+  v_uid UUID;
+  v_reservation public.reservations%ROWTYPE;
+  v_listing public.listings%ROWTYPE;
+  v_owner public.user%ROWTYPE;
+  v_can_view_sensitive BOOLEAN := FALSE;
+  v_listing_public jsonb := NULL;
+BEGIN
+  v_uid := auth.uid();
+
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Authentication required';
+  END IF;
+
+  SELECT r.*
+  INTO v_reservation
+  FROM public.reservations r
+  WHERE r.id = p_reservation_id;
+
+  IF v_reservation.id IS NULL THEN
+    RAISE EXCEPTION 'Reservation not found';
+  END IF;
+
+  SELECT l.*
+  INTO v_listing
+  FROM public.listings l
+  WHERE l.id = v_reservation.listing_id;
+
+  IF v_listing.id IS NOT NULL THEN
+    SELECT u.*
+    INTO v_owner
+    FROM public.user u
+    WHERE u.id = v_listing.owner_id;
+
+    v_can_view_sensitive :=
+      (v_uid = v_listing.owner_id)
+      OR (v_uid = v_reservation.renter_id AND v_reservation.status = 'CONFIRMED');
+
+    -- Public-safe listing shape (matches list_listings obfuscation)
+    v_listing_public := to_jsonb(v_listing)
+      || jsonb_build_object(
+        'lat', v_listing.lat + (((900 + random() * 600) / 111320.0) * cos(random() * 2 * pi())),
+        'lng', v_listing.lng + (((900 + random() * 600) / (111320.0 * GREATEST(abs(cos(radians(v_listing.lat))), 1e-6))) * sin(random() * 2 * pi())),
+        'address', CASE
+          WHEN strpos(v_listing.address, ',') > 0 THEN ltrim(substr(v_listing.address, strpos(v_listing.address, ',') + 1))
+          ELSE v_listing.address
+        END
+      );
+  END IF;
+
+  RETURN to_jsonb(v_reservation)
+    || jsonb_build_object(
+      'listing', CASE
+        WHEN v_listing.id IS NULL THEN NULL::jsonb
+        WHEN v_can_view_sensitive THEN to_jsonb(v_listing)
+        ELSE v_listing_public
+      END,
+      'owner', CASE
+        WHEN v_owner.id IS NULL THEN NULL::jsonb
+        WHEN v_can_view_sensitive THEN to_jsonb(v_owner)
+        ELSE NULL::jsonb
+      END
+    );
+END;
+$$ LANGUAGE plpgsql SET search_path = '';
+
 -- Create reservation (price auto-calculated by trigger)
 CREATE OR REPLACE FUNCTION public.create_reservation(
   p_listing_id UUID,
@@ -479,15 +549,15 @@ DECLARE
   result public.reservations%ROWTYPE;
 BEGIN
   INSERT INTO public.reservations (listing_id, renter_id, start_at, end_at, guests, status)
-  VALUES (p_listing_id, auth.uid(), p_start_at, p_end_at, p_guests, 'CONFIRMED')
+  VALUES (p_listing_id, auth.uid(), p_start_at, p_end_at, p_guests, 'PENDING')
   RETURNING * INTO result;
 
   RETURN to_jsonb(result);
 END;
 $$ LANGUAGE plpgsql SET search_path = '';
 
--- List all future reservations for current authenticated renter
-CREATE OR REPLACE FUNCTION public.list_user_future_reservations(
+-- List all upcoming or currently ongoing reservations for current authenticated renter
+CREATE OR REPLACE FUNCTION public.list_user_active_reservations(
   p_renter_id UUID DEFAULT NULL
 )
 RETURNS SETOF jsonb AS $$

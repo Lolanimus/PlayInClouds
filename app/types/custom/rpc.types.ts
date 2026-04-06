@@ -25,6 +25,9 @@ export type Database = MergeDeep<
         get_listing: {
           Returns: Listing 
         }
+        get_reservation: {
+          Returns: Reservation
+        }
         get_review: {
           Returns: Review 
         }
@@ -38,16 +41,9 @@ export type Database = MergeDeep<
           Returns: ListingHourSlot[]
         }
         list_host_monthly_reservations: {
-          Args: {
-            p_host_id?: string | null
-            p_month?: number
-          }
           Returns: Reservation[]
         }
-        list_user_future_reservations: {
-          Args: {
-            p_renter_id?: string | null
-          }
+        list_user_active_reservations: {
           Returns: Reservation[]
         }
         list_listings: {

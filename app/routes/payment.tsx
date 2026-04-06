@@ -4,8 +4,8 @@ import { ChevronLeft, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
-import { listings } from "@/components/listings"
 import { useGetListing } from "@/hooks/useListings"
+import { useCreateReservation } from "@/hooks/useReservations"
 import { useHostListings } from "@/store/host_listings_state"
 import { useUser } from "@/store/user_state"
 import { useReservationsActions } from "@/store/reservations_state"
@@ -36,6 +36,7 @@ export default function PaymentPage() {
   const hostListings = useHostListings()
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const { addReservation } = useReservationsActions()
+  const createReservationMutation = useCreateReservation()
   const [params] = useSearchParams()
   const listingIdParam = params.get("listingId") ?? ""
   const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(listingIdParam)
@@ -45,7 +46,7 @@ export default function PaymentPage() {
   const endHour = Number(params.get("end"))
   const guests = Number(params.get("guests") ?? "1")
 
-  const localListing = [...hostListings, ...listings].find((item) => String(item.id) === listingIdParam)
+  const localListing = [...hostListings].find((item) => String(item.id) === listingIdParam)
   const remoteListing = listingQuery.data as ApiListing | null
 
   const listing = remoteListing
@@ -111,9 +112,26 @@ export default function PaymentPage() {
   const processingFee = Number((subtotal * 0.075).toFixed(2))
   const total = Number((subtotal + processingFee).toFixed(2))
 
-  const handleBuy = () => {
+  const handleBuy = async () => {
     if (!user) {
       setIsAuthModalOpen(true)
+      return
+    }
+
+    const reservationStart = new Date(`${dateKey}T00:00:00`)
+    const reservationEnd = new Date(`${dateKey}T00:00:00`)
+    reservationStart.setHours(startHour, 0, 0, 0)
+    reservationEnd.setHours(endHour, 0, 0, 0)
+
+    try {
+      await createReservationMutation.mutateAsync({
+        p_listing_id: String(listing.id),
+        p_start_at: reservationStart.toISOString(),
+        p_end_at: reservationEnd.toISOString(),
+        p_guests: guests,
+      })
+    } catch (error) {
+      console.error("Failed to create reservation", error)
       return
     }
 
@@ -164,11 +182,13 @@ export default function PaymentPage() {
                 <div className="min-w-0">
                   <p className="truncate text-2xl font-semibold text-[#000000]">{listing.title}</p>
                   <p className="truncate text-sm text-[#6a6a6a]">{listing.subtitle}</p>
-                  <div className="mt-1 flex items-center gap-1 text-sm text-[#000000]">
-                    <Star className="h-4 w-4 fill-[#000000] text-[#000000]" />
-                    <span>{listing.rating}</span>
-                    <span className="text-[#6a6a6a]">({listing.reviews})</span>
-                  </div>
+                  {listing.reviews > 0 ? (
+                    <div className="mt-1 flex items-center gap-1 text-sm text-[#000000]">
+                      <Star className="h-4 w-4 fill-[#000000] text-[#000000]" />
+                      <span>{listing.rating}</span>
+                      <span className="text-[#6a6a6a]">({listing.reviews})</span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -207,9 +227,10 @@ export default function PaymentPage() {
                 </Button>
                 <Button
                   onClick={handleBuy}
+                  disabled={createReservationMutation.isPending}
                   className="h-11 rounded-xl bg-[#000000] px-8 text-[#ffffff] hover:bg-[#2a2a2a]"
                 >
-                  Buy now · ${total.toFixed(2)} CAD
+                  {createReservationMutation.isPending ? "Processing..." : `Buy now · $${total.toFixed(2)} CAD`}
                 </Button>
               </div>
               {!user && <p className="mt-3 text-sm text-[#6a6a6a]">You’ll need to log in before purchase.</p>}

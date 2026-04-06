@@ -361,14 +361,12 @@ export default function ListingDetailsPage() {
       guests: String(guestCount),
     })
 
-    const target = `/payment?${params.toString()}`
-
     if (!user) {
       setIsAuthModalOpen(true)
       return
     }
 
-    navigate(target)
+    navigate(`/payment?${params.toString()}`)
   }
 
   useEffect(() => {

@@ -106,19 +106,21 @@ export default function HostCalendarPage() {
   if (!user) return null
 
   const allListings = (listingsQuery.data as Listing[] | null) ?? []
-  const hostListings = allListings.filter((listing) => listing.owner_id === user.id)
-  const hostListingsById = useMemo(
-    () => new Map(hostListings.map((listing) => [listing.id, listing])),
-    [hostListings]
+  const listingsById = useMemo(
+    () => new Map(allListings.map((listing) => [listing.id, listing])),
+    [allListings]
   )
 
   const hostReservations = useMemo(() => {
     const rows = (monthlyReservationsQuery.data ?? []) as Reservation[]
 
     return rows
-      .filter((reservation) => hostListingsById.has(reservation.listing_id))
+      .filter(
+        (reservation) =>
+          reservation.status !== "CANCELLED"
+      )
       .map((reservation) => {
-        const listing = hostListingsById.get(reservation.listing_id)
+        const listing = listingsById.get(reservation.listing_id)
 
         return {
           ...reservation,
@@ -129,7 +131,7 @@ export default function HostCalendarPage() {
         }
       })
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-  }, [monthlyReservationsQuery.data, hostListingsById])
+  }, [monthlyReservationsQuery.data, listingsById])
 
   const reservationsByDate = useMemo(() => {
     const grouped = new Map<string, typeof hostReservations>()
@@ -263,15 +265,32 @@ export default function HostCalendarPage() {
                   ) : (
                     <div className="space-y-3">
                       {selectedDayReservations.map((reservation) => (
-                        <div key={reservation.id} className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-3">
-                          <p className="truncate text-sm font-semibold text-[#000000]">{reservation.listingTitle}</p>
+                        <button
+                          key={reservation.id}
+                          type="button"
+                          onClick={() => navigate(`/reservation/${reservation.id}?month=${monthCursor.getMonth() + 1}`)}
+                          className="w-full rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-3 text-left transition-colors hover:bg-[#f7f7f7]"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="truncate text-sm font-semibold text-[#000000]">{reservation.listingTitle}</p>
+                            <Badge
+                              variant="outline"
+                              className={
+                                reservation.status === "CONFIRMED"
+                                  ? "border-[#b7eb8f] bg-[#f6ffed] text-[#237804]"
+                                  : "border-[#ffe58f] bg-[#fffbe6] text-[#ad6800]"
+                              }
+                            >
+                              {reservation.status}
+                            </Badge>
+                          </div>
                           <p className="mt-1 text-xs text-[#6a6a6a]">
                             {formatHourLabel(reservation.startHour)} - {formatHourLabel(reservation.endHour)}
                           </p>
                           <p className="mt-1 text-xs text-[#6a6a6a]">
                             {reservation.guests} guest{reservation.guests !== 1 ? "s" : ""}
                           </p>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
