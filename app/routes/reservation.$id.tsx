@@ -63,6 +63,12 @@ function getDurationHours(startAt: string, endAt: string) {
   return Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60))
 }
 
+function isPastReservation(endAtIso: string) {
+  const end = new Date(endAtIso)
+  if (Number.isNaN(end.getTime())) return false
+  return end.getTime() <= Date.now()
+}
+
 export default function ReservationDetailsPage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -113,8 +119,11 @@ export default function ReservationDetailsPage() {
   const hasError =
     reservationQuery.isError
 
+  const isPast = reservation ? isPastReservation(reservation.end_at) : false
+
   const handleCancelReservation = async () => {
     if (!reservation) return
+    if (isPastReservation(reservation.end_at)) return
 
     if (!confirm("Cancel this reservation?")) return
 
@@ -334,7 +343,7 @@ export default function ReservationDetailsPage() {
                 <Link to={`/listing/${reservation.listing_id}`}>Open listing</Link>
               </Button>
 
-              {reservation.status !== "CANCELLED" ? (
+              {reservation.status !== "CANCELLED" && !isPast ? (
                 <Button
                   variant="destructive"
                   onClick={handleCancelReservation}
@@ -342,6 +351,10 @@ export default function ReservationDetailsPage() {
                 >
                   {cancelReservationMutation.isPending ? "Cancelling..." : "Cancel reservation"}
                 </Button>
+              ) : isPast ? (
+                <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                  Past reservation
+                </Badge>
               ) : (
                 <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
                   Already cancelled

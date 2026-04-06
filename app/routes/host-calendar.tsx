@@ -5,6 +5,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 
+import { ReservationCard } from "~/components/reservation-card"
 import { Button } from "~/components/ui/button"
 import { Badge } from "~/components/ui/badge"
 import {
@@ -15,7 +16,11 @@ import {
   CardTitle,
 } from "~/components/ui/card"
 import { useListings } from "~/hooks/useListings"
-import { useListHostMonthlyReservations } from "~/hooks/useReservations"
+import {
+  useCancelReservation,
+  useConfirmReservation,
+  useListHostMonthlyReservations,
+} from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
 import type { Listing, Reservation } from "~/types/custom/api.types"
 
@@ -58,10 +63,6 @@ function getCalendarGrid(monthCursor: Date): Array<CalendarDay | null> {
   return days
 }
 
-function formatHourLabel(hour: number) {
-  return `${hour.toString().padStart(2, "0")}:00`
-}
-
 function toDateKeyFromIso(isoValue: string) {
   const date = new Date(isoValue)
   if (Number.isNaN(date.getTime())) return ""
@@ -72,16 +73,18 @@ function toDateKeyFromIso(isoValue: string) {
   return `${y}-${m}-${d}`
 }
 
-function getHour(dateIso: string) {
-  const date = new Date(dateIso)
-  if (Number.isNaN(date.getTime())) return 0
-  return date.getHours()
+function isPastReservation(endAtIso: string) {
+  const end = new Date(endAtIso)
+  if (Number.isNaN(end.getTime())) return false
+  return end.getTime() <= Date.now()
 }
 
 export default function HostCalendarPage() {
   const navigate = useNavigate()
   const user = useUser()
   const listingsQuery = useListings()
+  const confirmMutation = useConfirmReservation()
+  const cancelMutation = useCancelReservation()
 
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date()
@@ -125,13 +128,34 @@ export default function HostCalendarPage() {
         return {
           ...reservation,
           dateKey: toDateKeyFromIso(reservation.start_at),
-          startHour: getHour(reservation.start_at),
-          endHour: getHour(reservation.end_at),
           listingTitle: listing?.title ?? "Listing",
+          listingSubtitle: listing?.subtitle ?? "",
+          listingImage: listing?.images?.[0] ?? "",
         }
       })
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
   }, [monthlyReservationsQuery.data, listingsById])
+
+  const handleConfirm = async (reservationId: string, endAtIso: string) => {
+    if (isPastReservation(endAtIso)) return
+
+    try {
+      await confirmMutation.mutateAsync({ p_reservation_id: reservationId })
+    } catch {
+      // handled by error store
+    }
+  }
+
+  const handleCancel = async (reservationId: string, endAtIso: string) => {
+    if (isPastReservation(endAtIso)) return
+    if (!confirm("Cancel this reservation?")) return
+
+    try {
+      await cancelMutation.mutateAsync({ p_reservation_id: reservationId })
+    } catch {
+      // handled by error store
+    }
+  }
 
   const reservationsByDate = useMemo(() => {
     const grouped = new Map<string, typeof hostReservations>()
@@ -176,7 +200,7 @@ export default function HostCalendarPage() {
                 </div>
               )}
 
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-6">
                 <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4 md:p-5">
                   <div className="mb-4 flex items-center justify-between">
                     <Button
@@ -265,32 +289,41 @@ export default function HostCalendarPage() {
                   ) : (
                     <div className="space-y-3">
                       {selectedDayReservations.map((reservation) => (
-                        <button
+                        (() => {
+                          const isPast = isPastReservation(reservation.end_at)
+
+                          return (
+                        <ReservationCard
                           key={reservation.id}
-                          type="button"
-                          onClick={() => navigate(`/reservation/${reservation.id}?month=${monthCursor.getMonth() + 1}`)}
-                          className="w-full rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-3 text-left transition-colors hover:bg-[#f7f7f7]"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="truncate text-sm font-semibold text-[#000000]">{reservation.listingTitle}</p>
-                            <Badge
-                              variant="outline"
-                              className={
-                                reservation.status === "CONFIRMED"
-                                  ? "border-[#b7eb8f] bg-[#f6ffed] text-[#237804]"
-                                  : "border-[#ffe58f] bg-[#fffbe6] text-[#ad6800]"
-                              }
-                            >
-                              {reservation.status}
-                            </Badge>
-                          </div>
-                          <p className="mt-1 text-xs text-[#6a6a6a]">
-                            {formatHourLabel(reservation.startHour)} - {formatHourLabel(reservation.endHour)}
-                          </p>
-                          <p className="mt-1 text-xs text-[#6a6a6a]">
-                            {reservation.guests} guest{reservation.guests !== 1 ? "s" : ""}
-                          </p>
-                        </button>
+                          reservation={reservation}
+                          onOpenReservation={() => navigate(`/reservation/${reservation.id}?month=${monthCursor.getMonth() + 1}`)}
+                          onOpenListing={() => navigate(`/listing/${reservation.listing_id}`)}
+                          actions={(
+                            <>
+                              {reservation.status === "PENDING" && !isPast ? (
+                                <Button
+                                  className="bg-[#237804] text-[#ffffff] hover:bg-[#1f6a03]"
+                                  onClick={() => handleConfirm(reservation.id, reservation.end_at)}
+                                  disabled={confirmMutation.isPending || cancelMutation.isPending}
+                                >
+                                  Confirm
+                                </Button>
+                              ) : null}
+
+                              {reservation.status !== "CANCELLED" && !isPast ? (
+                                <Button
+                                  variant="destructive"
+                                  onClick={() => handleCancel(reservation.id, reservation.end_at)}
+                                  disabled={confirmMutation.isPending || cancelMutation.isPending}
+                                >
+                                  Cancel
+                                </Button>
+                              ) : null}
+                            </>
+                          )}
+                        />
+                          )
+                        })()
                       ))}
                     </div>
                   )}

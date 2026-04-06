@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate } from "react-router"
-import { CalendarClock, ChevronLeft, ChevronRight, Users } from "lucide-react"
+import { useNavigate } from "react-router"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { Badge } from "~/components/ui/badge"
+import { ReservationCard } from "~/components/reservation-card"
 import { Button } from "~/components/ui/button"
 import {
   Card,
@@ -20,26 +21,39 @@ import {
 import { useUser } from "~/store/user_state"
 import type { Listing, Reservation } from "~/types/custom/api.types"
 
-function formatDateTime(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Unknown"
+function toDateKeyFromIso(isoValue: string) {
+  const date = new Date(isoValue)
+  if (Number.isNaN(date.getTime())) return ""
 
-  return date.toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-    maximumFractionDigits: 2,
-  }).format(value)
+function toOrdinal(value: number) {
+  const mod100 = value % 100
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`
+
+  const mod10 = value % 10
+  if (mod10 === 1) return `${value}st`
+  if (mod10 === 2) return `${value}nd`
+  if (mod10 === 3) return `${value}rd`
+  return `${value}th`
+}
+
+function formatDayHeading(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return dateKey
+
+  const monthLabel = date.toLocaleDateString("en-US", { month: "long" })
+  return `${monthLabel} ${toOrdinal(date.getDate())}`
+}
+
+function isPastReservation(endAtIso: string) {
+  const end = new Date(endAtIso)
+  if (Number.isNaN(end.getTime())) return false
+  return end.getTime() <= Date.now()
 }
 
 export default function HostReservationsPage() {
@@ -69,12 +83,39 @@ export default function HostReservationsPage() {
   const listings = (listingsQuery.data as Listing[] | null) ?? []
   const listingsById = useMemo(() => new Map(listings.map((item) => [item.id, item])), [listings])
 
-  const reservations = ((reservationsQuery.data as Reservation[] | null) ?? []).map((reservation) => ({
-    ...reservation,
-    listing: listingsById.get(reservation.listing_id) ?? null,
-  }))
+  const reservations = ((reservationsQuery.data as Reservation[] | null) ?? []).map((reservation) => {
+    const listing = listingsById.get(reservation.listing_id)
 
-  const handleConfirm = async (reservationId: string) => {
+    return {
+      ...reservation,
+      dateKey: toDateKeyFromIso(reservation.start_at),
+      listingTitle: listing?.title ?? "Listing",
+      listingSubtitle: listing?.subtitle ?? "",
+      listingImage: listing?.images?.[0] ?? "",
+    }
+  })
+
+  const reservationsByDay = useMemo(() => {
+    const grouped = new Map<string, typeof reservations>()
+
+    for (const reservation of reservations) {
+      const items = grouped.get(reservation.dateKey) ?? []
+      items.push(reservation)
+      grouped.set(reservation.dateKey, items)
+    }
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([dateKey, items]) => ({
+        dateKey,
+        heading: formatDayHeading(dateKey),
+        items,
+      }))
+  }, [reservations])
+
+  const handleConfirm = async (reservationId: string, endAtIso: string) => {
+    if (isPastReservation(endAtIso)) return
+
     try {
       await confirmMutation.mutateAsync({ p_reservation_id: reservationId })
     } catch {
@@ -82,7 +123,8 @@ export default function HostReservationsPage() {
     }
   }
 
-  const handleCancel = async (reservationId: string) => {
+  const handleCancel = async (reservationId: string, endAtIso: string) => {
+    if (isPastReservation(endAtIso)) return
     if (!confirm("Cancel this reservation?")) return
 
     try {
@@ -146,61 +188,56 @@ export default function HostReservationsPage() {
             </div>
           ) : null}
 
-          <div className="space-y-3">
-            {reservations.map((reservation) => (
-              <div key={reservation.id} className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-[#000000]">{reservation.listing?.title ?? "Listing"}</p>
-                    <p className="text-xs text-[#6a6a6a]">#{reservation.id.slice(0, 8)}</p>
-                  </div>
+          <div className="space-y-5">
+            {reservationsByDay.map((group) => (
+              <section key={group.dateKey} className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">{group.heading}</p>
                   <Badge variant="outline" className="border-[#dadada] bg-[#ffffff] text-[#000000]">
-                    {reservation.status}
+                    {group.items.length} booking{group.items.length !== 1 ? "s" : ""}
                   </Badge>
                 </div>
 
-                <div className="grid gap-2 text-sm md:grid-cols-3">
-                  <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><CalendarClock className="h-3.5 w-3.5" /> Start</p>
-                    <p className="text-[#000000]">{formatDateTime(reservation.start_at)}</p>
-                  </div>
-                  <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Users className="h-3.5 w-3.5" /> Guests</p>
-                    <p className="text-[#000000]">{reservation.guests}</p>
-                  </div>
-                  <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                    <p className="text-xs text-[#6a6a6a]">Total</p>
-                    <p className="text-[#000000]">{formatCurrency(reservation.total_price)}</p>
-                  </div>
+                <div className="space-y-3">
+                  {group.items.map((reservation) => (
+                    (() => {
+                      const isPast = isPastReservation(reservation.end_at)
+
+                      return (
+                    <ReservationCard
+                      key={reservation.id}
+                      reservation={reservation}
+                      onOpenReservation={() => navigate(`/reservation/${reservation.id}`)}
+                      onOpenListing={() => navigate(`/listing/${reservation.listing_id}`)}
+                      actions={(
+                        <>
+                          {reservation.status === "PENDING" && !isPast ? (
+                            <Button
+                              className="bg-[#237804] text-[#ffffff] hover:bg-[#1f6a03]"
+                              onClick={() => handleConfirm(reservation.id, reservation.end_at)}
+                              disabled={confirmMutation.isPending || cancelMutation.isPending}
+                            >
+                              Confirm
+                            </Button>
+                          ) : null}
+
+                          {reservation.status !== "CANCELLED" && !isPast ? (
+                            <Button
+                              variant="destructive"
+                              onClick={() => handleCancel(reservation.id, reservation.end_at)}
+                              disabled={confirmMutation.isPending || cancelMutation.isPending}
+                            >
+                              Cancel
+                            </Button>
+                          ) : null}
+                        </>
+                      )}
+                    />
+                      )
+                    })()
+                  ))}
                 </div>
-
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <Button asChild variant="outline">
-                    <Link to={`/reservation/${reservation.id}`}>Open details</Link>
-                  </Button>
-
-                  <div className="flex gap-2">
-                    {reservation.status === "PENDING" ? (
-                      <Button
-                        onClick={() => handleConfirm(reservation.id)}
-                        disabled={confirmMutation.isPending || cancelMutation.isPending}
-                      >
-                        Confirm
-                      </Button>
-                    ) : null}
-
-                    {reservation.status !== "CANCELLED" ? (
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleCancel(reservation.id)}
-                        disabled={confirmMutation.isPending || cancelMutation.isPending}
-                      >
-                        Cancel
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
+              </section>
             ))}
           </div>
         </CardContent>
