@@ -101,6 +101,7 @@ export const useCreateListing = () => {
       p_images: (string | File)[];
       p_description: string;
       p_amenities: string[];
+      p_timezone?: string;
     }) => {
       console.info("Creating listing", payload);
 
@@ -137,7 +138,8 @@ export const useCreateListing = () => {
         payload.p_price,
         uploadedImageUrls,
         payload.p_description,
-        payload.p_amenities
+        payload.p_amenities,
+        payload.p_timezone
       );
     },
     onSuccess: () => {

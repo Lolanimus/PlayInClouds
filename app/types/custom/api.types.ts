@@ -11,6 +11,7 @@ export interface Listing {
 	owner_id: string | null;
 	lat: number;
 	lng: number;
+	timezone: string;
 	address: string;
 	title: string;
 	subtitle: string;

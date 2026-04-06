@@ -48,6 +48,11 @@ type GoogleGeocodeResponse = {
   }>
 }
 
+type GoogleTimeZoneResponse = {
+  status?: string
+  timeZoneId?: string
+}
+
 type CropDragMode = "move" | "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
@@ -350,6 +355,7 @@ export default function CreateListingPage() {
 
     let lat: number
     let lng: number
+    let timezone: string
 
     try {
       const geocodeResponse = await fetch(
@@ -380,6 +386,33 @@ export default function CreateListingPage() {
       return
     }
 
+    try {
+      const timezoneResponse = await fetch(
+        `https://maps.googleapis.com/maps/api/timezone/json?location=${lat},${lng}&timestamp=${Math.floor(Date.now() / 1000)}&key=${GOOGLE_MAPS_API_KEY}`
+      )
+
+      if (!timezoneResponse.ok) {
+        setFormError("Could not resolve listing timezone. Please try again.")
+        setIsSubmitting(false)
+        return
+      }
+
+      const timezoneData = (await timezoneResponse.json()) as GoogleTimeZoneResponse
+      const timeZoneId = typeof timezoneData.timeZoneId === "string" ? timezoneData.timeZoneId : ""
+
+      if (timezoneData.status !== "OK" || !timeZoneId) {
+        setFormError("Could not resolve listing timezone. Please select a precise address.")
+        setIsSubmitting(false)
+        return
+      }
+
+      timezone = timeZoneId
+    } catch {
+      setFormError("Could not resolve listing timezone. Please try again.")
+      setIsSubmitting(false)
+      return
+    }
+
     const imagesPayload = uploadedImages
       .map((image) => image.persistedUrl ?? image.file)
       .filter((value): value is string | File => Boolean(value))
@@ -398,6 +431,7 @@ export default function CreateListingPage() {
           p_images: imagesPayload,
           p_description: form.description.trim(),
           p_amenities: parsedAmenities,
+          p_timezone: timezone,
         },
         {
           onSuccess: async (data: any) => {
@@ -437,6 +471,7 @@ export default function CreateListingPage() {
         p_images: imagesPayload,
         p_description: form.description.trim(),
         p_amenities: parsedAmenities,
+        p_timezone: timezone,
       },
       {
         onSuccess: async (data: any) => {
@@ -964,9 +999,28 @@ export default function CreateListingPage() {
                   <thead>
                     <tr className="bg-[#fafafa]">
                       <th className="sticky left-0 z-10 border-b border-r border-[#ececec] bg-[#fafafa] px-2 py-2 text-left font-medium text-[#6a6a6a]">Hour</th>
-                      {WEEK_DAYS.map((dayLabel) => (
+                      {WEEK_DAYS.map((dayLabel, weekday) => (
                         <th key={`day-header-${dayLabel}`} className="border-b border-r border-[#ececec] px-2 py-2 text-center font-medium text-[#6a6a6a]">
-                          {dayLabel}
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span>{dayLabel}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWeeklySlotPrices((prev) => {
+                                  const next = [...prev]
+                                  for (let hour = 0; hour < HOURS.length; hour += 1) {
+                                    next[weekday * 24 + hour] = ""
+                                  }
+                                  return next
+                                })
+                              }}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#dadada] text-[#7a7a7a] hover:border-[#000000] hover:text-[#000000]"
+                              aria-label={`Clear all hours for ${dayLabel}`}
+                              title={`Clear all hours for ${dayLabel}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
                         </th>
                       ))}
                     </tr>

@@ -69,6 +69,7 @@ export type Database = {
           rating_sum: number
           review_count: number
           subtitle: string
+          timezone: string
           title: string
           updated_at: string
         }
@@ -88,6 +89,7 @@ export type Database = {
           rating_sum?: number
           review_count?: number
           subtitle: string
+          timezone?: string
           title: string
           updated_at?: string
         }
@@ -107,6 +109,7 @@ export type Database = {
           rating_sum?: number
           review_count?: number
           subtitle?: string
+          timezone?: string
           title?: string
           updated_at?: string
         }
@@ -254,6 +257,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_reservation: { Args: { p_reservation_id: string }; Returns: Json }
+      confirm_reservation: { Args: { p_reservation_id: string }; Returns: Json }
       create_listing: {
         Args: {
           p_address: string
@@ -265,6 +270,7 @@ export type Database = {
           p_lng: number
           p_price: number
           p_subtitle: string
+          p_timezone?: string
           p_title: string
         }
         Returns: Json
@@ -290,10 +296,15 @@ export type Database = {
       delete_listing: { Args: { p_id: string }; Returns: boolean }
       delete_review: { Args: { p_id: string }; Returns: boolean }
       get_listing: { Args: { p_id: string }; Returns: Json }
+      get_reservation: { Args: { p_reservation_id: string }; Returns: Json }
       get_review: { Args: { p_id: string }; Returns: Json }
       get_user_id_by_username: {
         Args: { target_username: string }
         Returns: string
+      }
+      list_host_monthly_reservations: {
+        Args: { p_host_id?: string; p_month?: number }
+        Returns: Json[]
       }
       list_listing_month_slots: {
         Args: { p_listing_id: string; p_month: string }
@@ -318,6 +329,14 @@ export type Database = {
         Args: { p_limit?: number; p_listing_id: string; p_offset?: number }
         Returns: Json[]
       }
+      list_user_active_reservations: {
+        Args: { p_renter_id?: string }
+        Returns: Json[]
+      }
+      list_user_future_reservations: {
+        Args: { p_renter_id?: string }
+        Returns: Json[]
+      }
       set_listing_weekly_slots:
         | {
             Args: { p_listing_id: string; p_slot_prices: number[] }
@@ -336,6 +355,7 @@ export type Database = {
           p_lng?: number
           p_price?: number
           p_subtitle?: string
+          p_timezone?: string
           p_title?: string
         }
         Returns: Json
