@@ -622,6 +622,7 @@ CREATE OR REPLACE FUNCTION public.confirm_reservation(
 DECLARE
   v_uid UUID;
   v_owner_id UUID;
+  v_end_at TIMESTAMPTZ;
   result public.reservations%ROWTYPE;
 BEGIN
   v_uid := auth.uid();
@@ -630,8 +631,8 @@ BEGIN
     RAISE EXCEPTION 'Authentication required';
   END IF;
 
-  SELECT l.owner_id
-  INTO v_owner_id
+  SELECT l.owner_id, r.end_at
+  INTO v_owner_id, v_end_at
   FROM public.reservations r
   JOIN public.listings l ON l.id = r.listing_id
   WHERE r.id = p_reservation_id;
@@ -642,6 +643,10 @@ BEGIN
 
   IF v_owner_id <> v_uid THEN
     RAISE EXCEPTION 'Only listing owner can confirm this reservation';
+  END IF;
+
+  IF v_end_at <= NOW() THEN
+    RAISE EXCEPTION 'Past reservations cannot be confirmed';
   END IF;
 
   UPDATE public.reservations r
@@ -666,6 +671,7 @@ DECLARE
   v_uid UUID;
   v_renter_id UUID;
   v_owner_id UUID;
+  v_end_at TIMESTAMPTZ;
   result public.reservations%ROWTYPE;
 BEGIN
   v_uid := auth.uid();
@@ -674,8 +680,8 @@ BEGIN
     RAISE EXCEPTION 'Authentication required';
   END IF;
 
-  SELECT r.renter_id, l.owner_id
-  INTO v_renter_id, v_owner_id
+  SELECT r.renter_id, l.owner_id, r.end_at
+  INTO v_renter_id, v_owner_id, v_end_at
   FROM public.reservations r
   JOIN public.listings l ON l.id = r.listing_id
   WHERE r.id = p_reservation_id;
@@ -686,6 +692,10 @@ BEGIN
 
   IF v_uid <> v_renter_id AND v_uid <> v_owner_id THEN
     RAISE EXCEPTION 'Only renter or listing owner can cancel this reservation';
+  END IF;
+
+  IF v_end_at <= NOW() THEN
+    RAISE EXCEPTION 'Past reservations cannot be cancelled';
   END IF;
 
   UPDATE public.reservations r
