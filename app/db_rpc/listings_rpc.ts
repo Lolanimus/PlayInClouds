@@ -11,7 +11,8 @@ const createListing = async (
   p_price: number,
   p_images: string[],
   p_description: string,
-  p_amenities: string[]
+  p_amenities: string[],
+  p_timezone?: string
 ) => {
   return await processRpcRequest("create_listing", {
     p_lat,
@@ -24,6 +25,7 @@ const createListing = async (
     p_images,
     p_description,
     p_amenities,
+    ...(p_timezone ? { p_timezone } : {}),
   });
 };
 
@@ -61,6 +63,7 @@ const updateListing = async (args: {
   p_images?: string[];
   p_description?: string;
   p_amenities?: string[];
+  p_timezone?: string;
 }) => {
   return await processRpcRequest("update_listing", args);
 };

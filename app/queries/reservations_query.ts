@@ -2,9 +2,14 @@ import { createQueryKeys } from "@lukemorales/query-key-factory";
 import * as reservationsEvents from "../db_rpc/reservations_rpc";
 
 export const reservations = createQueryKeys("reservations", {
-  listUserFuture: (p?: { p_renter_id?: string | null }) => ({
-    queryKey: ["list-user-future", p],
-    queryFn: () => reservationsEvents.listUserFutureReservations(p?.p_renter_id ?? null),
+  detailById: (p?: { p_reservation_id?: string }) => ({
+    queryKey: ["detail", p],
+    queryFn: () => reservationsEvents.getReservation(p?.p_reservation_id ?? ""),
+  }),
+
+  listUserActive: (p?: { p_renter_id?: string | null }) => ({
+    queryKey: ["list-user-active", p],
+    queryFn: () => reservationsEvents.listUserActiveReservations(p?.p_renter_id ?? null),
   }),
 
   listHostMonthly: (p?: { p_host_id?: string | null; p_month?: number }) => ({

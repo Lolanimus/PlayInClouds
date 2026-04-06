@@ -1,5 +1,23 @@
 import { processRpcRequest } from "@/api/helpers";
 
+const getReservation = async (p_reservation_id: string) => {
+  return await processRpcRequest("get_reservation", {
+    p_reservation_id,
+  });
+};
+
+const cancelReservation = async (p_reservation_id: string) => {
+  return await processRpcRequest("cancel_reservation", {
+    p_reservation_id,
+  });
+};
+
+const confirmReservation = async (p_reservation_id: string) => {
+  return await processRpcRequest("confirm_reservation", {
+    p_reservation_id,
+  });
+};
+
 const createReservation = async (
   p_listing_id: string,
   p_start_at: string,
@@ -14,9 +32,9 @@ const createReservation = async (
   });
 };
 
-const listUserFutureReservations = async (p_renter_id?: string | null) => {
-  return await processRpcRequest("list_user_future_reservations", {
-    p_renter_id: p_renter_id ?? null,
+const listUserActiveReservations = async (p_renter_id?: string | null) => {
+  return await processRpcRequest("list_user_active_reservations", {
+    p_renter_id: p_renter_id ?? undefined,
   });
 };
 
@@ -25,13 +43,16 @@ const listHostMonthlyReservations = async (
   p_month?: number
 ) => {
   return await processRpcRequest("list_host_monthly_reservations", {
-    p_host_id: p_host_id ?? null,
+    p_host_id: p_host_id ?? undefined,
     ...(typeof p_month === "number" ? { p_month } : {}),
   });
 };
 
 export {
+  getReservation,
+  cancelReservation,
+  confirmReservation,
   createReservation,
-  listUserFutureReservations,
+  listUserActiveReservations,
   listHostMonthlyReservations,
 };

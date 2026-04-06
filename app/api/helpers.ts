@@ -21,6 +21,19 @@ export async function processAuthRequest<T>(
   }
 }
 
+export async function processBlobRequest<T>(
+  cb: () => Promise<T>
+): Promise<T | null> {
+  try {
+    return await cb();
+  } catch (err: any) {
+    console.error("", err);
+    errorStore.getState().actions.setError(err.message);
+
+    return null;
+  }
+}
+
 export async function processRpcRequest<T extends keyof Functions>(
   funName: T,
   argsObj: Function<T>["Args"] = {} as Function<T>["Args"]

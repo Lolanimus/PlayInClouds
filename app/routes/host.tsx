@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from "react-router"
 import {
   ArrowLeft,
   CalendarDays,
+  ClipboardList,
   LayoutDashboard,
   MessageSquare,
   Settings,
@@ -15,7 +16,8 @@ export default function HostLayoutPage() {
   const sideNavItems = [
     { label: "Overview", icon: LayoutDashboard, href: "/host/dashboard" },
     { label: "Calendar", icon: CalendarDays, href: "/host/calendar" },
-    { label: "Messages", icon: MessageSquare, href: "/chat" },
+    { label: "Reservations", icon: ClipboardList, href: "/host/reservations" },
+    { label: "Messages", icon: MessageSquare, href: "/host/chat" },
     { label: "Settings", icon: Settings, href: "#" },
   ]
 

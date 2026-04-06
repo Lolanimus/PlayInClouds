@@ -23,8 +23,42 @@ type Pages = {
   "/dashboard": {
     params: {};
   };
+  "/account-settings": {
+    params: {};
+  };
+  "/host/create-listing": {
+    params: {};
+  };
+  "/host/edit-listing/:id": {
+    params: {
+      "id": string;
+    };
+  };
+  "/host": {
+    params: {};
+  };
+  "/host/dashboard": {
+    params: {};
+  };
+  "/host/calendar": {
+    params: {};
+  };
+  "/host/reservations": {
+    params: {};
+  };
+  "/host/chat": {
+    params: {};
+  };
+  "/chat": {
+    params: {};
+  };
   "/payment": {
     params: {};
+  };
+  "/reservation/:id": {
+    params: {
+      "id": string;
+    };
   };
   "/listing/:id": {
     params: {
@@ -36,7 +70,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/signup" | "/dashboard" | "/payment" | "/listing/:id";
+    page: "/" | "/login" | "/signup" | "/dashboard" | "/account-settings" | "/host/create-listing" | "/host/edit-listing/:id" | "/host" | "/host/dashboard" | "/host/calendar" | "/host/reservations" | "/host/chat" | "/chat" | "/payment" | "/reservation/:id" | "/listing/:id";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -54,9 +88,49 @@ type RouteFiles = {
     id: "routes/dashboard";
     page: "/dashboard";
   };
+  "routes/account-settings.tsx": {
+    id: "routes/account-settings";
+    page: "/account-settings";
+  };
+  "routes/create-listing.tsx": {
+    id: "routes/create-listing";
+    page: "/host/create-listing";
+  };
+  "routes/edit-listing.tsx": {
+    id: "routes/edit-listing";
+    page: "/host/edit-listing/:id";
+  };
+  "routes/host.tsx": {
+    id: "routes/host";
+    page: "/host" | "/host/dashboard" | "/host/calendar" | "/host/reservations" | "/host/chat";
+  };
+  "routes/host-dashboard.tsx": {
+    id: "routes/host-dashboard";
+    page: "/host/dashboard";
+  };
+  "routes/host-calendar.tsx": {
+    id: "routes/host-calendar";
+    page: "/host/calendar";
+  };
+  "routes/host-reservations.tsx": {
+    id: "routes/host-reservations";
+    page: "/host/reservations";
+  };
+  "routes/host-chat.tsx": {
+    id: "routes/host-chat";
+    page: "/host/chat";
+  };
+  "routes/chat.tsx": {
+    id: "routes/chat";
+    page: "/chat";
+  };
   "routes/payment.tsx": {
     id: "routes/payment";
     page: "/payment";
+  };
+  "routes/reservation.$id.tsx": {
+    id: "routes/reservation.$id";
+    page: "/reservation/:id";
   };
   "routes/listing.$id.tsx": {
     id: "routes/listing.$id";
@@ -70,6 +144,16 @@ type RouteModules = {
   "routes/auth": typeof import("./app/routes/auth.tsx");
   "routes/signup": typeof import("./app/routes/signup.tsx");
   "routes/dashboard": typeof import("./app/routes/dashboard.tsx");
+  "routes/account-settings": typeof import("./app/routes/account-settings.tsx");
+  "routes/create-listing": typeof import("./app/routes/create-listing.tsx");
+  "routes/edit-listing": typeof import("./app/routes/edit-listing.tsx");
+  "routes/host": typeof import("./app/routes/host.tsx");
+  "routes/host-dashboard": typeof import("./app/routes/host-dashboard.tsx");
+  "routes/host-calendar": typeof import("./app/routes/host-calendar.tsx");
+  "routes/host-reservations": typeof import("./app/routes/host-reservations.tsx");
+  "routes/host-chat": typeof import("./app/routes/host-chat.tsx");
+  "routes/chat": typeof import("./app/routes/chat.tsx");
   "routes/payment": typeof import("./app/routes/payment.tsx");
+  "routes/reservation.$id": typeof import("./app/routes/reservation.$id.tsx");
   "routes/listing.$id": typeof import("./app/routes/listing.$id.tsx");
 };

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
+import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { signout } from "@/api/auth"
@@ -222,6 +223,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   )
   const [duration, setDuration] = useState(storeDuration)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const [isHostAuthModalOpen, setIsHostAuthModalOpen] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
@@ -282,6 +284,17 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     await signout()
     setIsUserMenuOpen(false)
     navigate("/")
+  }
+
+  const handleOpenHostTools = () => {
+    if (!user) {
+      setIsHostAuthModalOpen(true)
+      setIsUserMenuOpen(false)
+      return
+    }
+
+    setIsUserMenuOpen(false)
+    navigate("/host/dashboard")
   }
 
   const handleClickOutside = (e: MouseEvent) => {
@@ -957,9 +970,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         <div className="flex items-center justify-end gap-4 w-48 flex-shrink-0">
           <Button
             variant="ghost"
+            onClick={handleOpenHostTools}
             className="text-[#ffffff] hover:bg-[#ffffff]/10 text-sm font-medium whitespace-nowrap"
           >
-            Become a Host
+            List your space
           </Button>
           <div ref={userMenuRef} className="relative">
             <Button
@@ -982,6 +996,27 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                       className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
                     >
                       Dashboard
+                    </Link>
+                    <Link
+                      to="/chat"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Chat
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleOpenHostTools}
+                      className="block w-full rounded-lg px-4 py-2 text-left text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Host tools
+                    </button>
+                    <Link
+                      to="/account-settings"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Account settings
                     </Link>
                     <button
                       type="button"
@@ -1007,6 +1042,13 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                     >
                       Sign up
                     </a>
+                    <button
+                      type="button"
+                      onClick={handleOpenHostTools}
+                      className="block w-full rounded-lg px-4 py-2 text-left text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Host tools
+                    </button>
                   </>
                 )}
               </div>
@@ -1014,6 +1056,15 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
           </div>
         </div>
       </div>
+
+      <AuthRequiredModal
+        isOpen={isHostAuthModalOpen}
+        onClose={() => setIsHostAuthModalOpen(false)}
+        onLogin={() => navigate(`/login?redirect=${encodeURIComponent("/host/create-listing")}`)}
+        onSignup={() => navigate(`/signup?redirect=${encodeURIComponent("/host/create-listing")}`)}
+        title="Log in to become a host"
+        description="Please log in or create an account to publish your listing."
+      />
     </header>
   )
 }

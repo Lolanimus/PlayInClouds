@@ -29,160 +29,6 @@ export type ListingItem = {
   amenities?: string[]
 }
 
-export const listings: ListingItem[] = [
-  {
-    id: 1,
-    lat: 40.7484,
-    lng: -73.9967,
-    address: "New York, NY, USA",
-    title: "Rehearsal Space in Fashion District",
-    subtitle: "Full Service • Fashion District • Manhattan",
-    category: "Rehearsals, Film/Photo, Meetups",
-    price: "$30 CAD/hour",
-    distance: "1 km away",
-    rating: 5.0,
-    reviews: 9,
-    images: [
-      "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=400&h=300&fit=crop",
-    ],
-  },
-  {
-    id: 2,
-    lat: 40.7508,
-    lng: -73.9935,
-    address: "New York, NY, USA",
-    title: "Rehearsal Space in Fashion District",
-    subtitle: "Full Service • Fashion District • Manhattan",
-    category: "Rehearsals, Film/Photo, Meetups",
-    price: "$25 CAD/hour",
-    distance: "1 km away",
-    rating: 5.0,
-    reviews: 9,
-    images: [
-      "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&h=300&fit=crop",
-    ],
-  },
-  {
-    id: 3,
-    lat: 40.752,
-    lng: -73.989,
-    address: "New York, NY, USA",
-    title: "Creative Studio Space",
-    subtitle: "Modern • Downtown • Manhattan",
-    category: "Workshops, Events, Meetings",
-    price: "$45 CAD/hour",
-    distance: "2 km away",
-    rating: 4.8,
-    reviews: 12,
-    images: [
-      "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=400&h=300&fit=crop",
-    ],
-  },
-  {
-    id: 4,
-    lat: 40.7545,
-    lng: -73.9845,
-    address: "New York, NY, USA",
-    title: "Cozy Meeting Room",
-    subtitle: "Private • Midtown • Manhattan",
-    category: "Meetings, Interviews",
-    price: "$20 CAD/hour",
-    distance: "0.5 km away",
-    rating: 4.9,
-    reviews: 24,
-    images: [
-      "https://images.unsplash.com/photo-1497215842964-222b430dc094?w=400&h=300&fit=crop",
-    ],
-  },
-  {
-    id: 5,
-    lat: 40.7468,
-    lng: -74.0014,
-    address: "New York, NY, USA",
-    title: "Industrial Loft Rehearsal Room",
-    subtitle: "Open Layout • SoHo • Manhattan",
-    category: "Rehearsals, Workshops, Recording",
-    price: "$38 CAD/hour",
-    distance: "1.8 km away",
-    rating: 4.7,
-    reviews: 18,
-    images: [
-      "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=400&h=300&fit=crop",
-    ],
-  },
-  {
-    id: 6,
-    lat: 40.7489,
-    lng: -73.9993,
-    address: "New York, NY, USA",
-    title: "Minimalist Creative Hub",
-    subtitle: "Bright Space • Chelsea • Manhattan",
-    category: "Content, Meetings, Events",
-    price: "$42 CAD/hour",
-    distance: "2.4 km away",
-    rating: 4.9,
-    reviews: 31,
-    images: [
-      "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1497215728101-856f4ea42174?w=400&h=300&fit=crop&sat=-20",
-    ],
-  },
-  {
-    id: 7,
-    lat: 40.7567,
-    lng: -73.9778,
-    address: "New York, NY, USA",
-    title: "Sunlit Practice Studio",
-    subtitle: "Quiet • Upper West Side • Manhattan",
-    category: "Practice, Classes, Coaching",
-    price: "$28 CAD/hour",
-    distance: "3.1 km away",
-    rating: 4.6,
-    reviews: 14,
-    images: [
-      "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1493666438817-866a91353ca9?w=400&h=300&fit=crop",
-    ],
-  },
-  {
-    id: 8,
-    lat: 40.7196,
-    lng: -74.0089,
-    address: "New York, NY, USA",
-    title: "Premium Meeting & Jam Space",
-    subtitle: "Full Equipment • Tribeca • Manhattan",
-    category: "Jam Sessions, Meetings, Productions",
-    price: "$55 CAD/hour",
-    distance: "1.2 km away",
-    rating: 5.0,
-    reviews: 27,
-    images: [
-      "https://images.unsplash.com/photo-1517502884422-41eaead166d4?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&h=300&fit=crop",
-    ],
-  },
-  {
-    id: 9,
-    lat: 42.9755,
-    lng: -81.3009,
-    address: "London, ON, Canada",
-    title: "Rehearsal Space in Fashion District",
-    subtitle: "Full Service • Fashion District • Manhattan",
-    category: "Rehearsals, Film/Photo, Meetups",
-    price: "$30 CAD/hour",
-    distance: "1 km away",
-    rating: 5.0,
-    reviews: 9,
-    images: [
-      "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=300&fit=crop",
-      "https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=400&h=300&fit=crop",
-    ],
-  },
-]
-
 export function ListingCard({
   listing,
   onClose,
@@ -283,12 +129,14 @@ export function ListingCard({
           <h3 className="text-sm font-medium text-[#000000] truncate pr-2">
             {listing.title}
           </h3>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Star className="h-3 w-3 fill-[#000000] text-[#000000]" />
-            <span className="text-xs text-[#000000]">
-              {listing.rating} ({listing.reviews})
-            </span>
-          </div>
+          {listing.reviews > 0 ? (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Star className="h-3 w-3 fill-[#000000] text-[#000000]" />
+              <span className="text-xs text-[#000000]">
+                {listing.rating} ({listing.reviews})
+              </span>
+            </div>
+          ) : null}
         </div>
         <p className="text-xs text-[#6a6a6a] mb-1 truncate">{listing.subtitle}</p>
         <p className="text-xs text-[#6a6a6a] mb-2 truncate">{formatListingCategory(listing.category)}</p>

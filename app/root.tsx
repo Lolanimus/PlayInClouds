@@ -7,6 +7,8 @@ import {
   ScrollRestoration,
 } from "react-router";
 import { useState } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./queries/queries";
 
 import type { Route } from "./+types/root";
 import { Header } from "./components/header";
@@ -52,11 +54,11 @@ export default function App() {
   useAuth();
 
   return (
-    <>
+    <QueryClientProvider client={queryClient}>
       <Header onOpenFilters={() => setIsFiltersOpen(true)} />
       <Outlet />
       <FiltersModal isOpen={isFiltersOpen} onClose={() => setIsFiltersOpen(false)} />
-    </>
+    </QueryClientProvider>
   );
 }
 

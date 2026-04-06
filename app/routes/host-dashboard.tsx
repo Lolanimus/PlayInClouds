@@ -196,12 +196,14 @@ export default function HostDashboardPage() {
                               View listing
                             </Button>
                             <Button
+                              asChild
                               variant="outline"
-                              disabled
                               className="border-[#dadada] text-[#000000] hover:bg-[#f2f2f2]"
                             >
-                              <Edit2 className="mr-2 h-4 w-4" />
-                              Edit (soon)
+                              <Link to={`/host/edit-listing/${listing.id}`}>
+                                <Edit2 className="mr-2 h-4 w-4" />
+                                Edit
+                              </Link>
                             </Button>
                             <Button
                               variant="outline"
