@@ -19,7 +19,9 @@ export interface Listing {
 	price: number;
 	images: string[];
 	description: string;
-	amenities: string[];
+	equipment_desc: string;
+	conveniences_desc: string;
+	area_m2: number;
 	rating_sum: number;
 	average_rating: number;
 	review_count: number;

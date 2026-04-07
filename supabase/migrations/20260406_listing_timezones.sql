@@ -54,7 +54,9 @@ DROP FUNCTION IF EXISTS public.create_listing(
   DOUBLE PRECISION,
   TEXT[],
   TEXT,
-  TEXT[]
+  TEXT,
+  TEXT,
+  DOUBLE PRECISION
 );
 
 CREATE OR REPLACE FUNCTION public.create_listing(
@@ -67,19 +69,25 @@ CREATE OR REPLACE FUNCTION public.create_listing(
   p_price DOUBLE PRECISION,
   p_images TEXT[],
   p_description TEXT,
-  p_amenities TEXT[],
+  p_equipment_desc TEXT,
+  p_conveniences_desc TEXT,
+  p_area_m2 DOUBLE PRECISION,
   p_timezone TEXT DEFAULT 'UTC'
 ) RETURNS jsonb AS $$
 DECLARE
   result public.listings%ROWTYPE;
   v_timezone TEXT;
 BEGIN
+  IF p_area_m2 <= 0 THEN
+    RAISE EXCEPTION 'Area must be greater than 0 m2';
+  END IF;
+
   v_timezone := public.assert_valid_timezone(p_timezone);
 
   INSERT INTO public.listings(
-    lat, lng, address, title, subtitle, category, price, images, description, amenities, owner_id, timezone
+    lat, lng, address, title, subtitle, category, price, images, description, equipment_desc, conveniences_desc, area_m2, owner_id, timezone
   ) VALUES (
-    p_lat, p_lng, p_address, p_title, p_subtitle, p_category, p_price, p_images, p_description, p_amenities, auth.uid(), v_timezone
+    p_lat, p_lng, p_address, p_title, p_subtitle, p_category, p_price, p_images, p_description, p_equipment_desc, p_conveniences_desc, p_area_m2, auth.uid(), v_timezone
   ) RETURNING * INTO result;
 
   RETURN to_jsonb(result);
@@ -97,7 +105,9 @@ DROP FUNCTION IF EXISTS public.update_listing(
   DOUBLE PRECISION,
   TEXT[],
   TEXT,
-  TEXT[]
+  TEXT,
+  TEXT,
+  DOUBLE PRECISION
 );
 
 CREATE OR REPLACE FUNCTION public.update_listing(
@@ -111,13 +121,19 @@ CREATE OR REPLACE FUNCTION public.update_listing(
   p_price DOUBLE PRECISION DEFAULT NULL,
   p_images TEXT[] DEFAULT NULL,
   p_description TEXT DEFAULT NULL,
-  p_amenities TEXT[] DEFAULT NULL,
+  p_equipment_desc TEXT DEFAULT NULL,
+  p_conveniences_desc TEXT DEFAULT NULL,
+  p_area_m2 DOUBLE PRECISION DEFAULT NULL,
   p_timezone TEXT DEFAULT NULL
 ) RETURNS jsonb AS $$
 DECLARE
   result public.listings%ROWTYPE;
   v_timezone TEXT;
 BEGIN
+  IF p_area_m2 IS NOT NULL AND p_area_m2 <= 0 THEN
+    RAISE EXCEPTION 'Area must be greater than 0 m2';
+  END IF;
+
   v_timezone := CASE
     WHEN p_timezone IS NULL THEN NULL
     ELSE public.assert_valid_timezone(p_timezone)
@@ -134,7 +150,9 @@ BEGIN
     price = COALESCE(p_price, price),
     images = COALESCE(p_images, images),
     description = COALESCE(p_description, description),
-    amenities = COALESCE(p_amenities, amenities),
+    equipment_desc = COALESCE(p_equipment_desc, equipment_desc),
+    conveniences_desc = COALESCE(p_conveniences_desc, conveniences_desc),
+    area_m2 = COALESCE(p_area_m2, area_m2),
     timezone = COALESCE(v_timezone, timezone)
   WHERE id = p_id
   RETURNING * INTO result;

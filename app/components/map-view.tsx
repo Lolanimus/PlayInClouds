@@ -76,7 +76,9 @@ export function MapView() {
       reviews: item.review_count,
       images: item.images ?? [],
       description: item.description,
-      amenities: item.amenities,
+      equipmentDesc: item.equipment_desc,
+      conveniencesDesc: item.conveniences_desc,
+      areaM2: item.area_m2,
     }))
   }, [listingsQuery.data])
   const allListings = useMemo(() => (dbListings.length > 0 ? dbListings : hostListings), [dbListings, hostListings])

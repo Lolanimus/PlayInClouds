@@ -109,7 +109,9 @@ export default function ReservationDetailsPage() {
       reviews: listing.review_count,
       images: listing.images ?? [],
       description: listing.description,
-      amenities: listing.amenities,
+      equipmentDesc: listing.equipment_desc,
+      conveniencesDesc: listing.conveniences_desc,
+      areaM2: listing.area_m2,
     }
   }, [listing])
 
@@ -310,7 +312,9 @@ export default function ReservationDetailsPage() {
                       <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">rating_sum</p><p className="text-sm text-[#000000]">{listing.rating_sum}</p></div>
                       <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">images count</p><p className="text-sm text-[#000000]">{listing.images?.length ?? 0}</p></div>
                       <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">description</p><p className="text-sm text-[#000000]">{listing.description}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">amenities</p><p className="text-sm text-[#000000]">{(listing.amenities ?? []).join(", ")}</p></div>
+                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">equipment_desc</p><p className="text-sm text-[#000000]">{listing.equipment_desc}</p></div>
+                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">conveniences_desc</p><p className="text-sm text-[#000000]">{listing.conveniences_desc}</p></div>
+                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">area_m2</p><p className="text-sm text-[#000000]">{listing.area_m2}</p></div>
                       <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">created_at</p><p className="text-sm text-[#000000]">{listing.created_at}</p></div>
                       <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">updated_at</p><p className="text-sm text-[#000000]">{listing.updated_at}</p></div>
                     </div>

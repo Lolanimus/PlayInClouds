@@ -11,7 +11,9 @@ const createListing = async (
   p_price: number,
   p_images: string[],
   p_description: string,
-  p_amenities: string[],
+  p_equipment_desc: string,
+  p_conveniences_desc: string,
+  p_area_m2: number,
   p_timezone?: string
 ) => {
   return await processRpcRequest("create_listing", {
@@ -24,7 +26,9 @@ const createListing = async (
     p_price,
     p_images,
     p_description,
-    p_amenities,
+    p_equipment_desc,
+    p_conveniences_desc,
+    p_area_m2,
     ...(p_timezone ? { p_timezone } : {}),
   });
 };
@@ -48,7 +52,7 @@ const listListings = async (
     p_max_price,
     p_limit,
     p_offset,
-  });
+  } as any);
 };
 
 const updateListing = async (args: {
@@ -62,7 +66,9 @@ const updateListing = async (args: {
   p_price?: number;
   p_images?: string[];
   p_description?: string;
-  p_amenities?: string[];
+  p_equipment_desc?: string;
+  p_conveniences_desc?: string;
+  p_area_m2?: number;
   p_timezone?: string;
 }) => {
   return await processRpcRequest("update_listing", args);

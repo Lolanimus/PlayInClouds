@@ -154,7 +154,9 @@ export default function ListingDetailsPage() {
         subtitle: remote.subtitle,
         category: remote.category,
         description: remote.description,
-        amenities: remote.amenities,
+        equipmentDesc: remote.equipment_desc,
+        conveniencesDesc: remote.conveniences_desc,
+        areaM2: remote.area_m2,
         images: remote.images,
         priceLabel: `$${remote.price} CAD/hour`,
         priceNumber: remote.price,
@@ -173,7 +175,9 @@ export default function ListingDetailsPage() {
         subtitle: localListing.subtitle,
         category: localListing.category,
         description: localListing.description,
-        amenities: localListing.amenities,
+        equipmentDesc: localListing.equipmentDesc,
+        conveniencesDesc: localListing.conveniencesDesc,
+        areaM2: localListing.areaM2,
         images: localListing.images,
         priceLabel: localListing.price,
         priceNumber: parseHourlyPrice(localListing.price),
@@ -215,7 +219,6 @@ export default function ListingDetailsPage() {
   const previewReviews = reviews.slice(0, 6)
   const reviewCountForLabel = reviews.length > 0 ? reviews.length : listing?.reviews ?? 0
   const homeTo = "/"
-
   const bookingWindowEndLabel = useMemo(() => {
     const lastDay = upcomingDays[upcomingDays.length - 1]
     if (!lastDay) return ""
@@ -547,31 +550,36 @@ export default function ListingDetailsPage() {
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
               <h2 className="text-xl font-semibold text-[#000000]">{listing.title}</h2>
               <p className="mt-2 text-sm text-[#6a6a6a]">
-                {formatListingCategory(listing.category)} · Perfect for creators, teams, and rehearsals.
+                {formatListingCategory(listing.category)}
               </p>
             </div>
 
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#000000]">About this space</h3>
+              <h3 className="text-lg font-semibold text-[#000000]">Space Description</h3>
               <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
                 {listing.description ?? `This Airbnb-style listing page is set up for ${listing.title}. The space is located in ${listing.subtitle} and is ideal for sessions that need a clean, flexible layout.`}
               </p>
             </div>
 
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#000000]">What this place offers</h3>
-              <ul className="mt-3 grid grid-cols-1 gap-2 text-sm text-[#4a4a4a] sm:grid-cols-2">
-                {(listing.amenities?.length ? listing.amenities : [
-                  "High-speed Wi-Fi",
-                  "Sound-treated environment",
-                  "Flexible seating",
-                  "Whiteboard + monitor",
-                  "Coffee & water",
-                  "Easy self check-in",
-                ]).map((amenity: string) => (
-                  <li key={amenity}>• {amenity}</li>
-                ))}
-              </ul>
+              <h3 className="text-lg font-semibold text-[#000000]">Equipment Description</h3>
+              <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
+                {listing.equipmentDesc?.trim() || "Professional audio setup available on-site."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-[#000000]">Space conveniences</h3>
+              <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
+                {listing.conveniencesDesc?.trim() || "Bathroom, A/C, and Wi-Fi available."}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-[#000000]">Studio area</h3>
+              <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
+                {typeof listing.areaM2 === "number" && listing.areaM2 > 0 ? `${listing.areaM2} m²` : "Area not specified"}
+              </p>
             </div>
 
             {listing.reviews > 0 ? (

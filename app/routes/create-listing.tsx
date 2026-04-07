@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Crop, MapPin, Sparkles, UploadCloud, X } from "lucide-react"
 
@@ -66,8 +66,10 @@ type ListingFormState = {
   category: string
   address: string
   hourlyRate: string
+  areaM2: string
   description: string
-  amenitiesRaw: string
+  equipmentDesc: string
+  conveniencesDesc: string
 }
 
 const initialFormState: ListingFormState = {
@@ -76,8 +78,10 @@ const initialFormState: ListingFormState = {
   category: "REHEARSAL_SPACE",
   address: "",
   hourlyRate: "30",
+  areaM2: "25",
   description: "pizdec",
-  amenitiesRaw: "tozh pizdec",
+  equipmentDesc: "drum kit, guitar amps, microphones",
+  conveniencesDesc: "bathroom, A/C, Wi‑Fi",
 }
 
 export default function CreateListingPage() {
@@ -118,15 +122,6 @@ export default function CreateListingPage() {
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-  const parsedAmenities = useMemo(
-    () =>
-      form.amenitiesRaw
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean),
-    [form.amenitiesRaw]
-  )
-
   useEffect(() => {
     if (!user) {
       const redirect = isEditMode && id ? `/host/edit-listing/${id}` : "/host/create-listing"
@@ -155,8 +150,10 @@ export default function CreateListingPage() {
       category: listing.category ?? "REHEARSAL_SPACE",
       address: listing.address ?? "",
       hourlyRate: String(listing.price ?? ""),
+      areaM2: String(listing.area_m2 ?? ""),
       description: listing.description ?? "",
-      amenitiesRaw: (listing.amenities ?? []).join("\n"),
+      equipmentDesc: listing.equipment_desc ?? "",
+      conveniencesDesc: listing.conveniences_desc ?? "",
     })
 
     setUploadedImages(
@@ -319,15 +316,18 @@ export default function CreateListingPage() {
     setFormError(null)
 
     const hourlyRate = Number(form.hourlyRate)
+    const areaM2 = Number(form.areaM2)
 
     if (!form.title.trim()) return setFormError("Title is required.")
     if (!form.subtitle.trim()) return setFormError("Subtitle is required.")
     if (!form.category.trim()) return setFormError("Category is required.")
     if (!form.address.trim()) return setFormError("Address is required.")
     if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) return setFormError("Hourly rate must be a valid number.")
+    if (!Number.isFinite(areaM2) || areaM2 <= 0) return setFormError("Area must be a valid positive number.")
     if (uploadedImages.length === 0) return setFormError("Please upload at least one image.")
     if (!form.description.trim()) return setFormError("Description is required.")
-    if (parsedAmenities.length === 0) return setFormError("Add at least one amenity.")
+    if (!form.equipmentDesc.trim()) return setFormError("Equipment description is required.")
+    if (!form.conveniencesDesc.trim()) return setFormError("Conveniences description is required.")
     if (!GOOGLE_MAPS_API_KEY) return setFormError("Missing Google Maps API key.")
 
     const weeklySlotsPayload = [] as Array<{ weekday: number; hour: number; price: number }>
@@ -430,7 +430,9 @@ export default function CreateListingPage() {
           p_price: hourlyRate,
           p_images: imagesPayload,
           p_description: form.description.trim(),
-          p_amenities: parsedAmenities,
+          p_equipment_desc: form.equipmentDesc.trim(),
+          p_conveniences_desc: form.conveniencesDesc.trim(),
+          p_area_m2: areaM2,
           p_timezone: timezone,
         },
         {
@@ -470,7 +472,9 @@ export default function CreateListingPage() {
         p_price: hourlyRate,
         p_images: imagesPayload,
         p_description: form.description.trim(),
-        p_amenities: parsedAmenities,
+        p_equipment_desc: form.equipmentDesc.trim(),
+        p_conveniences_desc: form.conveniencesDesc.trim(),
+        p_area_m2: areaM2,
         p_timezone: timezone,
       },
       {
@@ -866,6 +870,11 @@ export default function CreateListingPage() {
                   <p className="text-xs font-medium text-[#6a6a6a]">Hourly rate (CAD)</p>
                   <Input type="number" min="1" step="1" placeholder="e.g. 40" value={form.hourlyRate} onChange={(e) => setForm((prev) => ({ ...prev, hourlyRate: e.target.value }))} />
                 </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <p className="text-xs font-medium text-[#6a6a6a]">Studio area (m²)</p>
+                  <Input type="number" min="1" step="0.1" placeholder="e.g. 35" value={form.areaM2} onChange={(e) => setForm((prev) => ({ ...prev, areaM2: e.target.value }))} />
+                </div>
               </div>
             </section>
 
@@ -943,11 +952,21 @@ export default function CreateListingPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Amenities (one per line)</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Equipment Description</p>
                   <Textarea
-                    value={form.amenitiesRaw}
-                    onChange={(e) => setForm((prev) => ({ ...prev, amenitiesRaw: e.target.value }))}
-                    placeholder={"High-speed Wi-Fi\nSound-treated room\nSelf check-in"}
+                    value={form.equipmentDesc}
+                    onChange={(e) => setForm((prev) => ({ ...prev, equipmentDesc: e.target.value }))}
+                    placeholder={"Drum kit, microphones, monitors, mixer..."}
+                    className="min-h-24"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-[#6a6a6a]">Space conveniences</p>
+                  <Textarea
+                    value={form.conveniencesDesc}
+                    onChange={(e) => setForm((prev) => ({ ...prev, conveniencesDesc: e.target.value }))}
+                    placeholder={"Bathroom, A/C, Wi-Fi, parking..."}
                     className="min-h-24"
                   />
                 </div>

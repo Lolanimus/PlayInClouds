@@ -55,11 +55,13 @@ export type Database = {
       listings: {
         Row: {
           address: string
-          amenities: string[]
+          area_m2: number
           average_rating: number
           category: Database["public"]["Enums"]["listing_category"]
+          conveniences_desc: string
           created_at: string
           description: string
+          equipment_desc: string
           id: string
           images: string[]
           lat: number
@@ -75,11 +77,13 @@ export type Database = {
         }
         Insert: {
           address: string
-          amenities: string[]
+          area_m2?: number
           average_rating?: number
           category: Database["public"]["Enums"]["listing_category"]
+          conveniences_desc?: string
           created_at?: string
           description: string
+          equipment_desc?: string
           id?: string
           images: string[]
           lat: number
@@ -95,11 +99,13 @@ export type Database = {
         }
         Update: {
           address?: string
-          amenities?: string[]
+          area_m2?: number
           average_rating?: number
           category?: Database["public"]["Enums"]["listing_category"]
+          conveniences_desc?: string
           created_at?: string
           description?: string
+          equipment_desc?: string
           id?: string
           images?: string[]
           lat?: number
@@ -262,9 +268,11 @@ export type Database = {
       create_listing: {
         Args: {
           p_address: string
-          p_amenities: string[]
+          p_area_m2: number
           p_category: Database["public"]["Enums"]["listing_category"]
+          p_conveniences_desc: string
           p_description: string
+          p_equipment_desc: string
           p_images: string[]
           p_lat: number
           p_lng: number
@@ -346,9 +354,11 @@ export type Database = {
       update_listing: {
         Args: {
           p_address?: string
-          p_amenities?: string[]
+          p_area_m2?: number
           p_category?: Database["public"]["Enums"]["listing_category"]
+          p_conveniences_desc?: string
           p_description?: string
+          p_equipment_desc?: string
           p_id: string
           p_images?: string[]
           p_lat?: number

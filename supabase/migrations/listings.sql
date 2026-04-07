@@ -32,7 +32,9 @@ CREATE TABLE public.listings (
 
     images TEXT[] NOT NULL,
     description TEXT NOT NULL,
-    amenities TEXT[] NOT NULL,
+    equipment_desc TEXT NOT NULL DEFAULT '',
+    conveniences_desc TEXT NOT NULL DEFAULT '',
+    area_m2 DOUBLE PRECISION NOT NULL DEFAULT 0,
 
     rating_sum NUMERIC NOT NULL DEFAULT 0,
     average_rating NUMERIC(2,1) NOT NULL DEFAULT 0,
@@ -194,15 +196,21 @@ CREATE OR REPLACE FUNCTION create_listing(
     p_price DOUBLE PRECISION,
     p_images TEXT[],
     p_description TEXT,
-    p_amenities TEXT[]
+    p_equipment_desc TEXT,
+    p_conveniences_desc TEXT,
+    p_area_m2 DOUBLE PRECISION
  ) RETURNS jsonb AS $$
 DECLARE
     result public.listings%ROWTYPE;
 BEGIN
+    IF p_area_m2 <= 0 THEN
+        RAISE EXCEPTION 'Area must be greater than 0 m2';
+    END IF;
+
     INSERT INTO public.listings(
-        lat, lng, address, title, subtitle, category, price, images, description, amenities, owner_id
+        lat, lng, address, title, subtitle, category, price, images, description, equipment_desc, conveniences_desc, area_m2, owner_id
     ) VALUES (
-        p_lat, p_lng, p_address, p_title, p_subtitle, p_category, p_price, p_images, p_description, p_amenities, auth.uid()
+        p_lat, p_lng, p_address, p_title, p_subtitle, p_category, p_price, p_images, p_description, p_equipment_desc, p_conveniences_desc, p_area_m2, auth.uid()
     ) RETURNING * INTO result;
 
     RETURN to_jsonb(result);
@@ -269,11 +277,17 @@ CREATE OR REPLACE FUNCTION update_listing(
     p_price DOUBLE PRECISION DEFAULT NULL,
     p_images TEXT[] DEFAULT NULL,
     p_description TEXT DEFAULT NULL,
-    p_amenities TEXT[] DEFAULT NULL
+    p_equipment_desc TEXT DEFAULT NULL,
+    p_conveniences_desc TEXT DEFAULT NULL,
+    p_area_m2 DOUBLE PRECISION DEFAULT NULL
  ) RETURNS jsonb AS $$
 DECLARE
     result public.listings%ROWTYPE;
 BEGIN
+    IF p_area_m2 IS NOT NULL AND p_area_m2 <= 0 THEN
+        RAISE EXCEPTION 'Area must be greater than 0 m2';
+    END IF;
+
     UPDATE public.listings
     SET
         lat = COALESCE(p_lat, lat),
@@ -285,7 +299,9 @@ BEGIN
         price = COALESCE(p_price, price),
         images = COALESCE(p_images, images),
         description = COALESCE(p_description, description),
-        amenities = COALESCE(p_amenities, amenities)
+        equipment_desc = COALESCE(p_equipment_desc, equipment_desc),
+        conveniences_desc = COALESCE(p_conveniences_desc, conveniences_desc),
+        area_m2 = COALESCE(p_area_m2, area_m2)
     WHERE id = p_id
     RETURNING * INTO result;
 
