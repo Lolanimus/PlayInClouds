@@ -36,6 +36,21 @@ CREATE TABLE IF NOT EXISTS public.listing_weekly_slots (
   CONSTRAINT listing_weekly_slots_price_positive CHECK (price > 0)
 );
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'listing_weekly_slots_listing_id_fkey'
+      AND conrelid = 'public.listing_weekly_slots'::regclass
+  ) THEN
+    ALTER TABLE public.listing_weekly_slots
+      ADD CONSTRAINT listing_weekly_slots_listing_id_fkey
+      FOREIGN KEY (listing_id) REFERENCES public.listings(id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
+
 -- Ensure existing installations match current non-null-price model
 ALTER TABLE public.listing_weekly_slots
   ALTER COLUMN price SET NOT NULL;
@@ -61,6 +76,32 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   CONSTRAINT reservations_time_valid CHECK (start_at < end_at)
 );
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'reservations_listing_id_fkey'
+      AND conrelid = 'public.reservations'::regclass
+  ) THEN
+    ALTER TABLE public.reservations
+      ADD CONSTRAINT reservations_listing_id_fkey
+      FOREIGN KEY (listing_id) REFERENCES public.listings(id) ON DELETE CASCADE;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'reservations_renter_id_fkey'
+      AND conrelid = 'public.reservations'::regclass
+  ) THEN
+    ALTER TABLE public.reservations
+      ADD CONSTRAINT reservations_renter_id_fkey
+      FOREIGN KEY (renter_id) REFERENCES public.user(id) ON DELETE CASCADE;
+  END IF;
+END
+$$;
 
 -- =========================
 -- INDEXES
