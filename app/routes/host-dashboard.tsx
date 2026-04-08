@@ -171,14 +171,10 @@ export default function HostDashboardPage() {
 
                           <p className="mb-4 line-clamp-2 text-sm text-[#6a6a6a]">{listing.description}</p>
 
-                          <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="grid gap-3 sm:grid-cols-2">
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
                               <p className="text-xs text-[#6a6a6a]">Rate</p>
                               <p className="font-semibold text-[#000000]">${listing.price} CAD/hour</p>
-                            </div>
-                            <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                              <p className="text-xs text-[#6a6a6a]">Distance</p>
-                              <p className="font-semibold text-[#000000]">—</p>
                             </div>
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
                               <p className="text-xs text-[#6a6a6a]">Rating</p>
