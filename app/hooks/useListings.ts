@@ -103,6 +103,7 @@ export const useCreateListing = () => {
       p_equipment_desc: string;
       p_conveniences_desc: string;
       p_area_m2: number;
+      p_cancellation_policy_hours?: number | null;
       p_timezone?: string;
     }) => {
       console.info("Creating listing", payload);
@@ -143,6 +144,7 @@ export const useCreateListing = () => {
         payload.p_equipment_desc,
         payload.p_conveniences_desc,
         payload.p_area_m2,
+        payload.p_cancellation_policy_hours,
         payload.p_timezone
       );
     },

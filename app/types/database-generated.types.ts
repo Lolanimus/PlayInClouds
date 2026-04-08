@@ -57,6 +57,7 @@ export type Database = {
           address: string
           area_m2: number
           average_rating: number
+          cancellation_policy_hours: number | null
           category: Database["public"]["Enums"]["listing_category"]
           conveniences_desc: string
           created_at: string
@@ -79,6 +80,7 @@ export type Database = {
           address: string
           area_m2?: number
           average_rating?: number
+          cancellation_policy_hours?: number | null
           category: Database["public"]["Enums"]["listing_category"]
           conveniences_desc?: string
           created_at?: string
@@ -101,6 +103,7 @@ export type Database = {
           address?: string
           area_m2?: number
           average_rating?: number
+          cancellation_policy_hours?: number | null
           category?: Database["public"]["Enums"]["listing_category"]
           conveniences_desc?: string
           created_at?: string
@@ -269,6 +272,7 @@ export type Database = {
         Args: {
           p_address: string
           p_area_m2: number
+          p_cancellation_policy_hours?: number | null
           p_category: Database["public"]["Enums"]["listing_category"]
           p_conveniences_desc: string
           p_description: string
@@ -355,6 +359,7 @@ export type Database = {
         Args: {
           p_address?: string
           p_area_m2?: number
+          p_cancellation_policy_hours?: number | null
           p_category?: Database["public"]["Enums"]["listing_category"]
           p_conveniences_desc?: string
           p_description?: string

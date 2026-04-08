@@ -22,6 +22,7 @@ export interface Listing {
 	equipment_desc: string;
 	conveniences_desc: string;
 	area_m2: number;
+	cancellation_policy_hours: number | null;
 	rating_sum: number;
 	average_rating: number;
 	review_count: number;

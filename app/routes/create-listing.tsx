@@ -5,6 +5,7 @@ import { ChevronLeft, Crop, MapPin, Sparkles, UploadCloud, X } from "lucide-reac
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { processRpcRequest } from "@/api/helpers"
 import { useSetListingWeeklySlots } from "@/hooks/useHours"
@@ -67,19 +68,23 @@ type ListingFormState = {
   address: string
   hourlyRate: string
   areaM2: string
+  cancellationPolicyEnabled: boolean
+  cancellationPolicyHours: string
   description: string
   equipmentDesc: string
   conveniencesDesc: string
 }
 
 const initialFormState: ListingFormState = {
-  title: "rehearsal space in london",
-  subtitle: "london on",
+  title: "Rehearsal Space in Wortley Village",
+  subtitle: "London, ON",
   category: "REHEARSAL_SPACE",
-  address: "",
+  address: "50 Euclid Ave London",
   hourlyRate: "30",
-  areaM2: "25",
-  description: "pizdec",
+  areaM2: "30",
+  cancellationPolicyEnabled: false,
+  cancellationPolicyHours: "",
+  description: "ahuenniy space",
   equipmentDesc: "drum kit, guitar amps, microphones",
   conveniencesDesc: "bathroom, A/C, Wi‑Fi",
 }
@@ -101,6 +106,7 @@ export default function CreateListingPage() {
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false)
   const [addressError, setAddressError] = useState<string | null>(null)
   const [isAddressDropdownOpen, setIsAddressDropdownOpen] = useState(false)
+  const [isAddressPickedFromSuggestions, setIsAddressPickedFromSuggestions] = useState(false)
   const [weeklySlotPrices, setWeeklySlotPrices] = useState<string[]>(() => Array.from({ length: SLOT_COUNT }, () => initialFormState.hourlyRate))
   const [bulkWeekPrice, setBulkWeekPrice] = useState(initialFormState.hourlyRate)
   const [cropImageIndex, setCropImageIndex] = useState<number | null>(null)
@@ -151,10 +157,16 @@ export default function CreateListingPage() {
       address: listing.address ?? "",
       hourlyRate: String(listing.price ?? ""),
       areaM2: String(listing.area_m2 ?? ""),
+      cancellationPolicyEnabled: typeof listing.cancellation_policy_hours === "number",
+      cancellationPolicyHours:
+        typeof listing.cancellation_policy_hours === "number"
+          ? String(listing.cancellation_policy_hours)
+          : "",
       description: listing.description ?? "",
       equipmentDesc: listing.equipment_desc ?? "",
       conveniencesDesc: listing.conveniences_desc ?? "",
     })
+    setIsAddressPickedFromSuggestions(true)
 
     setUploadedImages(
       (listing.images ?? []).map((url) => ({
@@ -317,13 +329,22 @@ export default function CreateListingPage() {
 
     const hourlyRate = Number(form.hourlyRate)
     const areaM2 = Number(form.areaM2)
+    const hasCancellationPolicy = form.cancellationPolicyEnabled
+    const cancellationPolicyHours = hasCancellationPolicy ? Number(form.cancellationPolicyHours) : null
 
     if (!form.title.trim()) return setFormError("Title is required.")
     if (!form.subtitle.trim()) return setFormError("Subtitle is required.")
     if (!form.category.trim()) return setFormError("Category is required.")
     if (!form.address.trim()) return setFormError("Address is required.")
+    if (!isAddressPickedFromSuggestions) return setFormError("Please pick the address from suggestions.")
+    if (hasCancellationPolicy && !form.cancellationPolicyHours.trim()) {
+      return setFormError("Enter cancellation policy hours.")
+    }
     if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) return setFormError("Hourly rate must be a valid number.")
     if (!Number.isFinite(areaM2) || areaM2 <= 0) return setFormError("Area must be a valid positive number.")
+    if (hasCancellationPolicy && (!Number.isInteger(cancellationPolicyHours) || (cancellationPolicyHours ?? -1) < 0)) {
+      return setFormError("Cancellation policy must be a whole number of hours, or empty.")
+    }
     if (uploadedImages.length === 0) return setFormError("Please upload at least one image.")
     if (!form.description.trim()) return setFormError("Description is required.")
     if (!form.equipmentDesc.trim()) return setFormError("Equipment description is required.")
@@ -433,6 +454,7 @@ export default function CreateListingPage() {
           p_equipment_desc: form.equipmentDesc.trim(),
           p_conveniences_desc: form.conveniencesDesc.trim(),
           p_area_m2: areaM2,
+          p_cancellation_policy_hours: cancellationPolicyHours,
           p_timezone: timezone,
         },
         {
@@ -475,6 +497,7 @@ export default function CreateListingPage() {
         p_equipment_desc: form.equipmentDesc.trim(),
         p_conveniences_desc: form.conveniencesDesc.trim(),
         p_area_m2: areaM2,
+        p_cancellation_policy_hours: cancellationPolicyHours,
         p_timezone: timezone,
       },
       {
@@ -808,6 +831,7 @@ export default function CreateListingPage() {
                       }}
                       onChange={(e) => {
                         setForm((prev) => ({ ...prev, address: e.target.value }))
+                        setIsAddressPickedFromSuggestions(false)
                         setIsAddressDropdownOpen(true)
                       }}
                     />
@@ -834,6 +858,7 @@ export default function CreateListingPage() {
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
                                 setForm((prev) => ({ ...prev, address: address.name }))
+                                setIsAddressPickedFromSuggestions(true)
                                 setIsAddressDropdownOpen(false)
                               }}
                               className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#e9e9e9]"
@@ -874,6 +899,45 @@ export default function CreateListingPage() {
                 <div className="space-y-1.5 md:col-span-2">
                   <p className="text-xs font-medium text-[#6a6a6a]">Studio area (m²)</p>
                   <Input type="number" min="1" step="0.1" placeholder="e.g. 35" value={form.areaM2} onChange={(e) => setForm((prev) => ({ ...prev, areaM2: e.target.value }))} />
+                </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <div className="rounded-xl border border-[#e6e6e6] bg-[#fafafa] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-[#6a6a6a]">Cancellation policy</p>
+                        <p className="mt-1 text-xs text-[#7a7a7a]">
+                          {form.cancellationPolicyEnabled
+                            ? "Renter can cancel only before the cutoff."
+                            : "Renter can cancel any time before reservation start."}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.cancellationPolicyEnabled}
+                        onCheckedChange={(checked) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            cancellationPolicyEnabled: checked,
+                            cancellationPolicyHours: checked ? prev.cancellationPolicyHours : "",
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {form.cancellationPolicyEnabled ? (
+                      <div className="mt-3 space-y-1.5">
+                        <p className="text-xs font-medium text-[#6a6a6a]">Hours before start</p>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="e.g. 24"
+                          value={form.cancellationPolicyHours}
+                          onChange={(e) => setForm((prev) => ({ ...prev, cancellationPolicyHours: e.target.value }))}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </section>
