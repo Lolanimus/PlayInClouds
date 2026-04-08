@@ -58,6 +58,7 @@ export default function PaymentPage() {
         rating: remoteListing.average_rating,
         reviews: remoteListing.review_count,
         priceNumber: remoteListing.price,
+        cancellationPolicyHours: remoteListing.cancellation_policy_hours,
       }
     : localListing
       ? {
@@ -68,6 +69,7 @@ export default function PaymentPage() {
           rating: localListing.rating,
           reviews: localListing.reviews,
           priceNumber: parseHourlyPrice(localListing.price),
+          cancellationPolicyHours: null,
         }
       : null
 
@@ -111,6 +113,15 @@ export default function PaymentPage() {
   const subtotal = Number((hourlyRate * hours).toFixed(2))
   const processingFee = Number((subtotal * 0.075).toFixed(2))
   const total = Number((subtotal + processingFee).toFixed(2))
+  const reservationStartAt = new Date(`${dateKey}T00:00:00`)
+  reservationStartAt.setHours(startHour, 0, 0, 0)
+  const hoursUntilStart = (reservationStartAt.getTime() - Date.now()) / (1000 * 60 * 60)
+  const cancellationWarning =
+    listing.cancellationPolicyHours === null
+      ? "Cancellation for this listing is disabled."
+      : typeof listing.cancellationPolicyHours === "number" && hoursUntilStart < listing.cancellationPolicyHours
+        ? `Cancellation will not be possible for this booking. This listing requires cancellations at least ${listing.cancellationPolicyHours} hour(s) before the start time.`
+        : null
 
   const handleBuy = async () => {
     if (!user) {
@@ -220,6 +231,13 @@ export default function PaymentPage() {
                   <p>${total.toFixed(2)} CAD</p>
                 </div>
               </div>
+
+              {cancellationWarning ? (
+                <div className="mt-4 rounded-lg border border-[#f1c3bd] bg-[#fff3f2] px-3 py-2">
+                  <p className="text-xs font-semibold text-[#b42318]">Cancellation notice</p>
+                  <p className="mt-1 text-sm text-[#b42318]">{cancellationWarning}</p>
+                </div>
+              ) : null}
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
                 <Button asChild variant="outline" className="rounded-xl border-[#dadada] bg-[#ffffff]">

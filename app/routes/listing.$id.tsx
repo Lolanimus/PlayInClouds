@@ -48,13 +48,6 @@ function parseHourlyPrice(price: string) {
   return Number(match[1])
 }
 
-function getHourRate(basePrice: number, hour: number) {
-  if (hour >= 18 && hour <= 22) return Math.round(basePrice * 1.3)
-  if (hour >= 10 && hour <= 16) return Math.round(basePrice * 1.1)
-  if (hour <= 6) return Math.round(basePrice * 0.8)
-  return Math.round(basePrice)
-}
-
 function formatHourLabel(hour: number) {
   return `${hour.toString().padStart(2, "0")}:00`
 }
@@ -157,6 +150,7 @@ export default function ListingDetailsPage() {
         equipmentDesc: remote.equipment_desc,
         conveniencesDesc: remote.conveniences_desc,
         areaM2: remote.area_m2,
+        cancellationPolicyHours: remote.cancellation_policy_hours,
         images: remote.images,
         priceLabel: `$${remote.price} CAD/hour`,
         priceNumber: remote.price,
@@ -178,6 +172,7 @@ export default function ListingDetailsPage() {
         equipmentDesc: localListing.equipmentDesc,
         conveniencesDesc: localListing.conveniencesDesc,
         areaM2: localListing.areaM2,
+        cancellationPolicyHours: null,
         images: localListing.images,
         priceLabel: localListing.price,
         priceNumber: parseHourlyPrice(localListing.price),
@@ -352,6 +347,35 @@ export default function ListingDetailsPage() {
       ? `${selectedDay.dayLabel}, ${selectedDay.monthDayLabel} · ${formatHourLabel(selectedStartHour)}–${formatHourLabel(selectedEndHour)}`
       : null
 
+  const cancellationWarning = useMemo(() => {
+    if (!listing || !selectedDay || selectedStartHour === null) return null
+
+    if (listing.cancellationPolicyHours === null) {
+      return "Cancellation for this listing is disabled."
+    }
+
+    if (typeof listing.cancellationPolicyHours !== "number") return null
+
+    const selectedStart = new Date(
+      selectedDay.date.getFullYear(),
+      selectedDay.date.getMonth(),
+      selectedDay.date.getDate(),
+      selectedStartHour,
+      0,
+      0,
+      0
+    )
+
+    const msUntilStart = selectedStart.getTime() - Date.now()
+    const hoursUntilStart = msUntilStart / (1000 * 60 * 60)
+
+    if (hoursUntilStart < listing.cancellationPolicyHours) {
+      return `Cancellation will not be possible for this booking. This listing requires cancellations at least ${listing.cancellationPolicyHours} hour(s) before the start time.`
+    }
+
+    return null
+  }, [listing, selectedDay, selectedStartHour])
+
   const handleContinueToPayment = () => {
     if (!listing || !selectedDay) return
     if (selectedStartHour === null || selectedEndHour === null) return
@@ -497,7 +521,14 @@ export default function ListingDetailsPage() {
           </div>
         </div>
 
-        <h1 className="text-2xl font-semibold text-[#000000] md:text-3xl">{listing.title}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold leading-none text-[#000000] md:text-3xl">{listing.title}</h1>
+          {typeof listing.areaM2 === "number" && listing.areaM2 > 0 ? (
+            <span className="inline-flex h-8 items-center rounded-full border border-[#dadada] bg-[#ffffff] ml-2 px-3 text-sm font-medium leading-none text-[#4a4a4a]">
+              {listing.areaM2} m²
+            </span>
+          ) : null}
+        </div>
 
         <div className="mt-2 flex items-center gap-2 text-sm text-[#6a6a6a]">
           {listing.reviews > 0 ? (
@@ -548,13 +579,6 @@ export default function ListingDetailsPage() {
         <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_22rem]">
           <div className="space-y-6">
             <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
-              <h2 className="text-xl font-semibold text-[#000000]">{listing.title}</h2>
-              <p className="mt-2 text-sm text-[#6a6a6a]">
-                {formatListingCategory(listing.category)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-[#000000]">Space Description</h3>
               <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
                 {listing.description ?? `This Airbnb-style listing page is set up for ${listing.title}. The space is located in ${listing.subtitle} and is ideal for sessions that need a clean, flexible layout.`}
@@ -572,13 +596,6 @@ export default function ListingDetailsPage() {
               <h3 className="text-lg font-semibold text-[#000000]">Space conveniences</h3>
               <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
                 {listing.conveniencesDesc?.trim() || "Bathroom, A/C, and Wi-Fi available."}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#000000]">Studio area</h3>
-              <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
-                {typeof listing.areaM2 === "number" && listing.areaM2 > 0 ? `${listing.areaM2} m²` : "Area not specified"}
               </p>
             </div>
 
@@ -729,6 +746,13 @@ export default function ListingDetailsPage() {
                   </p>
                   <p className="mt-1 text-xs text-[#6a6a6a]">Gray cells marked “Booked” are already rented and can’t be selected.</p>
                 </div>
+
+                {cancellationWarning ? (
+                  <div className="mb-4 rounded-lg border border-[#f1c3bd] bg-[#fff3f2] px-3 py-2">
+                    <p className="text-xs font-semibold text-[#b42318]">Cancellation notice</p>
+                    <p className="mt-1 text-sm text-[#b42318]">{cancellationWarning}</p>
+                  </div>
+                ) : null}
 
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>

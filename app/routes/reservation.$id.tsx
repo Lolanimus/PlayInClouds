@@ -69,6 +69,21 @@ function isPastReservation(endAtIso: string) {
   return end.getTime() <= Date.now()
 }
 
+function canRenterCancel(startAtIso: string, endAtIso: string, cancellationPolicyHours: number | null | undefined) {
+  const now = Date.now()
+  const start = new Date(startAtIso)
+  const end = new Date(endAtIso)
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false
+  if (end.getTime() <= now) return false
+  if (start.getTime() <= now) return false
+
+  if (typeof cancellationPolicyHours !== "number") return true
+
+  const deadline = start.getTime() - cancellationPolicyHours * 60 * 60 * 1000
+  return now <= deadline
+}
+
 export default function ReservationDetailsPage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -122,10 +137,17 @@ export default function ReservationDetailsPage() {
     reservationQuery.isError
 
   const isPast = reservation ? isPastReservation(reservation.end_at) : false
+  const isRenter = Boolean(user?.id && reservation?.renter_id === user.id)
+  const renterCanCancel = reservation && listing
+    ? canRenterCancel(reservation.start_at, reservation.end_at, listing.cancellation_policy_hours)
+    : false
+  const canCancel = reservation
+    ? (isRenter ? renterCanCancel : !isPast)
+    : false
 
   const handleCancelReservation = async () => {
     if (!reservation) return
-    if (isPastReservation(reservation.end_at)) return
+    if (!canCancel) return
 
     if (!confirm("Cancel this reservation?")) return
 
@@ -347,7 +369,7 @@ export default function ReservationDetailsPage() {
                 <Link to={`/listing/${reservation.listing_id}`}>Open listing</Link>
               </Button>
 
-              {reservation.status !== "CANCELLED" && !isPast ? (
+              {reservation.status !== "CANCELLED" && canCancel ? (
                 <Button
                   variant="destructive"
                   onClick={handleCancelReservation}
@@ -355,6 +377,10 @@ export default function ReservationDetailsPage() {
                 >
                   {cancelReservationMutation.isPending ? "Cancelling..." : "Cancel reservation"}
                 </Button>
+              ) : isRenter && !isPast ? (
+                <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                  Cancellation window ended
+                </Badge>
               ) : isPast ? (
                 <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
                   Past reservation
