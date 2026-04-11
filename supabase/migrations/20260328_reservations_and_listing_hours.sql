@@ -118,6 +118,9 @@ CREATE INDEX IF NOT EXISTS idx_reservations_renter_id
 CREATE INDEX IF NOT EXISTS idx_reservations_time
   ON public.reservations(start_at, end_at);
 
+CREATE INDEX IF NOT EXISTS idx_reservations_pending_start_at 
+  ON public.reservations(start_at) WHERE status = 'PENDING';
+
 -- =========================
 -- UPDATED_AT TRIGGERS
 -- =========================
