@@ -15,6 +15,7 @@ const createListing = async (
   p_conveniences_desc: string,
   p_area_m2: number,
   p_cancellation_policy_hours?: number | null,
+  p_advance_notice_hours?: number | null,
   p_timezone?: string
 ) => {
   return await processRpcRequest("create_listing", {
@@ -31,6 +32,7 @@ const createListing = async (
     p_conveniences_desc,
     p_area_m2,
     p_cancellation_policy_hours,
+    p_advance_notice_hours,
     ...(p_timezone ? { p_timezone } : {}),
   });
 };
@@ -72,6 +74,7 @@ const updateListing = async (args: {
   p_conveniences_desc?: string;
   p_area_m2?: number;
   p_cancellation_policy_hours?: number | null;
+  p_advance_notice_hours?: number | null;
   p_timezone?: string;
 }) => {
   return await processRpcRequest("update_listing", args);

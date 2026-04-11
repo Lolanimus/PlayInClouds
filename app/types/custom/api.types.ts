@@ -23,11 +23,23 @@ export interface Listing {
 	conveniences_desc: string;
 	area_m2: number;
 	cancellation_policy_hours: number | null;
+	advance_notice_hours: number | null;
 	rating_sum: number;
 	average_rating: number;
 	review_count: number;
 	created_at: string;
 	updated_at: string;
+}
+
+export interface ListingBookingPolicy {
+	listing_id: string;
+	instant_booking: boolean;
+	min_past_bookings: number | null;
+	min_reviews: number | null;
+	require_id_verified: boolean;
+	extra_rules: Record<string, unknown>;
+	created_at?: string;
+	updated_at?: string;
 }
 
 export interface Review {
@@ -45,6 +57,7 @@ export interface ListingHourSlot {
 	hour: number;
 	price: number | null;
 	is_booked: boolean;
+	is_booking_restricted?: boolean;
 }
 
 export interface Reservation {

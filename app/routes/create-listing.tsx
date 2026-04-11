@@ -11,7 +11,7 @@ import { processRpcRequest } from "@/api/helpers"
 import { useSetListingWeeklySlots } from "@/hooks/useHours"
 import { useCreateListing, useGetListing, useUpdateListing } from "@/hooks/useListings"
 import { useUser } from "@/store/user_state"
-import type { Listing as ApiListing } from "@/types/custom/api.types"
+import type { Listing as ApiListing, ListingBookingPolicy } from "@/types/custom/api.types"
 
 type CitySuggestion = {
   id: string
@@ -60,16 +60,22 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as s
 const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 const SLOT_COUNT = 7 * 24
+const DEFAULT_WEEKLY_PRICE = "30"
 
 type ListingFormState = {
   title: string
   subtitle: string
   category: string
   address: string
-  hourlyRate: string
   areaM2: string
   cancellationPolicyEnabled: boolean
   cancellationPolicyHours: string
+  advanceNoticeEnabled: boolean
+  advanceNoticeHours: string
+  instantBookingEnabled: boolean
+  instantMinPastBookings: string
+  instantMinReviews: string
+  instantRequireIdVerified: boolean
   description: string
   equipmentDesc: string
   conveniencesDesc: string
@@ -80,10 +86,15 @@ const initialFormState: ListingFormState = {
   subtitle: "London, ON",
   category: "REHEARSAL_SPACE",
   address: "50 Euclid Ave London",
-  hourlyRate: "30",
   areaM2: "30",
   cancellationPolicyEnabled: false,
   cancellationPolicyHours: "",
+  advanceNoticeEnabled: false,
+  advanceNoticeHours: "",
+  instantBookingEnabled: false,
+  instantMinPastBookings: "",
+  instantMinReviews: "",
+  instantRequireIdVerified: false,
   description: "ahuenniy space",
   equipmentDesc: "drum kit, guitar amps, microphones",
   conveniencesDesc: "bathroom, A/C, Wi‑Fi",
@@ -107,8 +118,8 @@ export default function CreateListingPage() {
   const [addressError, setAddressError] = useState<string | null>(null)
   const [isAddressDropdownOpen, setIsAddressDropdownOpen] = useState(false)
   const [isAddressPickedFromSuggestions, setIsAddressPickedFromSuggestions] = useState(false)
-  const [weeklySlotPrices, setWeeklySlotPrices] = useState<string[]>(() => Array.from({ length: SLOT_COUNT }, () => initialFormState.hourlyRate))
-  const [bulkWeekPrice, setBulkWeekPrice] = useState(initialFormState.hourlyRate)
+  const [weeklySlotPrices, setWeeklySlotPrices] = useState<string[]>(() => Array.from({ length: SLOT_COUNT }, () => DEFAULT_WEEKLY_PRICE))
+  const [bulkWeekPrice, setBulkWeekPrice] = useState(DEFAULT_WEEKLY_PRICE)
   const [cropImageIndex, setCropImageIndex] = useState<number | null>(null)
   const [isCropEditMode, setIsCropEditMode] = useState(false)
   const [cropSelection, setCropSelection] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -155,13 +166,21 @@ export default function CreateListingPage() {
       subtitle: listing.subtitle ?? "",
       category: listing.category ?? "REHEARSAL_SPACE",
       address: listing.address ?? "",
-      hourlyRate: String(listing.price ?? ""),
       areaM2: String(listing.area_m2 ?? ""),
       cancellationPolicyEnabled: typeof listing.cancellation_policy_hours === "number",
       cancellationPolicyHours:
         typeof listing.cancellation_policy_hours === "number"
           ? String(listing.cancellation_policy_hours)
           : "",
+      advanceNoticeEnabled: typeof listing.advance_notice_hours === "number",
+      advanceNoticeHours:
+        typeof listing.advance_notice_hours === "number"
+          ? String(listing.advance_notice_hours)
+          : "",
+      instantBookingEnabled: false,
+      instantMinPastBookings: "",
+      instantMinReviews: "",
+      instantRequireIdVerified: false,
       description: listing.description ?? "",
       equipmentDesc: listing.equipment_desc ?? "",
       conveniencesDesc: listing.conveniences_desc ?? "",
@@ -176,6 +195,30 @@ export default function CreateListingPage() {
       }))
     )
   }, [isEditMode, listingQuery.data])
+
+  useEffect(() => {
+    if (!isEditMode || !id) return
+
+    const loadBookingPolicy = async () => {
+      const policy = await processRpcRequest("get_listing_booking_policy", {
+        p_listing_id: id,
+      }) as ListingBookingPolicy | null
+
+      if (!policy) return
+
+      setForm((prev) => ({
+        ...prev,
+        instantBookingEnabled: Boolean(policy.instant_booking),
+        instantMinPastBookings:
+          typeof policy.min_past_bookings === "number" ? String(policy.min_past_bookings) : "",
+        instantMinReviews:
+          typeof policy.min_reviews === "number" ? String(policy.min_reviews) : "",
+        instantRequireIdVerified: Boolean(policy.require_id_verified),
+      }))
+    }
+
+    void loadBookingPolicy()
+  }, [isEditMode, id])
 
   useEffect(() => {
     if (!isEditMode || !id || hasLoadedWeeklySlotsRef.current) return
@@ -327,10 +370,14 @@ export default function CreateListingPage() {
 
     setFormError(null)
 
-    const hourlyRate = Number(form.hourlyRate)
     const areaM2 = Number(form.areaM2)
     const hasCancellationPolicy = form.cancellationPolicyEnabled
     const cancellationPolicyHours = hasCancellationPolicy ? Number(form.cancellationPolicyHours) : null
+    const hasAdvanceNotice = form.advanceNoticeEnabled
+    const advanceNoticeHours = hasAdvanceNotice ? Number(form.advanceNoticeHours) : null
+    const hasInstantBooking = form.instantBookingEnabled
+    const minPastBookings = form.instantMinPastBookings.trim() ? Number(form.instantMinPastBookings) : null
+    const minReviews = form.instantMinReviews.trim() ? Number(form.instantMinReviews) : null
 
     if (!form.title.trim()) return setFormError("Title is required.")
     if (!form.subtitle.trim()) return setFormError("Subtitle is required.")
@@ -340,10 +387,21 @@ export default function CreateListingPage() {
     if (hasCancellationPolicy && !form.cancellationPolicyHours.trim()) {
       return setFormError("Enter cancellation policy hours.")
     }
-    if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) return setFormError("Hourly rate must be a valid number.")
+    if (hasAdvanceNotice && !form.advanceNoticeHours.trim()) {
+      return setFormError("Enter advance notice hours.")
+    }
     if (!Number.isFinite(areaM2) || areaM2 <= 0) return setFormError("Area must be a valid positive number.")
     if (hasCancellationPolicy && (!Number.isInteger(cancellationPolicyHours) || (cancellationPolicyHours ?? -1) < 0)) {
       return setFormError("Cancellation policy must be a whole number of hours, or empty.")
+    }
+    if (hasAdvanceNotice && (!Number.isInteger(advanceNoticeHours) || (advanceNoticeHours ?? -1) < 0)) {
+      return setFormError("Advance notice must be a whole number of hours 0 or greater.")
+    }
+    if (hasInstantBooking && minPastBookings !== null && (!Number.isInteger(minPastBookings) || minPastBookings < 0)) {
+      return setFormError("Minimum past bookings must be a whole number 0 or greater.")
+    }
+    if (hasInstantBooking && minReviews !== null && (!Number.isInteger(minReviews) || minReviews < 0)) {
+      return setFormError("Minimum reviews must be a whole number 0 or greater.")
     }
     if (uploadedImages.length === 0) return setFormError("Please upload at least one image.")
     if (!form.description.trim()) return setFormError("Description is required.")
@@ -371,6 +429,13 @@ export default function CreateListingPage() {
     if (weeklySlotsPayload.length === 0) {
       return setFormError("Please set at least one working hour in the weekly hours table.")
     }
+
+    const hourlyRate = Number(
+      (
+        weeklySlotsPayload.reduce((sum, slot) => sum + slot.price, 0) /
+        weeklySlotsPayload.length
+      ).toFixed(2)
+    )
 
     setIsSubmitting(true)
 
@@ -438,6 +503,28 @@ export default function CreateListingPage() {
       .map((image) => image.persistedUrl ?? image.file)
       .filter((value): value is string | File => Boolean(value))
 
+    const bookingPolicyPayload = {
+      instant_booking: hasInstantBooking,
+      min_past_bookings: hasInstantBooking ? minPastBookings : null,
+      min_reviews: hasInstantBooking ? minReviews : null,
+      require_id_verified: hasInstantBooking ? form.instantRequireIdVerified : false,
+      extra_rules: {},
+    }
+
+    const saveBookingPolicy = async (listingId: string) => {
+      const savedPolicy = await processRpcRequest("upsert_listing_booking_policy", {
+        p_listing_id: listingId,
+        p_policy: bookingPolicyPayload,
+      })
+
+      if (!savedPolicy) {
+        setFormError("Listing saved, but booking policy could not be saved.")
+        return false
+      }
+
+      return true
+    }
+
     if (isEditMode && id) {
       updateListingMutation.mutate(
         {
@@ -455,6 +542,7 @@ export default function CreateListingPage() {
           p_conveniences_desc: form.conveniencesDesc.trim(),
           p_area_m2: areaM2,
           p_cancellation_policy_hours: cancellationPolicyHours,
+          p_advance_notice_hours: advanceNoticeHours,
           p_timezone: timezone,
         },
         {
@@ -467,6 +555,12 @@ export default function CreateListingPage() {
 
             if (!slotsSaved) {
               setFormError("Listing was updated, but weekly hours could not be saved.")
+              setIsSubmitting(false)
+              return
+            }
+
+            const policySaved = await saveBookingPolicy(listingId)
+            if (!policySaved) {
               setIsSubmitting(false)
               return
             }
@@ -498,6 +592,7 @@ export default function CreateListingPage() {
         p_conveniences_desc: form.conveniencesDesc.trim(),
         p_area_m2: areaM2,
         p_cancellation_policy_hours: cancellationPolicyHours,
+        p_advance_notice_hours: advanceNoticeHours,
         p_timezone: timezone,
       },
       {
@@ -516,6 +611,12 @@ export default function CreateListingPage() {
 
           if (!slotsSaved) {
             setFormError("Listing was created, but weekly hours could not be saved.")
+            setIsSubmitting(false)
+            return
+          }
+
+          const policySaved = await saveBookingPolicy(listingId)
+          if (!policySaved) {
             setIsSubmitting(false)
             return
           }
@@ -812,15 +913,15 @@ export default function CreateListingPage() {
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Basics</h3>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Title</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Title *</p>
                   <Input placeholder="Listing title" value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Subtitle / neighborhood</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Subtitle / neighborhood *</p>
                   <Input placeholder="e.g. Downtown, Toronto" value={form.subtitle} onChange={(e) => setForm((prev) => ({ ...prev, subtitle: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Address</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Address *</p>
                   <div className="relative">
                     <Input
                       placeholder="Street address, e.g. 123 Main St"
@@ -878,7 +979,7 @@ export default function CreateListingPage() {
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Category</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Category *</p>
                   <select
                     value={form.category}
                     onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
@@ -892,12 +993,7 @@ export default function CreateListingPage() {
                 {/* Address autocomplete is used instead of a city field */}
 
                 <div className="space-y-1.5 md:col-span-2">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Hourly rate (CAD)</p>
-                  <Input type="number" min="1" step="1" placeholder="e.g. 40" value={form.hourlyRate} onChange={(e) => setForm((prev) => ({ ...prev, hourlyRate: e.target.value }))} />
-                </div>
-
-                <div className="space-y-1.5 md:col-span-2">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Studio area (m²)</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Studio area (m²) *</p>
                   <Input type="number" min="1" step="0.1" placeholder="e.g. 35" value={form.areaM2} onChange={(e) => setForm((prev) => ({ ...prev, areaM2: e.target.value }))} />
                 </div>
 
@@ -926,7 +1022,7 @@ export default function CreateListingPage() {
 
                     {form.cancellationPolicyEnabled ? (
                       <div className="mt-3 space-y-1.5">
-                        <p className="text-xs font-medium text-[#6a6a6a]">Hours before start</p>
+                        <p className="text-xs font-medium text-[#6a6a6a]">Hours before start *</p>
                         <Input
                           type="number"
                           min="0"
@@ -939,12 +1035,121 @@ export default function CreateListingPage() {
                     ) : null}
                   </div>
                 </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <div className="rounded-xl border border-[#e6e6e6] bg-[#fafafa] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-[#6a6a6a]">Advance notice</p>
+                        <p className="mt-1 text-xs text-[#7a7a7a]">
+                          {form.advanceNoticeEnabled
+                            ? "Guests must book this listing a set number of hours ahead."
+                            : "Guests can book any future open slot without an extra lead-time rule."}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.advanceNoticeEnabled}
+                        onCheckedChange={(checked) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            advanceNoticeEnabled: checked,
+                            advanceNoticeHours: checked ? prev.advanceNoticeHours : "",
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {form.advanceNoticeEnabled ? (
+                      <div className="mt-3 space-y-1.5">
+                        <p className="text-xs font-medium text-[#6a6a6a]">Hours from now *</p>
+                        <p className="text-xs text-[#7a7a7a]">
+                          Example: if it is 12:30 and you set 5 hours, the first bookable start time becomes 18:00.
+                        </p>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="e.g. 5"
+                          value={form.advanceNoticeHours}
+                          onChange={(e) => setForm((prev) => ({ ...prev, advanceNoticeHours: e.target.value }))}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <div className="rounded-xl border border-[#e6e6e6] bg-[#fafafa] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-[#6a6a6a]">Instant booking</p>
+                        <p className="mt-1 text-xs text-[#7a7a7a]">
+                          {form.instantBookingEnabled
+                            ? "Bookers skip pending and are confirmed immediately if requirements are met."
+                            : "Bookings start as pending and require host confirmation."}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.instantBookingEnabled}
+                        onCheckedChange={(checked) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            instantBookingEnabled: checked,
+                            instantMinPastBookings: checked ? prev.instantMinPastBookings : "",
+                            instantMinReviews: checked ? prev.instantMinReviews : "",
+                            instantRequireIdVerified: checked ? prev.instantRequireIdVerified : false,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {form.instantBookingEnabled ? (
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-medium text-[#6a6a6a]">Minimum past bookings (optional)</p>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="e.g. 2"
+                            value={form.instantMinPastBookings}
+                            onChange={(e) => setForm((prev) => ({ ...prev, instantMinPastBookings: e.target.value }))}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-medium text-[#6a6a6a]">Minimum reviews (optional)</p>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="e.g. 1"
+                            value={form.instantMinReviews}
+                            onChange={(e) => setForm((prev) => ({ ...prev, instantMinReviews: e.target.value }))}
+                          />
+                        </div>
+
+                        <div className="md:col-span-2 rounded-xl border border-[#ececec] bg-[#ffffff] px-3 py-2">
+                          <label className="flex items-center justify-between gap-3 text-sm text-[#4a4a4a]">
+                            <span className="font-medium">Require ID-verified booker</span>
+                            <Switch
+                              checked={form.instantRequireIdVerified}
+                              onCheckedChange={(checked) =>
+                                setForm((prev) => ({ ...prev, instantRequireIdVerified: checked }))
+                              }
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </section>
 
             <section className="rounded-2xl border border-[#ececec] bg-[#ffffff] p-4 md:p-5">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Photos</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Photos *</h3>
                 <span className="rounded-full bg-[#f1f1f1] px-2.5 py-1 text-xs font-medium text-[#4a4a4a]">
                   {uploadedImages.length}/5
                 </span>
@@ -1006,7 +1211,7 @@ export default function CreateListingPage() {
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Details</h3>
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-[#6a6a6a]">About this space</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">About this space *</p>
                   <Textarea
                     value={form.description}
                     onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
@@ -1016,7 +1221,7 @@ export default function CreateListingPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Equipment Description</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Equipment Description *</p>
                   <Textarea
                     value={form.equipmentDesc}
                     onChange={(e) => setForm((prev) => ({ ...prev, equipmentDesc: e.target.value }))}
@@ -1026,7 +1231,7 @@ export default function CreateListingPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-[#6a6a6a]">Space conveniences</p>
+                  <p className="text-xs font-medium text-[#6a6a6a]">Space conveniences *</p>
                   <Textarea
                     value={form.conveniencesDesc}
                     onChange={(e) => setForm((prev) => ({ ...prev, conveniencesDesc: e.target.value }))}
@@ -1039,7 +1244,7 @@ export default function CreateListingPage() {
 
             <section className="rounded-2xl border border-[#ececec] bg-[#ffffff] p-4 md:p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Weekly hours & pricing</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Weekly hours & pricing *</h3>
                 <div className="flex flex-wrap items-center gap-2">
                   <Input
                     type="number"

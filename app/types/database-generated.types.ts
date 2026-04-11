@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      listing_booking_policies: {
+        Row: {
+          created_at: string
+          extra_rules: Json
+          instant_booking: boolean
+          listing_id: string
+          min_past_bookings: number | null
+          min_reviews: number | null
+          require_id_verified: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          extra_rules?: Json
+          instant_booking?: boolean
+          listing_id: string
+          min_past_bookings?: number | null
+          min_reviews?: number | null
+          require_id_verified?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          extra_rules?: Json
+          instant_booking?: boolean
+          listing_id?: string
+          min_past_bookings?: number | null
+          min_reviews?: number | null
+          require_id_verified?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_booking_policies_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: true
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       listing_weekly_slots: {
         Row: {
           created_at: string
@@ -67,6 +108,7 @@ export type Database = {
           images: string[]
           lat: number
           lng: number
+          advance_notice_hours: number | null
           owner_id: string | null
           price: number
           rating_sum: number
@@ -90,6 +132,7 @@ export type Database = {
           images: string[]
           lat: number
           lng: number
+          advance_notice_hours?: number | null
           owner_id?: string | null
           price: number
           rating_sum?: number
@@ -113,6 +156,7 @@ export type Database = {
           images?: string[]
           lat?: number
           lng?: number
+          advance_notice_hours?: number | null
           owner_id?: string | null
           price?: number
           rating_sum?: number
@@ -236,6 +280,7 @@ export type Database = {
           email: string | null
           first_name: string
           id: string
+          id_verified_at: string | null
           inserted_at: string
           last_name: string
           phone_number: string | null
@@ -245,6 +290,7 @@ export type Database = {
           email?: string | null
           first_name: string
           id: string
+          id_verified_at?: string | null
           inserted_at?: string
           last_name: string
           phone_number?: string | null
@@ -254,6 +300,7 @@ export type Database = {
           email?: string | null
           first_name?: string
           id?: string
+          id_verified_at?: string | null
           inserted_at?: string
           last_name?: string
           phone_number?: string | null
@@ -280,6 +327,7 @@ export type Database = {
           p_images: string[]
           p_lat: number
           p_lng: number
+          p_advance_notice_hours?: number | null
           p_price: number
           p_subtitle: string
           p_timezone?: string
@@ -308,6 +356,7 @@ export type Database = {
       delete_listing: { Args: { p_id: string }; Returns: boolean }
       delete_review: { Args: { p_id: string }; Returns: boolean }
       get_listing: { Args: { p_id: string }; Returns: Json }
+      get_listing_booking_policy: { Args: { p_listing_id: string }; Returns: Json }
       get_reservation: { Args: { p_reservation_id: string }; Returns: Json }
       get_review: { Args: { p_id: string }; Returns: Json }
       get_user_id_by_username: {
@@ -368,6 +417,7 @@ export type Database = {
           p_images?: string[]
           p_lat?: number
           p_lng?: number
+          p_advance_notice_hours?: number | null
           p_price?: number
           p_subtitle?: string
           p_timezone?: string
@@ -377,6 +427,10 @@ export type Database = {
       }
       update_review: {
         Args: { p_id: string; p_rating?: number; p_text?: string }
+        Returns: Json
+      }
+      upsert_listing_booking_policy: {
+        Args: { p_listing_id: string; p_policy?: Json }
         Returns: Json
       }
       upsert_listing_weekly_slot: {

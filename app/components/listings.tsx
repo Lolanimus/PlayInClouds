@@ -29,6 +29,7 @@ export type ListingItem = {
   equipmentDesc?: string
   conveniencesDesc?: string
   areaM2?: number
+  advanceNoticeHours?: number | null
 }
 
 export function ListingCard({
@@ -178,6 +179,7 @@ export function Listings() {
       equipmentDesc: item.equipment_desc,
       conveniencesDesc: item.conveniences_desc,
       areaM2: item.area_m2,
+      advanceNoticeHours: item.advance_notice_hours,
     }))
   }, [listingsQuery.data])
   const allListings = dbListings.length > 0 ? dbListings : hostListings

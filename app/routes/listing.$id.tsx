@@ -67,6 +67,21 @@ function getMonthStartKey(date: Date) {
   return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-01`
 }
 
+function getMinimumBookableStart(referenceAt: Date, advanceNoticeHours?: number | null) {
+  const minimumStart = new Date(referenceAt)
+  minimumStart.setMinutes(0, 0, 0)
+
+  if (minimumStart.getTime() < referenceAt.getTime()) {
+    minimumStart.setHours(minimumStart.getHours() + 1)
+  }
+
+  if (typeof advanceNoticeHours === "number" && advanceNoticeHours > 0) {
+    minimumStart.setHours(minimumStart.getHours() + advanceNoticeHours)
+  }
+
+  return minimumStart
+}
+
 function formatReviewMonth(value?: string | null) {
   if (!value) return ""
   const date = new Date(value)
@@ -151,6 +166,7 @@ export default function ListingDetailsPage() {
         conveniencesDesc: remote.conveniences_desc,
         areaM2: remote.area_m2,
         cancellationPolicyHours: remote.cancellation_policy_hours,
+        advanceNoticeHours: remote.advance_notice_hours,
         images: remote.images,
         priceLabel: `$${remote.price} CAD/hour`,
         priceNumber: remote.price,
@@ -173,6 +189,7 @@ export default function ListingDetailsPage() {
         conveniencesDesc: localListing.conveniencesDesc,
         areaM2: localListing.areaM2,
         cancellationPolicyHours: null,
+        advanceNoticeHours: localListing.advanceNoticeHours ?? null,
         images: localListing.images,
         priceLabel: localListing.price,
         priceNumber: parseHourlyPrice(localListing.price),
@@ -232,7 +249,7 @@ export default function ListingDetailsPage() {
       ((query.data as Array<Record<string, unknown>> | null) ?? [])
     )
 
-    const map = new Map<string, { price: number | null; isBooked: boolean }>()
+    const map = new Map<string, { price: number | null; isBooked: boolean; isBookingRestricted: boolean }>()
 
     rows.forEach((row) => {
       const rawDate = typeof row.date === "string" ? row.date : ""
@@ -245,11 +262,17 @@ export default function ListingDetailsPage() {
       map.set(key, {
         price: typeof row.price === "number" ? row.price : null,
         isBooked: Boolean(row.is_booked),
+        isBookingRestricted: Boolean(row.is_booking_restricted),
       })
     })
 
     return map
   }, [monthSlotsQueries])
+
+  const areMonthSlotsReady = useMemo(() => {
+    if (!id || monthSlotsQueries.length === 0) return false
+    return monthSlotsQueries.every((query) => !query.isPending && !query.isLoading)
+  }, [id, monthSlotsQueries])
 
   const bookedSlotKeys = useMemo(() => {
     const booked = new Set<string>()
@@ -290,6 +313,28 @@ export default function ListingDetailsPage() {
     return typeof slot?.price === "number" && Number.isFinite(slot.price) && slot.price > 0
   }
 
+  const isRestrictedByAdvanceBooking = (day: DaySlot, hour: number) => {
+    const slot = slotMap.get(`${getDateKey(day.date)}-${hour}`)
+    return Boolean(slot?.isBookingRestricted)
+  }
+
+  const isInAdvanceNoticeWindow = (day: DaySlot, hour: number) => {
+    if (!listing) return false
+
+    const minimumBookableStart = getMinimumBookableStart(new Date(), listing.advanceNoticeHours)
+    const slotStart = new Date(
+      day.date.getFullYear(),
+      day.date.getMonth(),
+      day.date.getDate(),
+      hour,
+      0,
+      0,
+      0
+    )
+
+    return slotStart.getTime() >= now.getTime() && slotStart.getTime() < minimumBookableStart.getTime()
+  }
+
   const getSlotPrice = (day: DaySlot, hour: number) => {
     const slot = slotMap.get(`${getDateKey(day.date)}-${hour}`)
     return typeof slot?.price === "number" && Number.isFinite(slot.price) ? slot.price : null
@@ -299,6 +344,7 @@ export default function ListingDetailsPage() {
     return (
       isBaseAvailabilityWindow(day, hour) &&
       !isPastCell(day, hour) &&
+      !isRestrictedByAdvanceBooking(day, hour) &&
       !isBookedCell(dayIndex, hour)
     )
   }
@@ -398,6 +444,7 @@ export default function ListingDetailsPage() {
 
   useEffect(() => {
     if (hasInitializedSelectionRef.current) return
+    if (!listing || !areMonthSlotsReady) return
 
     const dateParam = selectedDateParam ? getDateKey(selectedDateParam) : null
     const startParam = selectedStartParam
@@ -440,18 +487,23 @@ export default function ListingDetailsPage() {
     }
 
     const currentNow = new Date()
-    const todayKey = getDateKey(currentNow)
-    const nextBookableHourToday =
-      currentNow.getMinutes() > 0 || currentNow.getSeconds() > 0 || currentNow.getMilliseconds() > 0
-        ? currentNow.getHours() + 1
-        : currentNow.getHours()
+    const minimumBookableStart = getMinimumBookableStart(currentNow, listing.advanceNoticeHours)
 
     for (let dayIndex = 0; dayIndex < upcomingDays.length; dayIndex += 1) {
       const day = upcomingDays[dayIndex]
-      const isToday = getDateKey(day.date) === todayKey
-      const startAt = isToday ? Math.min(nextBookableHourToday, 23) : 0
 
-      for (let hour = startAt; hour <= 23; hour += 1) {
+      for (let hour = 0; hour <= 23; hour += 1) {
+        const slotStart = new Date(
+          day.date.getFullYear(),
+          day.date.getMonth(),
+          day.date.getDate(),
+          hour,
+          0,
+          0,
+          0
+        )
+
+        if (slotStart.getTime() < minimumBookableStart.getTime()) continue
         if (!canBookCell(day, dayIndex, hour)) continue
 
         setSelectedDayIndex(dayIndex)
@@ -463,7 +515,7 @@ export default function ListingDetailsPage() {
     }
 
     hasInitializedSelectionRef.current = true
-  }, [selectedDateParam, selectedStartParam, selectedDurationParam, upcomingDays, bookedSlotKeys])
+  }, [selectedDateParam, selectedStartParam, selectedDurationParam, upcomingDays, bookedSlotKeys, slotMap, listing, areMonthSlotsReady])
 
   if (isUuidId && listingQuery.isLoading) {
     return (
@@ -700,6 +752,8 @@ export default function ListingDetailsPage() {
                         {upcomingDays.map((day, dayIndex) => {
                           const isAvailable = canBookCell(day, dayIndex, hour)
                           const isBooked = isBookedCell(dayIndex, hour)
+                          const isRestricted = isRestrictedByAdvanceBooking(day, hour)
+                          const isAdvanceNoticeBlocked = isRestricted && isInAdvanceNoticeWindow(day, hour)
                           const rate = getSlotPrice(day, hour)
                           const isSameDay = selectedDayIndex === dayIndex
                           const isStart = isSameDay && selectedStartHour === hour
@@ -723,6 +777,8 @@ export default function ListingDetailsPage() {
                                   ? "bg-[#0f6130] text-[#ffffff]"
                                   : isAvailable
                                   ? "bg-[#ffffff] text-[#2a2a2a] hover:bg-[#f5f5f5] cursor-pointer"
+                                  : isAdvanceNoticeBlocked
+                                  ? "bg-[#fff8eb] text-[#9a6700] cursor-not-allowed"
                                   : isBooked
                                   ? "bg-[#dcdcdc] text-[#7a7a7a] cursor-not-allowed"
                                   : "bg-[#efefef] text-[#9a9a9a] cursor-not-allowed",
@@ -744,8 +800,15 @@ export default function ListingDetailsPage() {
                   <p className="mt-1 text-sm text-[#4a4a4a]">
                     {selectedSlotLabel ?? "Click one available slot for start, then another for end"}
                   </p>
-                  <p className="mt-1 text-xs text-[#6a6a6a]">Gray cells marked “Booked” are already rented and can’t be selected.</p>
+                  <p className="mt-1 text-xs text-[#6a6a6a]">Gray cells are unavailable. Yellow cells require more advance notice.</p>
                 </div>
+
+                {typeof listing.advanceNoticeHours === "number" && listing.advanceNoticeHours > 0 ? (
+                  <div className="mb-4 rounded-lg border border-[#f3d49b] bg-[#fff8eb] px-3 py-2">
+                    <p className="text-xs font-semibold text-[#9a6700]">Advance notice</p>
+                    <p className="mt-1 text-sm text-[#9a6700]">This host requires {listing.advanceNoticeHours} hour(s) of advance notice.</p>
+                  </div>
+                ) : null}
 
                 {cancellationWarning ? (
                   <div className="mb-4 rounded-lg border border-[#f1c3bd] bg-[#fff3f2] px-3 py-2">

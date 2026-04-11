@@ -59,6 +59,7 @@ export default function PaymentPage() {
         reviews: remoteListing.review_count,
         priceNumber: remoteListing.price,
         cancellationPolicyHours: remoteListing.cancellation_policy_hours,
+        advanceNoticeHours: remoteListing.advance_notice_hours,
       }
     : localListing
       ? {
@@ -70,6 +71,7 @@ export default function PaymentPage() {
           reviews: localListing.reviews,
           priceNumber: parseHourlyPrice(localListing.price),
           cancellationPolicyHours: null,
+          advanceNoticeHours: localListing.advanceNoticeHours ?? null,
         }
       : null
 
@@ -116,6 +118,10 @@ export default function PaymentPage() {
   const reservationStartAt = new Date(`${dateKey}T00:00:00`)
   reservationStartAt.setHours(startHour, 0, 0, 0)
   const hoursUntilStart = (reservationStartAt.getTime() - Date.now()) / (1000 * 60 * 60)
+  const advanceNoticeWarning =
+    typeof listing.advanceNoticeHours === "number" && hoursUntilStart < listing.advanceNoticeHours
+      ? `This listing requires ${listing.advanceNoticeHours} hour(s) of advance notice.`
+      : null
   const cancellationWarning =
     listing.cancellationPolicyHours === null
       ? "Cancellation for this listing is disabled."
@@ -245,13 +251,19 @@ export default function PaymentPage() {
                 </Button>
                 <Button
                   onClick={handleBuy}
-                  disabled={createReservationMutation.isPending}
+                  disabled={createReservationMutation.isPending || Boolean(advanceNoticeWarning)}
                   className="h-11 rounded-xl bg-[#000000] px-8 text-[#ffffff] hover:bg-[#2a2a2a]"
                 >
                   {createReservationMutation.isPending ? "Processing..." : `Buy now · $${total.toFixed(2)} CAD`}
                 </Button>
               </div>
               {!user && <p className="mt-3 text-sm text-[#6a6a6a]">You’ll need to log in before purchase.</p>}
+              {advanceNoticeWarning ? (
+                <div className="mt-4 rounded-lg border border-[#f3d49b] bg-[#fff8eb] px-3 py-2">
+                  <p className="text-xs font-semibold text-[#9a6700]">Advance notice</p>
+                  <p className="mt-1 text-sm text-[#9a6700]">{advanceNoticeWarning}</p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </main>

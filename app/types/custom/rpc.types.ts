@@ -1,6 +1,6 @@
 import type { Database as DatabaseGenerated } from "../database-generated.types";
 import type { MergeDeep } from "type-fest";
-import type { Listing, ListingHourSlot, Reservation, Review } from "./api.types";
+import type { Listing, ListingBookingPolicy, ListingHourSlot, Reservation, Review } from "./api.types";
 
 export type Database = MergeDeep<
   DatabaseGenerated,
@@ -24,6 +24,9 @@ export type Database = MergeDeep<
         }
         get_listing: {
           Returns: Listing 
+        }
+        get_listing_booking_policy: {
+          Returns: ListingBookingPolicy
         }
         get_reservation: {
           Returns: Reservation
@@ -60,6 +63,9 @@ export type Database = MergeDeep<
         }
         update_review: {
           Returns: Review
+        }
+        upsert_listing_booking_policy: {
+          Returns: ListingBookingPolicy
         }
         upsert_listing_weekly_slot: {
           Returns: ListingHourSlot
