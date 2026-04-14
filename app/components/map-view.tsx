@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { MapPin } from "lucide-react"
 import { useNavigate } from "react-router"
 import { ListingCard, type ListingItem } from "@/components/listings"
 import { useListings } from "@/hooks/useListings"
@@ -55,7 +56,40 @@ function PriceMarker({
   )
 }
 
-export function MapView() {
+function PinMarker({
+  isActive,
+  onClick,
+}: {
+  isActive: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+      className={[
+        "inline-flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-colors",
+        isActive
+          ? "border-[#000000] bg-[#000000] text-[#ffffff]"
+          : "border-[#000000] bg-[#000000] text-[#ffffff] hover:bg-[#1f1f1f]",
+      ].join(" ")}
+      aria-label="Open listing location"
+    >
+      <MapPin className="h-4 w-4" />
+    </button>
+  )
+}
+
+type MapViewProps = {
+  listingsOverride?: ListingItem[]
+  disableFilters?: boolean
+  markerVariant?: "price" | "pin"
+}
+
+export function MapView({ listingsOverride, disableFilters = false, markerVariant = "price" }: MapViewProps) {
   const hostListings = useHostListings()
   const listingsQuery = useListings()
   const whereValue = useSearchStore((state) => state.where)
@@ -81,7 +115,10 @@ export function MapView() {
       areaM2: item.area_m2,
     }))
   }, [listingsQuery.data])
-  const allListings = useMemo(() => (dbListings.length > 0 ? dbListings : hostListings), [dbListings, hostListings])
+  const allListings = useMemo(() => {
+    if (listingsOverride && listingsOverride.length > 0) return listingsOverride
+    return dbListings.length > 0 ? dbListings : hostListings
+  }, [dbListings, hostListings, listingsOverride])
 
   const priceMaxParam = useSearchStore((state) => state.priceMax)
   const distanceMaxParam = useSearchStore((state) => state.distanceMax)
@@ -134,28 +171,30 @@ export function MapView() {
     return earthRadiusKm * c
   }
 
-  const filteredListings = allListings
-    .filter((listing) => {
-      if (!whereQuery) return true
-      return [listing.title, listing.subtitle, listing.category, listing.address]
-        .join(" ")
-        .toLowerCase()
-        .includes(whereQuery)
-    })
-    .filter((listing) => {
-      if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
-      return parseListingPrice(listing.price) <= priceMaxParam
-    })
-    .filter((listing) => {
-      if (!Number.isFinite(distanceMaxParam) || distanceMaxParam < 0) return true
+  const filteredListings = disableFilters
+    ? allListings
+    : allListings
+        .filter((listing) => {
+          if (!whereQuery) return true
+          return [listing.title, listing.subtitle, listing.category, listing.address]
+            .join(" ")
+            .toLowerCase()
+            .includes(whereQuery)
+        })
+        .filter((listing) => {
+          if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
+          return parseListingPrice(listing.price) <= priceMaxParam
+        })
+        .filter((listing) => {
+          if (!Number.isFinite(distanceMaxParam) || distanceMaxParam < 0) return true
 
-      const distanceKm = searchCoords
-        ? getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
-        : parseListingDistance(listing.distance)
+          const distanceKm = searchCoords
+            ? getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
+            : parseListingDistance(listing.distance)
 
-      if (!Number.isFinite(distanceKm)) return false
-      return distanceKm <= distanceMaxParam
-    })
+          if (!Number.isFinite(distanceKm)) return false
+          return distanceKm <= distanceMaxParam
+        })
 
   const isAvailableInSelectedSlot = (listingId: string) => {
     if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return true
@@ -202,13 +241,20 @@ export function MapView() {
       const isAvailableNow = availableNowListingIds.has(id)
 
       root.render(
-        <PriceMarker
-          price={price}
-          isActive={activeListingId === id}
-          isAvailableInSelectedSlot={isAvailableNow}
-          hasSelectedSlot={Boolean(hasSelectedSlot)}
-          onClick={() => setActiveListingId(id)}
-        />
+        markerVariant === "pin" ? (
+          <PinMarker
+            isActive={activeListingId === id}
+            onClick={() => setActiveListingId(id)}
+          />
+        ) : (
+          <PriceMarker
+            price={price}
+            isActive={activeListingId === id}
+            isAvailableInSelectedSlot={isAvailableNow}
+            hasSelectedSlot={Boolean(hasSelectedSlot)}
+            onClick={() => setActiveListingId(id)}
+          />
+        )
       )
     })
   }
@@ -247,7 +293,9 @@ export function MapView() {
       if (!mapRef.current || !window.google?.maps) return
 
       const map = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 40.7505, lng: -73.9934 },
+        center: allListings[0]
+          ? { lat: allListings[0].lat, lng: allListings[0].lng }
+          : { lat: 40.7505, lng: -73.9934 },
         zoom: 15,
         styles: [
           {
@@ -284,6 +332,14 @@ export function MapView() {
       })
       mapInstanceRef.current = map
 
+      if (allListings.length > 1) {
+        const bounds = new window.google.maps.LatLngBounds()
+        allListings.forEach((listing) => {
+          bounds.extend(new window.google.maps.LatLng(listing.lat, listing.lng))
+        })
+        map.fitBounds(bounds, 80)
+      }
+
       allListings.forEach((listing) => {
         const listingId = String(listing.id)
         const price = listing.price.split(" ")[0] ?? "$--"
@@ -306,13 +362,20 @@ export function MapView() {
             })
 
             root.render(
-              <PriceMarker
-                price={price}
-                isActive={activeListingId === listingId}
-                isAvailableInSelectedSlot={availableNowListingIds.has(listingId)}
-                hasSelectedSlot={Boolean(hasSelectedSlot)}
-                onClick={() => setActiveListingId(listingId)}
-              />
+              markerVariant === "pin" ? (
+                <PinMarker
+                  isActive={activeListingId === listingId}
+                  onClick={() => setActiveListingId(listingId)}
+                />
+              ) : (
+                <PriceMarker
+                  price={price}
+                  isActive={activeListingId === listingId}
+                  isAvailableInSelectedSlot={availableNowListingIds.has(listingId)}
+                  hasSelectedSlot={Boolean(hasSelectedSlot)}
+                  onClick={() => setActiveListingId(listingId)}
+                />
+              )
             )
 
             this.div.appendChild(container)
@@ -366,7 +429,7 @@ export function MapView() {
         markerRoots.forEach((root) => root.unmount())
       }, 0)
     }
-  }, [allListings])
+  }, [allListings, activeListingId, availableNowListingIds, hasSelectedSlot, markerVariant])
 
   useEffect(() => {
     const where = whereValue.trim()

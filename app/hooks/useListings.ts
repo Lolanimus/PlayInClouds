@@ -107,6 +107,8 @@ export const useCreateListing = () => {
       p_advance_notice_hours?: number | null;
       p_timezone?: string;
       p_host_confirmation_message?: string;
+      p_rules?: string;
+      p_instructions?: string;
     }) => {
       console.info("Creating listing", payload);
 
@@ -149,7 +151,9 @@ export const useCreateListing = () => {
         payload.p_cancellation_policy_hours,
         payload.p_advance_notice_hours,
         payload.p_timezone,
-        payload.p_host_confirmation_message
+        payload.p_host_confirmation_message,
+        payload.p_rules,
+        payload.p_instructions
       );
     },
     onSuccess: () => {

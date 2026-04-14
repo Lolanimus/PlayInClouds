@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate } from "react-router"
+import { Fragment, useEffect, useMemo, useState } from "react"
+import { Link, useNavigate, useSearchParams } from "react-router"
 import { ArrowLeft, Loader2, Search, Send, Trash2, UserCircle2 } from "lucide-react"
 
 import { Button } from "~/components/ui/button"
@@ -32,6 +32,7 @@ type Conversation = {
   listingImageUrl?: string
   chatId?: string
   listingId?: string
+  reservationId?: string
   targetUserId?: string
 }
 
@@ -60,6 +61,29 @@ function formatTime(timestamp: string) {
   if (Number.isNaN(date.getTime())) return ""
 
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+}
+
+function getMessageDateKey(timestamp: string) {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ""
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
+}
+
+function formatMessageDate(timestamp: string) {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ""
+
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 }
 
 function toDateKeyFromIso(isoValue: string) {
@@ -93,6 +117,7 @@ function normalizeMessages(messages: Message[] | undefined, userId?: string): Ch
 
 export default function ChatPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { toast } = useToast()
   const user = useUser()
   const chatsQuery = useChats()
@@ -113,6 +138,7 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [draft, setDraft] = useState("")
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const requestedReservationId = searchParams.get("reservationId")
 
   useEffect(() => {
     if (!user) {
@@ -151,6 +177,7 @@ export default function ChatPage() {
         updatedAt: existing.updatedAt >= incoming.updatedAt ? existing.updatedAt : incoming.updatedAt,
         chatId: incoming.chatId ?? existing.chatId,
         listingId: incoming.listingId ?? existing.listingId,
+        reservationId: keepExistingText ? existing.reservationId ?? incoming.reservationId : incoming.reservationId ?? existing.reservationId,
         targetUserId: incoming.targetUserId ?? existing.targetUserId,
       })
     }
@@ -169,6 +196,7 @@ export default function ChatPage() {
         updatedAt,
         listingImageUrl: listing?.images?.[0],
         listingId: reservation.listing_id,
+        reservationId: reservation.id,
         targetUserId,
       })
     }
@@ -187,6 +215,7 @@ export default function ChatPage() {
         updatedAt,
         listingImageUrl: listing?.images?.[0],
         listingId: reservation.listing_id,
+        reservationId: reservation.id,
         targetUserId,
       })
     }
@@ -254,6 +283,18 @@ export default function ChatPage() {
       return conversations[0].id
     })
   }, [conversations])
+
+  useEffect(() => {
+    if (!requestedReservationId || conversations.length === 0) return
+
+    const matchingConversation = conversations.find(
+      (conversation) => conversation.reservationId === requestedReservationId
+    )
+
+    if (matchingConversation) {
+      setActiveConversationId(matchingConversation.id)
+    }
+  }, [conversations, requestedReservationId])
 
   const filteredConversations = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -457,6 +498,18 @@ export default function ChatPage() {
                         </Button>
                       )}
 
+                      {activeConversation.reservationId ? (
+                        <Button asChild type="button" variant="outline" size="sm">
+                          <Link to={`/reservation/${activeConversation.reservationId}`}>
+                            Go to reservation
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button type="button" variant="outline" size="sm" disabled>
+                          Go to reservation
+                        </Button>
+                      )}
+
                       <Button
                         type="button"
                         variant="outline"
@@ -492,25 +545,40 @@ export default function ChatPage() {
                       </div>
                     ) : null}
 
-                    {activeMessages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`flex ${message.sender === "me" ? "justify-end" : "justify-start"}`}
-                      >
-                        <div
-                          className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                            message.sender === "me"
-                              ? "bg-[#000000] text-[#ffffff]"
-                              : "border border-[#e9e9e9] bg-[#ffffff] text-[#1f1f1f]"
-                          }`}
-                        >
-                          <p>{message.text}</p>
-                          <p className={`mt-1 text-[11px] ${message.sender === "me" ? "text-[#ffffff]/75" : "text-[#8a8a8a]"}`}>
-                            {formatTime(message.timestamp)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                    {activeMessages.map((message, index) => {
+                      const previousMessage = index > 0 ? activeMessages[index - 1] : null
+                      const shouldShowDate = !previousMessage
+                        || getMessageDateKey(previousMessage.timestamp) !== getMessageDateKey(message.timestamp)
+
+                      return (
+                        <Fragment key={message.id}>
+                          {shouldShowDate ? (
+                            <div className="flex justify-center py-1">
+                              <div className="rounded-full border border-[#e9e9e9] bg-[#ffffff] px-3 py-1 text-[11px] font-medium text-[#6a6a6a] shadow-sm">
+                                {formatMessageDate(message.timestamp)}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <div
+                            className={`flex ${message.sender === "me" ? "justify-end" : "justify-start"}`}
+                          >
+                            <div
+                              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+                                message.sender === "me"
+                                  ? "bg-[#000000] text-[#ffffff]"
+                                  : "border border-[#e9e9e9] bg-[#ffffff] text-[#1f1f1f]"
+                              }`}
+                            >
+                              <p>{message.text}</p>
+                              <p className={`mt-1 text-[11px] ${message.sender === "me" ? "text-[#ffffff]/75" : "text-[#8a8a8a]"}`}>
+                                {formatTime(message.timestamp)}
+                              </p>
+                            </div>
+                          </div>
+                        </Fragment>
+                      )
+                    })}
                   </div>
 
                   <div className="shrink-0 border-t border-[#e9e9e9] bg-[#ffffff] p-3 md:p-4">

@@ -23,9 +23,11 @@ export type Database = {
           metadata: Json | null
           sender_id: string
         }
+              p_instructions?: string
         Insert: {
           chat_id: string
           contents: string
+              p_rules?: string
           created_at?: string
           id?: string
           metadata?: Json | null
@@ -198,6 +200,7 @@ export type Database = {
           created_at: string
           description: string
           equipment_desc: string
+          instructions: string
           id: string
           images: string[]
           lat: number
@@ -206,6 +209,7 @@ export type Database = {
           price: number
           rating_sum: number
           review_count: number
+          rules: string
           subtitle: string
           timezone: string
           title: string
@@ -222,6 +226,7 @@ export type Database = {
           created_at?: string
           description: string
           equipment_desc?: string
+          instructions?: string
           id?: string
           images: string[]
           lat: number
@@ -230,6 +235,7 @@ export type Database = {
           price: number
           rating_sum?: number
           review_count?: number
+          rules?: string
           subtitle: string
           timezone?: string
           title: string
@@ -246,6 +252,7 @@ export type Database = {
           created_at?: string
           description?: string
           equipment_desc?: string
+          instructions?: string
           id?: string
           images?: string[]
           lat?: number
@@ -254,6 +261,7 @@ export type Database = {
           price?: number
           rating_sum?: number
           review_count?: number
+          rules?: string
           subtitle?: string
           timezone?: string
           title?: string
@@ -429,9 +437,11 @@ export type Database = {
               p_description: string
               p_equipment_desc: string
               p_images: string[]
+              p_instructions?: string
               p_lat: number
               p_lng: number
               p_price: number
+              p_rules?: string
               p_subtitle: string
               p_title: string
             }
@@ -440,17 +450,19 @@ export type Database = {
         | {
             Args: {
               p_address: string
-              p_advance_notice_hours?: number
+              p_advance_notice_hours?: number | null
               p_area_m2: number
-              p_cancellation_policy_hours?: number
+              p_cancellation_policy_hours?: number | null
               p_category: Database["public"]["Enums"]["listing_category"]
               p_conveniences_desc: string
               p_description: string
               p_equipment_desc: string
               p_images: string[]
+              p_instructions?: string
               p_lat: number
               p_lng: number
               p_price: number
+              p_rules?: string
               p_subtitle: string
               p_timezone?: string
               p_title: string
@@ -550,9 +562,11 @@ export type Database = {
               p_equipment_desc?: string
               p_id: string
               p_images?: string[]
+              p_instructions?: string
               p_lat?: number
               p_lng?: number
               p_price?: number
+              p_rules?: string
               p_subtitle?: string
               p_title?: string
             }
@@ -570,9 +584,11 @@ export type Database = {
               p_equipment_desc?: string
               p_id: string
               p_images?: string[]
+              p_instructions?: string
               p_lat?: number
               p_lng?: number
               p_price?: number
+              p_rules?: string
               p_subtitle?: string
               p_timezone?: string
               p_title?: string

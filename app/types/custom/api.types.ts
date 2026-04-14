@@ -14,6 +14,8 @@ export interface Listing {
 	address: string;
 	title: string;
 	subtitle: string;
+	rules: string;
+	instructions: string;
 	host_confirmation_message: string;
 	category: Database["public"]["Enums"]["listing_category"];
 	price: number;

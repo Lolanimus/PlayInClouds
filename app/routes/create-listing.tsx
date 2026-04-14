@@ -79,6 +79,8 @@ type ListingFormState = {
   description: string
   equipmentDesc: string
   conveniencesDesc: string
+  rules: string
+  instructions: string
   hostConfirmationMessage: string
 }
 
@@ -99,6 +101,8 @@ const initialFormState: ListingFormState = {
   description: "ahuenniy space",
   equipmentDesc: "drum kit, guitar amps, microphones",
   conveniencesDesc: "bathroom, A/C, Wi‑Fi",
+  rules: "",
+  instructions: "",
   hostConfirmationMessage: "",
 }
 
@@ -186,6 +190,8 @@ export default function CreateListingPage() {
       description: listing.description ?? "",
       equipmentDesc: listing.equipment_desc ?? "",
       conveniencesDesc: listing.conveniences_desc ?? "",
+      rules: listing.rules ?? "",
+      instructions: listing.instructions ?? "",
       hostConfirmationMessage: listing.host_confirmation_message ?? "",
     })
     setIsAddressPickedFromSuggestions(true)
@@ -543,6 +549,8 @@ export default function CreateListingPage() {
           p_description: form.description.trim(),
           p_equipment_desc: form.equipmentDesc.trim(),
           p_conveniences_desc: form.conveniencesDesc.trim(),
+          p_rules: form.rules.trim(),
+          p_instructions: form.instructions.trim(),
           p_area_m2: areaM2,
           p_cancellation_policy_hours: cancellationPolicyHours,
           p_advance_notice_hours: advanceNoticeHours,
@@ -594,6 +602,8 @@ export default function CreateListingPage() {
         p_description: form.description.trim(),
         p_equipment_desc: form.equipmentDesc.trim(),
         p_conveniences_desc: form.conveniencesDesc.trim(),
+        p_rules: form.rules.trim(),
+        p_instructions: form.instructions.trim(),
         p_area_m2: areaM2,
         p_cancellation_policy_hours: cancellationPolicyHours,
         p_advance_notice_hours: advanceNoticeHours,
@@ -1241,6 +1251,26 @@ export default function CreateListingPage() {
                     value={form.conveniencesDesc}
                     onChange={(e) => setForm((prev) => ({ ...prev, conveniencesDesc: e.target.value }))}
                     placeholder={"Bathroom, A/C, Wi-Fi, parking..."}
+                    className="min-h-24"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-[#6a6a6a]">Rules</p>
+                  <Textarea
+                    value={form.rules}
+                    onChange={(e) => setForm((prev) => ({ ...prev, rules: e.target.value }))}
+                    placeholder="House rules, limits, and anything guests should know before arriving."
+                    className="min-h-24"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-[#6a6a6a]">Instructions</p>
+                  <Textarea
+                    value={form.instructions}
+                    onChange={(e) => setForm((prev) => ({ ...prev, instructions: e.target.value }))}
+                    placeholder="Access details, parking, setup guidance, or check-in instructions."
                     className="min-h-24"
                   />
                 </div>

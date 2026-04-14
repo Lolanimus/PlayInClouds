@@ -575,7 +575,7 @@ BEGIN
       END,
       'owner', CASE
         WHEN v_owner.id IS NULL THEN NULL::jsonb
-        WHEN v_can_view_sensitive THEN to_jsonb(v_owner)
+        WHEN v_can_view_sensitive THEN to_jsonb(v_owner) - 'email'
         ELSE NULL::jsonb
       END
     );

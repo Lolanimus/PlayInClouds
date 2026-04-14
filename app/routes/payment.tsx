@@ -30,6 +30,63 @@ function formatDateRange(dateKey: string, start: number, end: number) {
   return `${dayLabel}, ${formatHourLabel(start)}–${formatHourLabel(end)}`
 }
 
+function getFormatterForTimeZone(timeZone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  })
+}
+
+function getTimeZoneOffsetMs(date: Date, timeZone: string) {
+  const parts = getFormatterForTimeZone(timeZone).formatToParts(date)
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)])
+  ) as Record<string, number>
+
+  const asUtc = Date.UTC(
+    values.year,
+    (values.month ?? 1) - 1,
+    values.day ?? 1,
+    values.hour ?? 0,
+    values.minute ?? 0,
+    values.second ?? 0,
+    0
+  )
+
+  return asUtc - date.getTime()
+}
+
+function listingLocalDateHourToUtc(dateKey: string, hour: number, timeZone: string) {
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(hour)) {
+    return new Date(NaN)
+  }
+
+  const baseUtc = Date.UTC(year, month - 1, day, hour, 0, 0, 0)
+  let result = new Date(baseUtc)
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const offset = getTimeZoneOffsetMs(result, timeZone)
+    const next = new Date(baseUtc - offset)
+    if (next.getTime() === result.getTime()) break
+    result = next
+  }
+
+  return result
+}
+
 export default function PaymentPage() {
   const navigate = useNavigate()
   const user = useUser()
@@ -55,6 +112,7 @@ export default function PaymentPage() {
         title: remoteListing.title,
         subtitle: remoteListing.subtitle,
         images: remoteListing.images ?? [],
+        timezone: remoteListing.timezone,
         rating: remoteListing.average_rating,
         reviews: remoteListing.review_count,
         priceNumber: remoteListing.price,
@@ -67,6 +125,7 @@ export default function PaymentPage() {
           title: localListing.title,
           subtitle: localListing.subtitle,
           images: localListing.images,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
           rating: localListing.rating,
           reviews: localListing.reviews,
           priceNumber: parseHourlyPrice(localListing.price),
@@ -115,8 +174,7 @@ export default function PaymentPage() {
   const subtotal = Number((hourlyRate * hours).toFixed(2))
   const processingFee = Number((subtotal * 0.075).toFixed(2))
   const total = Number((subtotal + processingFee).toFixed(2))
-  const reservationStartAt = new Date(`${dateKey}T00:00:00`)
-  reservationStartAt.setHours(startHour, 0, 0, 0)
+  const reservationStartAt = listingLocalDateHourToUtc(dateKey, startHour, listing.timezone)
   const hoursUntilStart = (reservationStartAt.getTime() - Date.now()) / (1000 * 60 * 60)
   const advanceNoticeWarning =
     typeof listing.advanceNoticeHours === "number" && hoursUntilStart < listing.advanceNoticeHours
@@ -135,10 +193,8 @@ export default function PaymentPage() {
       return
     }
 
-    const reservationStart = new Date(`${dateKey}T00:00:00`)
-    const reservationEnd = new Date(`${dateKey}T00:00:00`)
-    reservationStart.setHours(startHour, 0, 0, 0)
-    reservationEnd.setHours(endHour, 0, 0, 0)
+    const reservationStart = listingLocalDateHourToUtc(dateKey, startHour, listing.timezone)
+    const reservationEnd = listingLocalDateHourToUtc(dateKey, endHour, listing.timezone)
 
     try {
       await createReservationMutation.mutateAsync({

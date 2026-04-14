@@ -1,15 +1,15 @@
 import { useEffect, useMemo } from "react"
 import { Link, useNavigate, useParams } from "react-router"
-import { CalendarClock, ChevronLeft, Clock3, Hash, MapPin, ReceiptText, Users } from "lucide-react"
+import { CalendarClock, ChevronLeft, Clock3, ExternalLink, Hash, MapPin, MessageCircle, ReceiptText, Users } from "lucide-react"
 
+import { MapView } from "~/components/map-view"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
-import { ListingCard } from "~/components/listings"
+import { ListingCard, type ListingItem } from "~/components/listings"
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
@@ -84,6 +84,32 @@ function canRenterCancel(startAtIso: string, endAtIso: string, cancellationPolic
   return now <= deadline
 }
 
+function getHostDisplayName(owner: ReservationOwner | null) {
+  if (!owner) return "Host"
+
+  const fullName = `${owner.first_name ?? ""} ${owner.last_name ?? ""}`.trim()
+  return fullName || owner.email || "Host"
+}
+
+function formatCancellationPolicy(hours: number | null | undefined) {
+  if (typeof hours !== "number") return "No cancellation policy set"
+  if (hours <= 0) return "Cancellation allowed until the reservation starts"
+  return `Cancel up to ${hours} hour${hours === 1 ? "" : "s"} before the reservation start`
+}
+
+function getStatusBadgeClass(status: string) {
+  switch (status) {
+    case "CONFIRMED":
+      return "border-[#cfe7d6] bg-[#effaf2] text-[#166534]"
+    case "PENDING":
+      return "border-[#f4dfb0] bg-[#fff8e8] text-[#9a6700]"
+    case "CANCELLED":
+      return "border-[#ebd0d5] bg-[#fff1f3] text-[#b42318]"
+    default:
+      return "border-[#dadada] bg-[#ffffff] text-[#000000]"
+  }
+}
+
 export default function ReservationDetailsPage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -107,7 +133,7 @@ export default function ReservationDetailsPage() {
   const reservation = reservationPayload as Reservation | null
   const listing = reservationPayload?.listing ?? null
   const owner = reservationPayload?.owner ?? null
-  const listingCardItem = useMemo(() => {
+  const listingCardItem = useMemo<ListingItem | null>(() => {
     if (!listing) return null
 
     return {
@@ -144,6 +170,9 @@ export default function ReservationDetailsPage() {
   const canCancel = reservation
     ? (isRenter ? renterCanCancel : !isPast)
     : false
+  const mapListings = useMemo<ListingItem[]>(() => {
+    return listingCardItem ? [listingCardItem] : []
+  }, [listingCardItem])
 
   const handleCancelReservation = async () => {
     if (!reservation) return
@@ -160,244 +189,302 @@ export default function ReservationDetailsPage() {
   }
 
   return (
-    <main className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5] px-4 py-8 md:px-8">
-      <Card className="mx-auto w-full max-w-5xl border-[#e9e9e9] bg-[#ffffff] shadow-lg">
-        <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
-          <div className="mb-3 flex items-center justify-between">
-            <Button asChild variant="outline" className="gap-2">
-              <Link to="/dashboard">
-                <ChevronLeft className="h-4 w-4" />
-                Back
-              </Link>
-            </Button>
-            {reservation ? (
-              <Badge variant="outline" className="border-[#dadada] bg-[#ffffff] text-[#000000]">
-                Reservation #{reservation.id.slice(0, 8)}
-              </Badge>
+    <div className="h-[calc(100vh-5.5rem)] flex flex-col bg-[#f5f5f5]">
+      <main className="flex-1 flex overflow-hidden">
+        <section className="w-1/2 overflow-y-auto border-r border-[#e9e9e9]">
+          <div className="mx-auto my-4 max-w-3xl space-y-4 px-4">
+            <Card className="overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-sm">
+              <CardHeader className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <Button asChild variant="outline" className="gap-2">
+                    <Link to="/dashboard">
+                      <ChevronLeft className="h-4 w-4" />
+                      Back
+                    </Link>
+                  </Button>
+                  {reservation ? (
+                    <Badge variant="outline" className={getStatusBadgeClass(reservation.status)}>
+                      Reservation #{reservation.id.slice(0, 8)}
+                    </Badge>
+                  ) : null}
+                </div>
+                <CardTitle className="text-3xl tracking-tight text-[#000000]">Reservation details</CardTitle>
+                <CardDescription className="max-w-2xl text-[#6a6a6a]">
+                  Everything you need for this booking, including the space, timing, host info, payment summary, and support options.
+                </CardDescription>
+                {reservation ? (
+                  <div className="mt-5 space-y-3">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Status</p>
+                        <p className="mt-1 text-sm font-semibold text-[#111111]">{reservation.status}</p>
+                      </div>
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Total paid</p>
+                        <p className="mt-1 text-sm font-semibold text-[#111111]">{formatCurrency(reservation.total_price)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Duration</p>
+                        <p className="mt-1 text-sm font-semibold text-[#111111]">{getDurationHours(reservation.start_at, reservation.end_at)} hours</p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">
+                          <CalendarClock className="h-3.5 w-3.5" />
+                          Start
+                        </p>
+                        <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{formatDateTime(reservation.start_at)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">
+                          <CalendarClock className="h-3.5 w-3.5" />
+                          End
+                        </p>
+                        <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{formatDateTime(reservation.end_at)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] md:col-span-2">
+                        <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">
+                          <MapPin className="h-3.5 w-3.5" />
+                          Address
+                        </p>
+                        <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{listing?.address || "No address available"}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </CardHeader>
+            </Card>
+
+            {isLoading ? (
+              <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-6 text-sm text-[#6a6a6a]">
+                Loading reservation...
+              </div>
+            ) : null}
+
+            {hasError ? (
+              <div className="rounded-xl border border-[#f1c3bd] bg-[#fff3f2] px-4 py-6 text-sm text-[#b42318]">
+                Could not load reservation details.
+              </div>
+            ) : null}
+
+            {!isLoading && !hasError && !reservation ? (
+              <div className="rounded-xl border border-dashed border-[#d9d9d9] bg-[#fafafa] px-4 py-8 text-center text-sm text-[#6a6a6a]">
+                Reservation not found.
+              </div>
+            ) : null}
+
+            {!isLoading && !hasError && reservation ? (
+              <>
+                <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-xl text-[#000000]">Your space</CardTitle>
+                    <CardDescription>Review the listing and jump to the most useful actions.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {listingCardItem ? (
+                      <div className="max-w-md">
+                        <ListingCard
+                          listing={listingCardItem}
+                          onClick={() => navigate(`/listing/${reservation.listing_id}`)}
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Button
+                        asChild
+                        className="h-11 w-full rounded-2xl bg-[#111111] px-4 text-[#ffffff] shadow-[0_8px_24px_rgba(17,17,17,0.14)] transition-all hover:-translate-y-0.5 hover:bg-[#222222] hover:shadow-[0_12px_28px_rgba(17,17,17,0.18)]"
+                      >
+                        <Link to={`/chat`} className="flex w-full items-center justify-center gap-2.5">
+                          <MessageCircle className="h-4 w-4" />
+                          <span className="font-medium">Chat</span>
+                        </Link>
+                      </Button>
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-11 w-full rounded-2xl border-[#dcdcdc] bg-[#ffffff] px-4 text-[#111111] shadow-[0_4px_16px_rgba(15,15,15,0.04)] transition-all hover:-translate-y-0.5 hover:border-[#cfcfcf] hover:bg-[#fafafa] hover:shadow-[0_10px_24px_rgba(15,15,15,0.08)]"
+                      >
+                        <Link to={`/listing/${reservation.listing_id}`} className="flex w-full items-center justify-center gap-2.5">
+                          <ExternalLink className="h-4 w-4" />
+                          <span className="font-medium">Open listing</span>
+                        </Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-xl text-[#000000]">Reservation details</CardTitle>
+                    <CardDescription>Date, timing, guests, and cancellation policy.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Users className="h-3.5 w-3.5" /> Guests</p>
+                      <p className="mt-1 text-base font-semibold text-[#000000]">{reservation.guests}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="text-xs text-[#6a6a6a]">Status</p>
+                      <div className="mt-2">
+                        <Badge variant="outline" className={getStatusBadgeClass(reservation.status)}>
+                          {reservation.status}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
+                      <p className="text-xs text-[#6a6a6a]">Cancellation policy</p>
+                      <p className="mt-1 text-sm text-[#000000]">{formatCancellationPolicy(listing?.cancellation_policy_hours)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
+                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Hash className="h-3.5 w-3.5" /> Reservation ID</p>
+                      <p className="mt-1 break-all text-sm text-[#000000]">{reservation.id}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><CalendarClock className="h-3.5 w-3.5" /> Start</p>
+                      <p className="mt-1 text-sm font-medium text-[#000000]">{formatDateTime(reservation.start_at)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><CalendarClock className="h-3.5 w-3.5" /> End</p>
+                      <p className="mt-1 text-sm font-medium text-[#000000]">{formatDateTime(reservation.end_at)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
+                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><MapPin className="h-3.5 w-3.5" /> Address</p>
+                      <p className="mt-1 text-sm font-medium text-[#000000]">{listing?.address || "No address available"}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
+                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Clock3 className="h-3.5 w-3.5" /> Duration</p>
+                      <p className="mt-1 text-sm font-medium text-[#000000]">{getDurationHours(reservation.start_at, reservation.end_at)} hours</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-xl text-[#000000]">Rules and instructions</CardTitle>
+                    <CardDescription>Important info to know before you arrive.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="text-xs text-[#6a6a6a]">Instructions</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-[#000000]">{listing?.instructions?.trim() || "No instructions provided yet."}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="text-xs text-[#6a6a6a]">Rules</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-[#000000]">{listing?.rules?.trim() || "No rules provided yet."}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-xl text-[#000000]">Hosted by</CardTitle>
+                    <CardDescription>Your contact for booking-related questions.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Link
+                      to={`/chat?reservationId=${reservation.id}`}
+                      className="flex items-start gap-4 rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 transition-colors hover:border-[#d8d8d8] hover:bg-[#f7f7f7]"
+                    >
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#111111] text-sm font-semibold text-[#ffffff]">
+                        {getHostDisplayName(owner).slice(0, 1).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[#000000]">{getHostDisplayName(owner)}</p>
+                        {owner?.email ? <p className="mt-1 text-sm text-[#6a6a6a]">{owner.email}</p> : null}
+                        {owner?.phone_number ? <p className="mt-1 text-sm text-[#6a6a6a]">{owner.phone_number}</p> : null}
+                        <p className="mt-2 text-sm font-medium text-[#111111]">Open chat</p>
+                      </div>
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-xl text-[#000000]">Payment info</CardTitle>
+                    <CardDescription>Quick payment summary and receipt timing.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="text-xs text-[#6a6a6a]">Cost</p>
+                      <p className="mt-1 text-base font-semibold text-[#000000]">{formatCurrency(reservation.total_price)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
+                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><ReceiptText className="h-3.5 w-3.5" /> Receipt</p>
+                      <p className="mt-1 text-sm text-[#000000]">Booked on {formatDateTime(reservation.created_at)}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="text-xl text-[#000000]">Support</CardTitle>
+                    <CardDescription>Get help quickly if something about your reservation changes.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] p-4">
+                      <p className="mb-3 text-sm text-[#6a6a6a]">
+                        Need help before your session starts? Reach out in chat or review support resources.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" disabled className="rounded-full border-[#d7d7d7] bg-[#ffffff]">
+                        Help Center
+                        </Button>
+                        <Button asChild variant="outline" className="rounded-full border-[#d7d7d7] bg-[#ffffff]">
+                          <Link to="/chat">Contact support</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-6 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[#000000]">Manage this reservation</p>
+                      <p className="mt-1 text-sm text-[#6a6a6a]">Cancellation availability depends on the reservation timing and policy.</p>
+                    </div>
+                    {reservation.status !== "CANCELLED" && canCancel ? (
+                      <Button
+                        variant="destructive"
+                        className="rounded-full"
+                        onClick={handleCancelReservation}
+                        disabled={cancelReservationMutation.isPending}
+                      >
+                        {cancelReservationMutation.isPending ? "Cancelling..." : "Cancel reservation"}
+                      </Button>
+                    ) : isRenter && !isPast ? (
+                      <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                        Cancellation window ended
+                      </Badge>
+                    ) : isPast ? (
+                      <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                        Past reservation
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                        Already cancelled
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </>
             ) : null}
           </div>
-          <CardTitle className="text-3xl text-[#000000]">Reservation details</CardTitle>
-          <CardDescription>Everything about this booking in one place.</CardDescription>
-        </CardHeader>
+        </section>
 
-        <CardContent className="space-y-6 p-6">
-          {isLoading ? (
-            <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-6 text-sm text-[#6a6a6a]">
-              Loading reservation...
-            </div>
-          ) : null}
-
-          {hasError ? (
-            <div className="rounded-xl border border-[#f1c3bd] bg-[#fff3f2] px-4 py-6 text-sm text-[#b42318]">
-              Could not load reservation details.
-            </div>
-          ) : null}
-
-          {!isLoading && !hasError && !reservation ? (
-            <div className="rounded-xl border border-dashed border-[#d9d9d9] bg-[#fafafa] px-4 py-8 text-center text-sm text-[#6a6a6a]">
-              Reservation not found.
-            </div>
-          ) : null}
-
-          {!isLoading && !hasError && reservation ? (
-            <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-              <div className="space-y-3">
-                {listingCardItem ? (
-                  <div>
-                    <div className="max-w-sm">
-                      <ListingCard
-                        listing={listingCardItem}
-                        onClick={() => navigate(`/listing/${reservation.listing_id}`)}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6a6a6a]">Status</p>
-                  <Badge variant="outline" className="border-[#dadada] bg-[#ffffff] text-[#000000]">
-                    {reservation.status}
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid gap-3 rounded-2xl border border-[#e9e9e9] bg-[#f8f8f8] p-4 md:grid-cols-2">
-                  <div className="rounded-xl bg-[#ffffff] px-3 py-2">
-                    <p className="text-xs text-[#6a6a6a]">Listing</p>
-                    <p className="font-medium text-[#000000]">{listing?.title ?? "Listing"}</p>
-                    <p className="text-sm text-[#6a6a6a]">{listing?.subtitle ?? ""}</p>
-                  </div>
-
-                  <div className="rounded-xl bg-[#ffffff] px-3 py-2">
-                    <p className="text-xs text-[#6a6a6a]">Total</p>
-                    <p className="font-medium text-[#000000]">{formatCurrency(reservation.total_price)}</p>
-                  </div>
-
-                  <div className="rounded-xl bg-[#ffffff] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><CalendarClock className="h-3.5 w-3.5" /> Start</p>
-                    <p className="font-medium text-[#000000]">{formatDateTime(reservation.start_at)}</p>
-                  </div>
-
-                  <div className="rounded-xl bg-[#ffffff] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><CalendarClock className="h-3.5 w-3.5" /> End</p>
-                    <p className="font-medium text-[#000000]">{formatDateTime(reservation.end_at)}</p>
-                  </div>
-
-                  <div className="rounded-xl bg-[#ffffff] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Clock3 className="h-3.5 w-3.5" /> Duration</p>
-                    <p className="font-medium text-[#000000]">{getDurationHours(reservation.start_at, reservation.end_at)}h</p>
-                  </div>
-
-                  <div className="rounded-xl bg-[#ffffff] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Users className="h-3.5 w-3.5" /> Guests</p>
-                    <p className="font-medium text-[#000000]">{reservation.guests}</p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Hash className="h-3.5 w-3.5" /> Reservation ID</p>
-                    <p className="break-all text-sm text-[#000000]">{reservation.id}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] px-3 py-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><ReceiptText className="h-3.5 w-3.5" /> Renter ID</p>
-                    <p className="break-all text-sm text-[#000000]">{reservation.renter_id}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] px-3 py-2 md:col-span-2">
-                    <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><MapPin className="h-3.5 w-3.5" /> Listing ID</p>
-                    <p className="break-all text-sm text-[#000000]">{reservation.listing_id}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#6a6a6a]">All reservation fields</p>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">id</p>
-                      <p className="break-all text-sm text-[#000000]">{reservation.id}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">listing_id</p>
-                      <p className="break-all text-sm text-[#000000]">{reservation.listing_id}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">renter_id</p>
-                      <p className="break-all text-sm text-[#000000]">{reservation.renter_id}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">status</p>
-                      <p className="text-sm text-[#000000]">{reservation.status}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">start_at</p>
-                      <p className="text-sm text-[#000000]">{reservation.start_at}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">end_at</p>
-                      <p className="text-sm text-[#000000]">{reservation.end_at}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">guests</p>
-                      <p className="text-sm text-[#000000]">{reservation.guests}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">total_price</p>
-                      <p className="text-sm text-[#000000]">{reservation.total_price}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">created_at</p>
-                      <p className="text-sm text-[#000000]">{reservation.created_at}</p>
-                    </div>
-                    <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
-                      <p className="text-xs text-[#6a6a6a]">updated_at</p>
-                      <p className="text-sm text-[#000000]">{reservation.updated_at}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {listing ? (
-                  <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#6a6a6a]">All listing fields</p>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">id</p><p className="break-all text-sm text-[#000000]">{listing.id}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">owner_id</p><p className="break-all text-sm text-[#000000]">{listing.owner_id ?? ""}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">address</p><p className="text-sm text-[#000000]">{listing.address}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">lat</p><p className="text-sm text-[#000000]">{listing.lat}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">lng</p><p className="text-sm text-[#000000]">{listing.lng}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">title</p><p className="text-sm text-[#000000]">{listing.title}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">subtitle</p><p className="text-sm text-[#000000]">{listing.subtitle}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">category</p><p className="text-sm text-[#000000]">{listing.category}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">price</p><p className="text-sm text-[#000000]">{listing.price}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">average_rating</p><p className="text-sm text-[#000000]">{listing.average_rating}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">review_count</p><p className="text-sm text-[#000000]">{listing.review_count}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">rating_sum</p><p className="text-sm text-[#000000]">{listing.rating_sum}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">images count</p><p className="text-sm text-[#000000]">{listing.images?.length ?? 0}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">description</p><p className="text-sm text-[#000000]">{listing.description}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">equipment_desc</p><p className="text-sm text-[#000000]">{listing.equipment_desc}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">conveniences_desc</p><p className="text-sm text-[#000000]">{listing.conveniences_desc}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">area_m2</p><p className="text-sm text-[#000000]">{listing.area_m2}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">created_at</p><p className="text-sm text-[#000000]">{listing.created_at}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">updated_at</p><p className="text-sm text-[#000000]">{listing.updated_at}</p></div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {owner ? (
-                  <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4">
-                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#6a6a6a]">All owner fields</p>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">id</p><p className="break-all text-sm text-[#000000]">{owner.id}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">email</p><p className="text-sm text-[#000000]">{owner.email ?? ""}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">first_name</p><p className="text-sm text-[#000000]">{owner.first_name}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">last_name</p><p className="text-sm text-[#000000]">{owner.last_name}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">phone_number</p><p className="text-sm text-[#000000]">{owner.phone_number ?? ""}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2"><p className="text-xs text-[#6a6a6a]">inserted_at</p><p className="text-sm text-[#000000]">{owner.inserted_at}</p></div>
-                      <div className="rounded-lg bg-[#f8f8f8] px-3 py-2 md:col-span-2"><p className="text-xs text-[#6a6a6a]">updated_at</p><p className="text-sm text-[#000000]">{owner.updated_at}</p></div>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-
-        <CardFooter className="border-t border-[#e9e9e9] px-6 py-6">
-          {reservation ? (
-            <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              <Button asChild variant="outline">
-                <Link to={`/listing/${reservation.listing_id}`}>Open listing</Link>
-              </Button>
-
-              {reservation.status !== "CANCELLED" && canCancel ? (
-                <Button
-                  variant="destructive"
-                  onClick={handleCancelReservation}
-                  disabled={cancelReservationMutation.isPending}
-                >
-                  {cancelReservationMutation.isPending ? "Cancelling..." : "Cancel reservation"}
-                </Button>
-              ) : isRenter && !isPast ? (
-                <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                  Cancellation window ended
-                </Badge>
-              ) : isPast ? (
-                <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                  Past reservation
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                  Already cancelled
-                </Badge>
-              )}
-            </div>
+        <aside className="w-1/2 p-4">
+          {listing ? (
+            <MapView listingsOverride={mapListings} disableFilters markerVariant="pin" />
           ) : (
-            <Button asChild variant="outline">
-              <Link to="/dashboard">Back to dashboard</Link>
-            </Button>
+            <div className="flex h-full min-h-[350px] items-center justify-center rounded-[1.75rem] border border-[#e5e5e5] bg-[#ffffff] px-6 text-center text-sm text-[#6a6a6a] shadow-sm">
+              Listing location will appear here once the reservation is loaded.
+            </div>
           )}
-        </CardFooter>
-      </Card>
-    </main>
+        </aside>
+      </main>
+    </div>
   )
 }

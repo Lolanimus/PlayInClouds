@@ -3,11 +3,11 @@ import * as React from "react"
 import { cn } from "~/lib/utils"
 
 export function Card({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("rounded-xl border bg-card text-card-foreground shadow-sm", className)} {...props} />
+  return <div className={cn("rounded-xl p-8 border bg-card text-card-foreground shadow-sm", className)} {...props} />
 }
 
 export function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
+  return <div className={cn("flex flex-col  space-y-1.5", className)} {...props} />
 }
 
 export function CardTitle({ className, ...props }: React.ComponentProps<"h3">) {
@@ -19,7 +19,7 @@ export function CardDescription({ className, ...props }: React.ComponentProps<"p
 }
 
 export function CardContent({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("px-6", className)} {...props} />
+  return <div className={cn("w-full text-left items-start justify-start", className)} {...props} />
 }
 
 export function CardFooter({ className, ...props }: React.ComponentProps<"div">) {

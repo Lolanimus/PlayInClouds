@@ -23,27 +23,25 @@ export type Database = MergeDeep<
           Returns: Reservation
         }
         create_direct_chat: {
-          Args: {
-            p_listing_id: string
-            target_user_id: string
-          }
           Returns: Chat
         }
         create_listing: {
           Args: {
             p_address: string
-            p_advance_notice_hours?: number
+            p_advance_notice_hours?: number | null
             p_area_m2: number
-            p_cancellation_policy_hours?: number
+            p_cancellation_policy_hours?: number | null
             p_category: Listing["category"]
             p_conveniences_desc: string
             p_description: string
             p_equipment_desc: string
             p_host_confirmation_message?: string
             p_images: string[]
+            p_instructions?: string
             p_lat: number
             p_lng: number
             p_price: number
+            p_rules?: string
             p_subtitle: string
             p_timezone?: string
             p_title: string
@@ -63,9 +61,6 @@ export type Database = MergeDeep<
           Returns: boolean 
         }
         delete_chat: {
-          Args: {
-            p_chat_id: string
-          }
           Returns: boolean
         }
         delete_messages: {
@@ -78,10 +73,6 @@ export type Database = MergeDeep<
           Returns: Chat[]
         }
         get_direct_chat_by_user_id: {
-          Args: {
-            p_listing_id: string
-            target_user_id: string
-          }
           Returns: Chat
         }
         get_listing: {
@@ -136,9 +127,11 @@ export type Database = MergeDeep<
             p_host_confirmation_message?: string | null
             p_id: string
             p_images?: string[]
+            p_instructions?: string | null
             p_lat?: number
             p_lng?: number
             p_price?: number
+            p_rules?: string | null
             p_subtitle?: string
             p_timezone?: string
             p_title?: string
