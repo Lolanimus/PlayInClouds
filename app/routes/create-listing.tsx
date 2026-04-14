@@ -79,6 +79,7 @@ type ListingFormState = {
   description: string
   equipmentDesc: string
   conveniencesDesc: string
+  hostConfirmationMessage: string
 }
 
 const initialFormState: ListingFormState = {
@@ -98,6 +99,7 @@ const initialFormState: ListingFormState = {
   description: "ahuenniy space",
   equipmentDesc: "drum kit, guitar amps, microphones",
   conveniencesDesc: "bathroom, A/C, Wi‑Fi",
+  hostConfirmationMessage: "",
 }
 
 export default function CreateListingPage() {
@@ -184,6 +186,7 @@ export default function CreateListingPage() {
       description: listing.description ?? "",
       equipmentDesc: listing.equipment_desc ?? "",
       conveniencesDesc: listing.conveniences_desc ?? "",
+      hostConfirmationMessage: listing.host_confirmation_message ?? "",
     })
     setIsAddressPickedFromSuggestions(true)
 
@@ -544,6 +547,7 @@ export default function CreateListingPage() {
           p_cancellation_policy_hours: cancellationPolicyHours,
           p_advance_notice_hours: advanceNoticeHours,
           p_timezone: timezone,
+          p_host_confirmation_message: form.hostConfirmationMessage.trim(),
         },
         {
           onSuccess: async (data: any) => {
@@ -594,6 +598,7 @@ export default function CreateListingPage() {
         p_cancellation_policy_hours: cancellationPolicyHours,
         p_advance_notice_hours: advanceNoticeHours,
         p_timezone: timezone,
+        p_host_confirmation_message: form.hostConfirmationMessage.trim(),
       },
       {
         onSuccess: async (data: any) => {
@@ -1238,6 +1243,19 @@ export default function CreateListingPage() {
                     placeholder={"Bathroom, A/C, Wi-Fi, parking..."}
                     className="min-h-24"
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-[#6a6a6a]">Initial message after confirmation</p>
+                  <Textarea
+                    value={form.hostConfirmationMessage}
+                    onChange={(e) => setForm((prev) => ({ ...prev, hostConfirmationMessage: e.target.value }))}
+                    placeholder="Optional message sent to the booker when you confirm their reservation."
+                    className="min-h-24"
+                  />
+                  <p className="text-xs text-[#8a8a8a]">
+                    Sent automatically in chat after you approve a reservation for this listing.
+                  </p>
                 </div>
               </div>
             </section>

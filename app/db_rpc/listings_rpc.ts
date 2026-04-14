@@ -14,9 +14,10 @@ const createListing = async (
   p_equipment_desc: string,
   p_conveniences_desc: string,
   p_area_m2: number,
-  p_cancellation_policy_hours?: number | null,
-  p_advance_notice_hours?: number | null,
-  p_timezone?: string
+  p_cancellation_policy_hours?: number,
+  p_advance_notice_hours?: number,
+  p_timezone?: string,
+  p_host_confirmation_message?: string
 ) => {
   return await processRpcRequest("create_listing", {
     p_lat,
@@ -33,6 +34,7 @@ const createListing = async (
     p_area_m2,
     p_cancellation_policy_hours,
     p_advance_notice_hours,
+    p_host_confirmation_message,
     ...(p_timezone ? { p_timezone } : {}),
   });
 };
@@ -76,6 +78,7 @@ const updateListing = async (args: {
   p_cancellation_policy_hours?: number | null;
   p_advance_notice_hours?: number | null;
   p_timezone?: string;
+  p_host_confirmation_message?: string | null;
 }) => {
   return await processRpcRequest("update_listing", args);
 };
