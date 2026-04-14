@@ -521,6 +521,7 @@ DECLARE
   v_reservation public.reservations%ROWTYPE;
   v_listing public.listings%ROWTYPE;
   v_owner public.user%ROWTYPE;
+  v_booker public.user%ROWTYPE;
   v_can_view_sensitive BOOLEAN := FALSE;
   v_listing_public jsonb := NULL;
 BEGIN
@@ -550,6 +551,11 @@ BEGIN
     FROM public.user u
     WHERE u.id = v_listing.owner_id;
 
+    SELECT u.*
+    INTO v_booker
+    FROM public.user u
+    WHERE u.id = v_reservation.renter_id;
+
     v_can_view_sensitive :=
       (v_uid = v_listing.owner_id)
       OR (v_uid = v_reservation.renter_id AND v_reservation.status = 'CONFIRMED');
@@ -576,6 +582,11 @@ BEGIN
       'owner', CASE
         WHEN v_owner.id IS NULL THEN NULL::jsonb
         WHEN v_can_view_sensitive THEN to_jsonb(v_owner) - 'email'
+        ELSE NULL::jsonb
+      END,
+      'booker', CASE
+        WHEN v_booker.id IS NULL THEN NULL::jsonb
+        WHEN v_can_view_sensitive THEN to_jsonb(v_booker) - 'email'
         ELSE NULL::jsonb
       END
     );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { CalendarClock, ChevronLeft, Clock3, ExternalLink, Hash, MapPin, MessageCircle, ReceiptText, Users } from "lucide-react"
 
@@ -13,11 +13,11 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
-import { useCancelReservation, useGetReservation } from "~/hooks/useReservations"
+import { useCancelReservation, useConfirmReservation, useGetReservation } from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
 import type { Listing, Reservation } from "~/types/custom/api.types"
 
-type ReservationOwner = {
+type ReservationProfile = {
   id: string
   email: string | null
   first_name: string
@@ -29,7 +29,8 @@ type ReservationOwner = {
 
 type ReservationDetailsPayload = Reservation & {
   listing?: Listing | null
-  owner?: ReservationOwner | null
+  owner?: ReservationProfile | null
+  booker?: ReservationProfile | null
 }
 
 function formatCurrency(value: number) {
@@ -84,11 +85,11 @@ function canRenterCancel(startAtIso: string, endAtIso: string, cancellationPolic
   return now <= deadline
 }
 
-function getHostDisplayName(owner: ReservationOwner | null) {
-  if (!owner) return "Host"
+function getProfileDisplayName(profile: ReservationProfile | null, fallback: string) {
+  if (!profile) return fallback
 
-  const fullName = `${owner.first_name ?? ""} ${owner.last_name ?? ""}`.trim()
-  return fullName || owner.email || "Host"
+  const fullName = `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim()
+  return fullName || profile.email || fallback
 }
 
 function formatCancellationPolicy(hours: number | null | undefined) {
@@ -110,11 +111,26 @@ function getStatusBadgeClass(status: string) {
   }
 }
 
+function getStatusTextClass(status: string) {
+  switch (status) {
+    case "CONFIRMED":
+      return "text-[#166534]"
+    case "PENDING":
+      return "text-[#9a6700]"
+    case "CANCELLED":
+      return "text-[#b42318]"
+    default:
+      return "text-[#111111]"
+  }
+}
+
 export default function ReservationDetailsPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const user = useUser()
+  const [showMoreInfo, setShowMoreInfo] = useState(false)
   const cancelReservationMutation = useCancelReservation()
+  const confirmReservationMutation = useConfirmReservation()
 
   const reservationQuery = useGetReservation(
     { p_reservation_id: id },
@@ -133,6 +149,7 @@ export default function ReservationDetailsPage() {
   const reservation = reservationPayload as Reservation | null
   const listing = reservationPayload?.listing ?? null
   const owner = reservationPayload?.owner ?? null
+  const booker = reservationPayload?.booker ?? null
   const listingCardItem = useMemo<ListingItem | null>(() => {
     if (!listing) return null
 
@@ -164,15 +181,24 @@ export default function ReservationDetailsPage() {
 
   const isPast = reservation ? isPastReservation(reservation.end_at) : false
   const isRenter = Boolean(user?.id && reservation?.renter_id === user.id)
+  const isHost = Boolean(user?.id && owner?.id === user.id)
   const renterCanCancel = reservation && listing
     ? canRenterCancel(reservation.start_at, reservation.end_at, listing.cancellation_policy_hours)
     : false
   const canCancel = reservation
     ? (isRenter ? renterCanCancel : !isPast)
     : false
+  const canConfirm = Boolean(reservation && isHost && reservation.status === "PENDING" && !isPast)
   const mapListings = useMemo<ListingItem[]>(() => {
     return listingCardItem ? [listingCardItem] : []
   }, [listingCardItem])
+  const profileCardTitle = isHost ? "Booker profile" : "Host profile"
+  const profileCardDescription = isHost
+    ? "The guest who made this reservation."
+    : "Your contact for booking-related questions."
+  const profile = isHost ? booker : owner
+  const profileDisplayName = getProfileDisplayName(profile, isHost ? "Booker" : "Host")
+  const profileRoleLabel = isHost ? "Booker" : "Host"
 
   const handleCancelReservation = async () => {
     if (!reservation) return
@@ -188,10 +214,23 @@ export default function ReservationDetailsPage() {
     }
   }
 
+  const handleConfirmReservation = async () => {
+    if (!reservation || !canConfirm) return
+
+    if (!confirm("Confirm this reservation?")) return
+
+    try {
+      await confirmReservationMutation.mutateAsync({ p_reservation_id: reservation.id })
+      await reservationQuery.refetch()
+    } catch {
+      // handled by global error state
+    }
+  }
+
   return (
     <div className="h-[calc(100vh-5.5rem)] flex flex-col bg-[#f5f5f5]">
       <main className="flex-1 flex overflow-hidden">
-        <section className="w-1/2 overflow-y-auto border-r border-[#e9e9e9]">
+        <section className="w-1/2 overflow-y-auto border-r border-[#e9e9e9] pb-4">
           <div className="mx-auto my-4 max-w-3xl space-y-4 px-4">
             <Card className="overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-sm">
               <CardHeader className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] p-4">
@@ -217,7 +256,7 @@ export default function ReservationDetailsPage() {
                     <div className="grid gap-3 md:grid-cols-3">
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Status</p>
-                        <p className="mt-1 text-sm font-semibold text-[#111111]">{reservation.status}</p>
+                        <p className={`mt-1 text-sm font-semibold ${getStatusTextClass(reservation.status)}`}>{reservation.status}</p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Total paid</p>
@@ -252,6 +291,69 @@ export default function ReservationDetailsPage() {
                         <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{listing?.address || "No address available"}</p>
                       </div>
                     </div>
+
+                    {canConfirm ? (
+                      <Button
+                        className="h-11 w-full rounded-full border border-[#1f8f4a] bg-[#eaf8ef] px-3 py-1 text-sm font-semibold text-[#0f6130] shadow-sm transition-colors hover:bg-[#ddf2e5]"
+                        onClick={handleConfirmReservation}
+                        disabled={confirmReservationMutation.isPending}
+                      >
+                        {confirmReservationMutation.isPending ? "Confirming..." : "Confirm reservation"}
+                      </Button>
+                    ) : isRenter && !isPast ? (
+                      <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                        Cancellation window ended
+                      </Badge>
+                    ) : isPast ? (
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                          Past reservation
+                        </Badge>
+                      </div>
+                    ) : reservation.status === "CANCELLED" ? (
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                          Already cancelled
+                        </Badge>
+                      </div>
+                    ) : null}
+
+                    <div className="flex justify-start">
+                      <button
+                        type="button"
+                        className="text-sm font-medium text-[#111111] underline underline-offset-4 transition-colors hover:text-[#6a6a6a]"
+                        onClick={() => setShowMoreInfo((current) => !current)}
+                      >
+                        {showMoreInfo ? "Less info" : "More info"}
+                      </button>
+                    </div>
+
+                    {showMoreInfo ? (
+                      <div className="space-y-3">
+                        <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                          <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]"><Users className="h-3.5 w-3.5" /> Guests</p>
+                          <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{reservation.guests}</p>
+                        </div>
+                        <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                          <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Cancellation policy</p>
+                          <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{formatCancellationPolicy(listing?.cancellation_policy_hours)}</p>
+                        </div>
+                        <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                          <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]"><Hash className="h-3.5 w-3.5" /> Reservation ID</p>
+                          <p className="mt-2 break-all text-sm font-medium leading-6 text-[#111111]">{reservation.id}</p>
+                        </div>
+                        {reservation.status !== "CANCELLED" && canCancel ? (
+                          <Button
+                            variant="destructive"
+                            className="h-11 w-full rounded-full"
+                            onClick={handleCancelReservation}
+                            disabled={cancelReservationMutation.isPending}
+                          >
+                            {cancelReservationMutation.isPending ? "Cancelling..." : "Cancel reservation"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </CardHeader>
@@ -318,51 +420,6 @@ export default function ReservationDetailsPage() {
 
                 <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="text-xl text-[#000000]">Reservation details</CardTitle>
-                    <CardDescription>Date, timing, guests, and cancellation policy.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
-                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Users className="h-3.5 w-3.5" /> Guests</p>
-                      <p className="mt-1 text-base font-semibold text-[#000000]">{reservation.guests}</p>
-                    </div>
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
-                      <p className="text-xs text-[#6a6a6a]">Status</p>
-                      <div className="mt-2">
-                        <Badge variant="outline" className={getStatusBadgeClass(reservation.status)}>
-                          {reservation.status}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
-                      <p className="text-xs text-[#6a6a6a]">Cancellation policy</p>
-                      <p className="mt-1 text-sm text-[#000000]">{formatCancellationPolicy(listing?.cancellation_policy_hours)}</p>
-                    </div>
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
-                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Hash className="h-3.5 w-3.5" /> Reservation ID</p>
-                      <p className="mt-1 break-all text-sm text-[#000000]">{reservation.id}</p>
-                    </div>
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
-                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><CalendarClock className="h-3.5 w-3.5" /> Start</p>
-                      <p className="mt-1 text-sm font-medium text-[#000000]">{formatDateTime(reservation.start_at)}</p>
-                    </div>
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
-                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><CalendarClock className="h-3.5 w-3.5" /> End</p>
-                      <p className="mt-1 text-sm font-medium text-[#000000]">{formatDateTime(reservation.end_at)}</p>
-                    </div>
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
-                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><MapPin className="h-3.5 w-3.5" /> Address</p>
-                      <p className="mt-1 text-sm font-medium text-[#000000]">{listing?.address || "No address available"}</p>
-                    </div>
-                    <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 md:col-span-2">
-                      <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><Clock3 className="h-3.5 w-3.5" /> Duration</p>
-                      <p className="mt-1 text-sm font-medium text-[#000000]">{getDurationHours(reservation.start_at, reservation.end_at)} hours</p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
-                  <CardHeader className="pb-4">
                     <CardTitle className="text-xl text-[#000000]">Rules and instructions</CardTitle>
                     <CardDescription>Important info to know before you arrive.</CardDescription>
                   </CardHeader>
@@ -380,8 +437,8 @@ export default function ReservationDetailsPage() {
 
                 <Card className="border-[#e9e9e9] bg-[#ffffff] shadow-sm">
                   <CardHeader className="pb-4">
-                    <CardTitle className="text-xl text-[#000000]">Hosted by</CardTitle>
-                    <CardDescription>Your contact for booking-related questions.</CardDescription>
+                    <CardTitle className="text-xl text-[#000000]">{profileCardTitle}</CardTitle>
+                    <CardDescription>{profileCardDescription}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <Link
@@ -389,12 +446,12 @@ export default function ReservationDetailsPage() {
                       className="flex items-start gap-4 rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 transition-colors hover:border-[#d8d8d8] hover:bg-[#f7f7f7]"
                     >
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#111111] text-sm font-semibold text-[#ffffff]">
-                        {getHostDisplayName(owner).slice(0, 1).toUpperCase()}
+                        {profileDisplayName.slice(0, 1).toUpperCase()}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-[#000000]">{getHostDisplayName(owner)}</p>
-                        {owner?.email ? <p className="mt-1 text-sm text-[#6a6a6a]">{owner.email}</p> : null}
-                        {owner?.phone_number ? <p className="mt-1 text-sm text-[#6a6a6a]">{owner.phone_number}</p> : null}
+                        <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#6a6a6a]">{profileRoleLabel}</p>
+                        <p className="mt-1 text-sm font-semibold text-[#000000]">{profileDisplayName}</p>
+                        {profile?.phone_number ? <p className="mt-1 text-sm text-[#6a6a6a]">{profile.phone_number}</p> : null}
                         <p className="mt-2 text-sm font-medium text-[#111111]">Open chat</p>
                       </div>
                     </Link>
@@ -440,36 +497,6 @@ export default function ReservationDetailsPage() {
                   </CardContent>
                 </Card>
 
-                <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-6 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-[#000000]">Manage this reservation</p>
-                      <p className="mt-1 text-sm text-[#6a6a6a]">Cancellation availability depends on the reservation timing and policy.</p>
-                    </div>
-                    {reservation.status !== "CANCELLED" && canCancel ? (
-                      <Button
-                        variant="destructive"
-                        className="rounded-full"
-                        onClick={handleCancelReservation}
-                        disabled={cancelReservationMutation.isPending}
-                      >
-                        {cancelReservationMutation.isPending ? "Cancelling..." : "Cancel reservation"}
-                      </Button>
-                    ) : isRenter && !isPast ? (
-                      <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                        Cancellation window ended
-                      </Badge>
-                    ) : isPast ? (
-                      <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                        Past reservation
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                        Already cancelled
-                      </Badge>
-                    )}
-                  </div>
-                </div>
               </>
             ) : null}
           </div>
