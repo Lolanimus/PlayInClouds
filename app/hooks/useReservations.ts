@@ -1,6 +1,11 @@
 import * as reservationsEvents from "@/db_rpc/reservations_rpc";
 import { queries } from "@/queries/queries";
+import { errorStore } from "@/store/error_state";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+function getMutationErrorMessage(fallback: string) {
+  return errorStore.getState().error ?? fallback
+}
 
 export const useGetReservation = (
   opts?: { p_reservation_id?: string },
@@ -49,12 +54,18 @@ export const useCreateReservation = () => {
       p_guests?: number;
     }) => {
       console.info("Creating reservation", payload);
-      return await reservationsEvents.createReservation(
+      const result = await reservationsEvents.createReservation(
         payload.p_listing_id,
         payload.p_start_at,
         payload.p_end_at,
         payload.p_guests ?? 1
       );
+
+      if (!result) {
+        throw new Error(getMutationErrorMessage("Failed to create reservation."))
+      }
+
+      return result
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queries.reservations._def });
@@ -72,7 +83,13 @@ export const useCancelReservation = () => {
   return useMutation({
     mutationFn: async (payload: { p_reservation_id: string }) => {
       console.info("Cancelling reservation", payload);
-      return await reservationsEvents.cancelReservation(payload.p_reservation_id);
+      const result = await reservationsEvents.cancelReservation(payload.p_reservation_id);
+
+      if (!result) {
+        throw new Error(getMutationErrorMessage("Failed to cancel reservation."))
+      }
+
+      return result
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queries.reservations._def });
@@ -90,7 +107,13 @@ export const useConfirmReservation = () => {
   return useMutation({
     mutationFn: async (payload: { p_reservation_id: string }) => {
       console.info("Confirming reservation", payload);
-      return await reservationsEvents.confirmReservation(payload.p_reservation_id);
+      const result = await reservationsEvents.confirmReservation(payload.p_reservation_id);
+
+      if (!result) {
+        throw new Error(getMutationErrorMessage("Failed to confirm reservation."))
+      }
+
+      return result
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queries.reservations._def });

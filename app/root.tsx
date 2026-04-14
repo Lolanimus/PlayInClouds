@@ -5,15 +5,19 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from "react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { X } from "lucide-react";
 import { queryClient } from "./queries/queries";
 
 import type { Route } from "./+types/root";
 import { Header } from "./components/header";
 import { FiltersModal } from "./components/filter-bar";
 import { useAuth } from "./hooks/useAuth";
+import { useError, useErrorActions } from "./store/error_state";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -51,13 +55,37 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const location = useLocation();
+  const error = useError();
+  const { setError } = useErrorActions();
+
   useAuth();
+
+  useEffect(() => {
+    setError(null)
+  }, [location.pathname, setError])
 
   return (
     <QueryClientProvider client={queryClient}>
       <Header onOpenFilters={() => setIsFiltersOpen(true)} />
+      {error ? (
+        <div className="border-b border-[#f1c3bd] bg-[#fff3f2] px-4 py-3 text-[#b42318]">
+          <div className="mx-auto flex max-w-6xl items-start justify-between gap-3">
+            <p className="text-sm font-medium">{error}</p>
+            <button
+              type="button"
+              aria-label="Dismiss error"
+              onClick={() => setError(null)}
+              className="rounded-md p-1 text-[#b42318] transition-colors hover:bg-[#f9d7d3]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : null}
       <Outlet />
       <FiltersModal isOpen={isFiltersOpen} onClose={() => setIsFiltersOpen(false)} />
+      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }
