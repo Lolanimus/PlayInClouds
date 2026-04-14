@@ -14,6 +14,99 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          chat_id: string
+          contents: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          sender_id: string
+        }
+        Insert: {
+          chat_id: string
+          contents: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          sender_id: string
+        }
+        Update: {
+          chat_id?: string
+          contents?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_participants: {
+        Row: {
+          chat_id: string
+          metadata: Json
+          participant_id: string
+        }
+        Insert: {
+          chat_id: string
+          metadata: Json
+          participant_id: string
+        }
+        Update: {
+          chat_id?: string
+          metadata?: Json
+          participant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_participants_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_participants_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chats: {
+        Row: {
+          chat_type: Database["public"]["Enums"]["chat_type"]
+          id: string
+          metadata: Json | null
+        }
+        Insert: {
+          chat_type: Database["public"]["Enums"]["chat_type"]
+          id?: string
+          metadata?: Json | null
+        }
+        Update: {
+          chat_type?: Database["public"]["Enums"]["chat_type"]
+          id?: string
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
       listing_booking_policies: {
         Row: {
           created_at: string
@@ -96,6 +189,7 @@ export type Database = {
       listings: {
         Row: {
           address: string
+          advance_notice_hours: number | null
           area_m2: number
           average_rating: number
           cancellation_policy_hours: number | null
@@ -108,8 +202,7 @@ export type Database = {
           images: string[]
           lat: number
           lng: number
-          advance_notice_hours: number | null
-          owner_id: string | null
+          owner_id: string
           price: number
           rating_sum: number
           review_count: number
@@ -120,6 +213,7 @@ export type Database = {
         }
         Insert: {
           address: string
+          advance_notice_hours?: number | null
           area_m2?: number
           average_rating?: number
           cancellation_policy_hours?: number | null
@@ -132,8 +226,7 @@ export type Database = {
           images: string[]
           lat: number
           lng: number
-          advance_notice_hours?: number | null
-          owner_id?: string | null
+          owner_id: string
           price: number
           rating_sum?: number
           review_count?: number
@@ -144,6 +237,7 @@ export type Database = {
         }
         Update: {
           address?: string
+          advance_notice_hours?: number | null
           area_m2?: number
           average_rating?: number
           cancellation_policy_hours?: number | null
@@ -156,8 +250,7 @@ export type Database = {
           images?: string[]
           lat?: number
           lng?: number
-          advance_notice_hours?: number | null
-          owner_id?: string | null
+          owner_id?: string
           price?: number
           rating_sum?: number
           review_count?: number
@@ -214,13 +307,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "reservations_listing_id_fkey"
-            columns: ["listing_id"]
-            isOneToOne: false
-            referencedRelation: "listings"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "reservations_renter_id_fkey"
             columns: ["renter_id"]
@@ -313,26 +399,66 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assert_valid_timezone: { Args: { p_timezone: string }; Returns: string }
+      calculate_advance_notice_start_at: {
+        Args: {
+          p_advance_notice_hours: number
+          p_reference_at?: string
+          p_timezone: string
+        }
+        Returns: string
+      }
+      calculate_minimum_advance_booking_start_at: {
+        Args: {
+          p_minimum_advance_booking_hours: number
+          p_reference_at?: string
+          p_timezone: string
+        }
+        Returns: string
+      }
       cancel_reservation: { Args: { p_reservation_id: string }; Returns: Json }
       confirm_reservation: { Args: { p_reservation_id: string }; Returns: Json }
-      create_listing: {
-        Args: {
-          p_address: string
-          p_area_m2: number
-          p_cancellation_policy_hours?: number | null
-          p_category: Database["public"]["Enums"]["listing_category"]
-          p_conveniences_desc: string
-          p_description: string
-          p_equipment_desc: string
-          p_images: string[]
-          p_lat: number
-          p_lng: number
-          p_advance_notice_hours?: number | null
-          p_price: number
-          p_subtitle: string
-          p_timezone?: string
-          p_title: string
-        }
+      create_direct_chat: { Args: { target_user_id: string }; Returns: Json }
+      create_listing:
+        | {
+            Args: {
+              p_address: string
+              p_area_m2: number
+              p_category: Database["public"]["Enums"]["listing_category"]
+              p_conveniences_desc: string
+              p_description: string
+              p_equipment_desc: string
+              p_images: string[]
+              p_lat: number
+              p_lng: number
+              p_price: number
+              p_subtitle: string
+              p_title: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_address: string
+              p_advance_notice_hours?: number
+              p_area_m2: number
+              p_cancellation_policy_hours?: number
+              p_category: Database["public"]["Enums"]["listing_category"]
+              p_conveniences_desc: string
+              p_description: string
+              p_equipment_desc: string
+              p_images: string[]
+              p_lat: number
+              p_lng: number
+              p_price: number
+              p_subtitle: string
+              p_timezone?: string
+              p_title: string
+            }
+            Returns: Json
+          }
+      create_message: {
+        Args: { p_chat_id: string; p_contents: string }
         Returns: Json
       }
       create_reservation: {
@@ -354,15 +480,24 @@ export type Database = {
         Returns: Json
       }
       delete_listing: { Args: { p_id: string }; Returns: boolean }
+      delete_messages: { Args: { msg_ids: string[] }; Returns: boolean }
       delete_review: { Args: { p_id: string }; Returns: boolean }
+      get_client_chats: { Args: never; Returns: Json }
+      get_direct_chat_by_user_id: {
+        Args: { target_user_id: string }
+        Returns: Json
+      }
       get_listing: { Args: { p_id: string }; Returns: Json }
-      get_listing_booking_policy: { Args: { p_listing_id: string }; Returns: Json }
+      get_listing_booking_policy: {
+        Args: { p_listing_id: string }
+        Returns: Json
+      }
+      get_messages: {
+        Args: { p_chat_id: string; p_cursor?: number; p_limit?: number }
+        Returns: Json
+      }
       get_reservation: { Args: { p_reservation_id: string }; Returns: Json }
       get_review: { Args: { p_id: string }; Returns: Json }
-      get_user_id_by_username: {
-        Args: { target_username: string }
-        Returns: string
-      }
       list_host_monthly_reservations: {
         Args: { p_host_id?: string; p_month?: number }
         Returns: Json[]
@@ -404,27 +539,46 @@ export type Database = {
             Returns: Json
           }
         | { Args: { p_listing_id: string; p_slots: Json }; Returns: Json }
-      update_listing: {
-        Args: {
-          p_address?: string
-          p_area_m2?: number
-          p_cancellation_policy_hours?: number | null
-          p_category?: Database["public"]["Enums"]["listing_category"]
-          p_conveniences_desc?: string
-          p_description?: string
-          p_equipment_desc?: string
-          p_id: string
-          p_images?: string[]
-          p_lat?: number
-          p_lng?: number
-          p_advance_notice_hours?: number | null
-          p_price?: number
-          p_subtitle?: string
-          p_timezone?: string
-          p_title?: string
-        }
-        Returns: Json
-      }
+      update_listing:
+        | {
+            Args: {
+              p_address?: string
+              p_area_m2?: number
+              p_category?: Database["public"]["Enums"]["listing_category"]
+              p_conveniences_desc?: string
+              p_description?: string
+              p_equipment_desc?: string
+              p_id: string
+              p_images?: string[]
+              p_lat?: number
+              p_lng?: number
+              p_price?: number
+              p_subtitle?: string
+              p_title?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_address?: string
+              p_advance_notice_hours?: number
+              p_area_m2?: number
+              p_cancellation_policy_hours?: number
+              p_category?: Database["public"]["Enums"]["listing_category"]
+              p_conveniences_desc?: string
+              p_description?: string
+              p_equipment_desc?: string
+              p_id: string
+              p_images?: string[]
+              p_lat?: number
+              p_lng?: number
+              p_price?: number
+              p_subtitle?: string
+              p_timezone?: string
+              p_title?: string
+            }
+            Returns: Json
+          }
       update_review: {
         Args: { p_id: string; p_rating?: number; p_text?: string }
         Returns: Json
@@ -444,7 +598,9 @@ export type Database = {
       }
     }
     Enums: {
+      chat_type: "DIRECT" | "GROUP" | "SELF"
       listing_category: "REHEARSAL_SPACE" | "RECORDING_STUDIO" | "OTHER"
+      realtime_events: "chats_update"
       reservation_status: "PENDING" | "CONFIRMED" | "CANCELLED"
     }
     CompositeTypes: {
@@ -573,7 +729,9 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      chat_type: ["DIRECT", "GROUP", "SELF"],
       listing_category: ["REHEARSAL_SPACE", "RECORDING_STUDIO", "OTHER"],
+      realtime_events: ["chats_update"],
       reservation_status: ["PENDING", "CONFIRMED", "CANCELLED"],
     },
   },

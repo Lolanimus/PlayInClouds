@@ -5,7 +5,6 @@ export type User = Omit<Database["public"]["Tables"]["user"]["Insert"], "id"> & 
 export type UserLogin = { email: string; password: string };
 export type UserSignup = Writable<User & { password: string, confirmPassword: string }>;
 
-// API return interfaces for RPC functions
 export interface Listing {
 	id: string;
 	owner_id: string | null;
@@ -15,6 +14,7 @@ export interface Listing {
 	address: string;
 	title: string;
 	subtitle: string;
+	host_confirmation_message: string;
 	category: Database["public"]["Enums"]["listing_category"];
 	price: number;
 	images: string[];
@@ -71,4 +71,34 @@ export interface Reservation {
 	guests: number;
 	created_at: string;
 	updated_at: string;
+}
+
+export interface ChatParticipantProfile {
+	id: string;
+	first_name: string | null;
+	last_name: string | null;
+}
+
+export interface Chat {
+  id: string;
+  chat_type: Database["public"]["Enums"]["chat_type"];
+	listing_id: string | null;
+	metadata: JSON | null;
+	participants?: ChatParticipantProfile[] | null;
+	participant_ids?: string[] | null;
+	updated_at?: string | null;
+}
+
+export interface Message {
+  id: string;
+  sender_id: string;
+  chat_id: string;
+  contents: string;
+  created_at: Date;
+  metadata: JSON;
+}
+
+export interface Messages {
+  messages: Message[];
+  nextCursor: number | null;
 }
