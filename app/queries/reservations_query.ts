@@ -12,6 +12,21 @@ export const reservations = createQueryKeys("reservations", {
     queryFn: () => reservationsEvents.listUserActiveReservations(p?.p_renter_id ?? null),
   }),
 
+  countUserPast: (p?: { p_renter_id?: string | null }) => ({
+    queryKey: ["count-user-past", p],
+    queryFn: () => reservationsEvents.countUserPastReservations(p?.p_renter_id ?? null),
+  }),
+
+  listUserPast: (p?: { p_renter_id?: string | null; p_page?: number; p_page_size?: number }) => ({
+    queryKey: ["list-user-past", p],
+    queryFn: () =>
+      reservationsEvents.listUserPastReservations(
+        p?.p_renter_id ?? null,
+        p?.p_page,
+        p?.p_page_size
+      ),
+  }),
+
   listHostMonthly: (p?: { p_host_id?: string | null; p_month?: number }) => ({
     queryKey: ["list-host-monthly", p],
     queryFn: () =>

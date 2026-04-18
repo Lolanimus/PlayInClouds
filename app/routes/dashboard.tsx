@@ -1,6 +1,6 @@
-import { useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router"
-import { PlusCircle, Settings } from "lucide-react"
+import { ChevronLeft, ChevronRight, PlusCircle, Settings } from "lucide-react"
 
 import { ReservationCard } from "~/components/reservation-card"
 import { Button } from "~/components/ui/button"
@@ -14,15 +14,34 @@ import {
   CardTitle,
 } from "~/components/ui/card"
 import { useListings } from "~/hooks/useListings"
-import { useListUserActiveReservations } from "~/hooks/useReservations"
+import {
+  useCountUserPastReservations,
+  useListUserActiveReservations,
+  useListUserPastReservations,
+} from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
 import { useHostListings } from "~/store/host_listings_state"
+
+const PAST_RESERVATIONS_PAGE_SIZE = 6
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const [pastReservationsPage, setPastReservationsPage] = useState(1)
   const activeReservationsQuery = useListUserActiveReservations(
     { p_renter_id: user?.id ?? null },
+    { enabled: Boolean(user?.id) }
+  )
+  const pastReservationsCountQuery = useCountUserPastReservations(
+    { p_renter_id: user?.id ?? null },
+    { enabled: Boolean(user?.id) }
+  )
+  const pastReservationsQuery = useListUserPastReservations(
+    {
+      p_renter_id: user?.id ?? null,
+      p_page: pastReservationsPage,
+      p_page_size: PAST_RESERVATIONS_PAGE_SIZE,
+    },
     { enabled: Boolean(user?.id) }
   )
   const listingsQuery = useListings()
@@ -37,8 +56,30 @@ export default function DashboardPage() {
       listingTitle: listing?.title ?? "Listing",
       listingSubtitle: listing?.subtitle ?? "",
       listingImage: listing?.images?.[0] ?? "",
+      listingOwnerId: listing?.owner_id ?? null,
     }
   })
+  const pastReservations = (pastReservationsQuery.data ?? []).map((reservation) => {
+    const listing = listingsById.get(reservation.listing_id)
+
+    return {
+      ...reservation,
+      listingTitle: listing?.title ?? "Listing",
+      listingSubtitle: listing?.subtitle ?? "",
+      listingImage: listing?.images?.[0] ?? "",
+      listingOwnerId: listing?.owner_id ?? null,
+    }
+  })
+  const totalPastReservations = pastReservationsCountQuery.data ?? 0
+  const totalPastReservationPages = Math.max(1, Math.ceil(totalPastReservations / PAST_RESERVATIONS_PAGE_SIZE))
+
+  useEffect(() => {
+    setPastReservationsPage(1)
+  }, [user?.id])
+
+  useEffect(() => {
+    setPastReservationsPage((currentPage) => Math.min(currentPage, totalPastReservationPages))
+  }, [totalPastReservationPages])
 
   useEffect(() => {
     if (!user) {
@@ -53,7 +94,7 @@ export default function DashboardPage() {
       <Card className="mx-auto w-full max-w-6xl overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
         <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+            <div className="pb-4">
               <CardTitle className="text-3xl text-[#000000]">Dashboard</CardTitle>
               <CardDescription>Welcome back. Manage your account, reservations, and hosting tools.</CardDescription>
             </div>
@@ -112,10 +153,80 @@ export default function DashboardPage() {
                   <ReservationCard
                     key={reservation.id}
                     reservation={reservation}
-                    onOpenReservation={() => navigate(`/reservation/${reservation.id}`)}
-                    onOpenListing={() => navigate(`/listing/${reservation.listing_id}`)}
                   />
                 ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-lg font-semibold text-[#000000]">Past reservations</p>
+              <Badge variant="outline" className="border-[#dadada] bg-[#ffffff] text-[#000000]">
+                {totalPastReservations} total
+              </Badge>
+            </div>
+
+            {pastReservationsQuery.isLoading ? (
+              <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">Loading past reservations...</p>
+              </div>
+            ) : null}
+
+            {pastReservationsQuery.isError ? (
+              <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">Failed to load past reservations.</p>
+              </div>
+            ) : null}
+
+            {!pastReservationsQuery.isLoading && !pastReservationsQuery.isError && totalPastReservations === 0 ? (
+              <div className="rounded-2xl border border-dashed border-[#dadada] bg-[#fafafa] px-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">No past reservations yet.</p>
+              </div>
+            ) : null}
+
+            {!pastReservationsQuery.isLoading && !pastReservationsQuery.isError && totalPastReservations > 0 ? (
+              <div className="space-y-4">
+                {pastReservations.map((reservation) => (
+                  <ReservationCard
+                    key={reservation.id}
+                    reservation={reservation}
+                  />
+                ))}
+
+                {totalPastReservationPages > 1 ? (
+                  <div className="flex items-center justify-end gap-3 rounded-2xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
+                    <span className="rounded-full border border-[#e1e1e1] bg-[#ffffff] px-3 py-1 text-xs font-medium text-[#6a6a6a]">
+                      {pastReservationsPage} / {totalPastReservationPages}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPastReservationsPage((page) => Math.max(1, page - 1))}
+                        disabled={pastReservationsPage === 1}
+                        className="h-9 w-9 rounded-full p-0"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="sr-only">Previous page</span>
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPastReservationsPage((page) => Math.min(totalPastReservationPages, page + 1))}
+                        disabled={pastReservationsPage === totalPastReservationPages}
+                        className="h-9 w-9 rounded-full p-0"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        <span className="sr-only">Next page</span>
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

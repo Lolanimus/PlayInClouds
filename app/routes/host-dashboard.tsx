@@ -59,7 +59,7 @@ export default function HostDashboardPage() {
       <Card className="w-full overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
             <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
+                <div className="pb-4">
                   <CardTitle className="text-3xl text-[#000000]">Host tools</CardTitle>
                   <CardDescription>View, edit, and manage all your listed spaces.</CardDescription>
                 </div>

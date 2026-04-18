@@ -38,6 +38,24 @@ const listUserActiveReservations = async (p_renter_id?: string | null) => {
   });
 };
 
+const countUserPastReservations = async (p_renter_id?: string | null) => {
+  return await processRpcRequest("count_user_past_reservations", {
+    p_renter_id: p_renter_id ?? undefined,
+  });
+};
+
+const listUserPastReservations = async (
+  p_renter_id?: string | null,
+  p_page = 1,
+  p_page_size = 6
+) => {
+  return await processRpcRequest("list_user_past_reservations", {
+    p_renter_id: p_renter_id ?? undefined,
+    p_page,
+    p_page_size,
+  });
+};
+
 const listHostMonthlyReservations = async (
   p_host_id?: string | null,
   p_month?: number
@@ -54,5 +72,7 @@ export {
   confirmReservation,
   createReservation,
   listUserActiveReservations,
+  countUserPastReservations,
+  listUserPastReservations,
   listHostMonthlyReservations,
 };

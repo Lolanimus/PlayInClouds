@@ -31,6 +31,30 @@ export const useListUserActiveReservations = (
   return query;
 };
 
+export const useListUserPastReservations = (
+  opts?: { p_renter_id?: string | null; p_page?: number; p_page_size?: number },
+  config?: { enabled?: boolean }
+) => {
+  const query = useQuery({
+    ...queries.reservations.listUserPast(opts),
+    enabled: config?.enabled ?? true,
+  });
+
+  return query;
+};
+
+export const useCountUserPastReservations = (
+  opts?: { p_renter_id?: string | null },
+  config?: { enabled?: boolean }
+) => {
+  const query = useQuery({
+    ...queries.reservations.countUserPast(opts),
+    enabled: config?.enabled ?? true,
+  });
+
+  return query;
+};
+
 export const useListHostMonthlyReservations = (
   opts?: { p_host_id?: string | null; p_month?: number },
   config?: { enabled?: boolean }
