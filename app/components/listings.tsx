@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
 import { useNavigate } from "react-router"
 import { useListings } from "@/hooks/useListings"
-import { formatListingCategory } from "@/lib/utils"
+import { cn, formatListingCategory } from "@/lib/utils"
 import { useSearchStore } from "@/store/search-store"
 import { useHostListings } from "@/store/host_listings_state"
 import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
@@ -37,11 +37,13 @@ export function ListingCard({
   onClose,
   onClick,
   distanceLabel,
+  className
 }: {
   listing: ListingItem
   onClose?: () => void
   onClick?: () => void
   distanceLabel?: string | null
+  className?: string | null
 }) {
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
@@ -63,7 +65,10 @@ export function ListingCard({
   return (
     <div
       onClick={onClick}
-      className="relative bg-[#ffffff] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+      className={cn(
+        "relative overflow-hidden rounded-xl bg-[#ffffff] shadow-sm transition-shadow cursor-pointer hover:shadow-md",
+        className
+      )}
     >
       {onClose && (
         <button

@@ -17,8 +17,6 @@ import {
 } from "~/components/ui/card"
 import { useListings } from "~/hooks/useListings"
 import {
-  useCancelReservation,
-  useConfirmReservation,
   useListHostMonthlyReservations,
 } from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
@@ -73,18 +71,10 @@ function toDateKeyFromIso(isoValue: string) {
   return `${y}-${m}-${d}`
 }
 
-function isPastReservation(endAtIso: string) {
-  const end = new Date(endAtIso)
-  if (Number.isNaN(end.getTime())) return false
-  return end.getTime() <= Date.now()
-}
-
 export default function HostCalendarPage() {
   const navigate = useNavigate()
   const user = useUser()
   const listingsQuery = useListings()
-  const confirmMutation = useConfirmReservation()
-  const cancelMutation = useCancelReservation()
 
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date()
@@ -131,31 +121,11 @@ export default function HostCalendarPage() {
           listingTitle: listing?.title ?? "Listing",
           listingSubtitle: listing?.subtitle ?? "",
           listingImage: listing?.images?.[0] ?? "",
+          listingOwnerId: listing?.owner_id ?? null,
         }
       })
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
   }, [monthlyReservationsQuery.data, listingsById])
-
-  const handleConfirm = async (reservationId: string, endAtIso: string) => {
-    if (isPastReservation(endAtIso)) return
-
-    try {
-      await confirmMutation.mutateAsync({ p_reservation_id: reservationId })
-    } catch {
-      // handled by error store
-    }
-  }
-
-  const handleCancel = async (reservationId: string, endAtIso: string) => {
-    if (isPastReservation(endAtIso)) return
-    if (!confirm("Cancel this reservation?")) return
-
-    try {
-      await cancelMutation.mutateAsync({ p_reservation_id: reservationId })
-    } catch {
-      // handled by error store
-    }
-  }
 
   const reservationsByDate = useMemo(() => {
     const grouped = new Map<string, typeof hostReservations>()
@@ -177,7 +147,7 @@ export default function HostCalendarPage() {
       <Card className="w-full border-[#e9e9e9] bg-[#ffffff] shadow-lg">
             <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
+                <div className="pb-4">
                   <CardTitle className="text-3xl text-[#000000]">Host calendar</CardTitle>
                   <CardDescription>Track upcoming reservations for your listings.</CardDescription>
                 </div>
@@ -289,41 +259,10 @@ export default function HostCalendarPage() {
                   ) : (
                     <div className="space-y-3">
                       {selectedDayReservations.map((reservation) => (
-                        (() => {
-                          const isPast = isPastReservation(reservation.end_at)
-
-                          return (
                         <ReservationCard
                           key={reservation.id}
                           reservation={reservation}
-                          onOpenReservation={() => navigate(`/reservation/${reservation.id}?month=${monthCursor.getMonth() + 1}`)}
-                          onOpenListing={() => navigate(`/listing/${reservation.listing_id}`)}
-                          actions={(
-                            <>
-                              {reservation.status === "PENDING" && !isPast ? (
-                                <Button
-                                  className="bg-[#237804] text-[#ffffff] hover:bg-[#1f6a03]"
-                                  onClick={() => handleConfirm(reservation.id, reservation.end_at)}
-                                  disabled={confirmMutation.isPending || cancelMutation.isPending}
-                                >
-                                  Confirm
-                                </Button>
-                              ) : null}
-
-                              {reservation.status !== "CANCELLED" && !isPast ? (
-                                <Button
-                                  variant="destructive"
-                                  onClick={() => handleCancel(reservation.id, reservation.end_at)}
-                                  disabled={confirmMutation.isPending || cancelMutation.isPending}
-                                >
-                                  Cancel
-                                </Button>
-                              ) : null}
-                            </>
-                          )}
                         />
-                          )
-                        })()
                       ))}
                     </div>
                   )}

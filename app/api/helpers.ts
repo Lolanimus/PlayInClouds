@@ -4,6 +4,10 @@ import { AuthError } from "@supabase/supabase-js";
 import * as z from "zod";
 import type { Function, Functions } from "../types/custom/rpc.types";
 
+type RpcArgs<T extends keyof Functions> = Function<T> extends { Args: infer Args }
+  ? Args
+  : Record<string, unknown>;
+
 export async function processAuthRequest<T>(
   cb: () => Promise<T>
 ): Promise<T | null> {
@@ -36,7 +40,7 @@ export async function processBlobRequest<T>(
 
 export async function processRpcRequest<T extends keyof Functions>(
   funName: T,
-  argsObj: Function<T>["Args"] = {} as Function<T>["Args"]
+  argsObj: RpcArgs<T> | Record<string, unknown> = {} as RpcArgs<T>
 ): Promise<Function<T>["Returns"] | null> {
   try {
     const { data, error } = await supabase.rpc(funName, argsObj);

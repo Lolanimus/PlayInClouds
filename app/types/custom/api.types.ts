@@ -54,6 +54,59 @@ export interface Review {
 	updated_at: string;
 }
 
+export type ReservationReviewRole = "BOOKER_TO_HOST" | "HOST_TO_BOOKER";
+
+export interface ReservationReview {
+	id: string;
+	reservation_id: string;
+	listing_id: string;
+	reviewer_user_id: string;
+	reviewee_user_id: string;
+	reviewer_role: ReservationReviewRole;
+	rating: number;
+	text: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface PendingReservationReview {
+	reservation_id: string;
+	listing_id: string;
+	reviewer_role: ReservationReviewRole;
+	reviewee_user_id: string;
+	reviewee_display_name: string;
+	start_at: string;
+	end_at: string;
+	expires_at: string;
+}
+
+export interface PublicProfileReview {
+	id: string;
+	reviewer_user_id: string;
+	reviewer_name: string;
+	reviewer_role: ReservationReviewRole;
+	rating: number;
+	text: string;
+	created_at: string;
+	listing_id: string | null;
+	listing_title: string | null;
+}
+
+export interface PublicProfile {
+	id: string;
+	first_name: string;
+	last_name: string;
+	member_since: string;
+	profile_role: string;
+	years_hosting: number | null;
+	id_verified: boolean;
+	review_count: number;
+	average_rating: number;
+	guest_reviews_count: number;
+	host_reviews_count: number;
+	reviews: PublicProfileReview[];
+}
+
 export interface ListingHourSlot {
 	date: string;
 	hour: number;

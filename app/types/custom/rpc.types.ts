@@ -1,6 +1,6 @@
 import type { Database as DatabaseGenerated, Json } from "../database-generated.types";
 import type { MergeDeep } from "type-fest";
-import type { Chat, Listing, ListingBookingPolicy, ListingHourSlot, Message, Messages, Reservation, Review } from "./api.types";
+import type { Chat, Listing, ListingBookingPolicy, ListingHourSlot, Message, Messages, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
 
 export type Database = MergeDeep<
   DatabaseGenerated,
@@ -26,26 +26,6 @@ export type Database = MergeDeep<
           Returns: Chat
         }
         create_listing: {
-          Args: {
-            p_address: string
-            p_advance_notice_hours?: number | null
-            p_area_m2: number
-            p_cancellation_policy_hours?: number | null
-            p_category: Listing["category"]
-            p_conveniences_desc: string
-            p_description: string
-            p_equipment_desc: string
-            p_host_confirmation_message?: string
-            p_images: string[]
-            p_instructions?: string
-            p_lat: number
-            p_lng: number
-            p_price: number
-            p_rules?: string
-            p_subtitle: string
-            p_timezone?: string
-            p_title: string
-          }
           Returns: Listing
         }
         create_message: {
@@ -54,8 +34,11 @@ export type Database = MergeDeep<
         create_reservation: {
           Returns: Reservation
         }
-        create_review: {
-          Returns: Review
+        create_reservation_review: {
+          Returns: ReservationReview
+        }
+        update_reservation_review: {
+          Returns: ReservationReview
         }
         delete_listing: {
           Returns: boolean 
@@ -66,9 +49,6 @@ export type Database = MergeDeep<
         delete_messages: {
           Returns: boolean
         }
-        delete_review: {
-          Returns: boolean 
-        }
         get_client_chats: {
           Returns: Chat[]
         }
@@ -77,6 +57,9 @@ export type Database = MergeDeep<
         }
         get_listing: {
           Returns: Listing 
+        }
+        get_public_profile: {
+          Returns: PublicProfile
         }
         get_listing_booking_policy: {
           Returns: ListingBookingPolicy
@@ -87,19 +70,25 @@ export type Database = MergeDeep<
         get_reservation: {
           Returns: Reservation
         }
-        get_review: {
-          Returns: Review 
-        }
         list_listing_month_slots: {
           Returns: ListingHourSlot[]
         }
         list_listing_week_slots: {
           Returns: ListingHourSlot[]
         }
+        list_pending_reservation_reviews: {
+          Returns: PendingReservationReview[]
+        }
         list_host_monthly_reservations: {
           Returns: Reservation[]
         }
         list_user_active_reservations: {
+          Returns: Reservation[]
+        }
+        count_user_past_reservations: {
+          Returns: number
+        }
+        list_user_past_reservations: {
           Returns: Reservation[]
         }
         list_user_future_reservations: {
@@ -115,31 +104,7 @@ export type Database = MergeDeep<
           Returns: ListingHourSlot[]
         }
         update_listing: {
-          Args: {
-            p_address?: string
-            p_advance_notice_hours?: number | null
-            p_area_m2?: number
-            p_cancellation_policy_hours?: number | null
-            p_category?: Listing["category"]
-            p_conveniences_desc?: string
-            p_description?: string
-            p_equipment_desc?: string
-            p_host_confirmation_message?: string | null
-            p_id: string
-            p_images?: string[]
-            p_instructions?: string | null
-            p_lat?: number
-            p_lng?: number
-            p_price?: number
-            p_rules?: string | null
-            p_subtitle?: string
-            p_timezone?: string
-            p_title?: string
-          }
           Returns: Listing
-        }
-        update_review: {
-          Returns: Review
         }
         upsert_listing_booking_policy: {
           Returns: ListingBookingPolicy

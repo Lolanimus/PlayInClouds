@@ -1,14 +1,18 @@
-import { ArrowRight, CalendarClock, Clock3, Users } from "lucide-react"
-import type { ReactNode } from "react"
+import { ArrowRight, CalendarClock, Clock3, Star, Users } from "lucide-react"
+import { useNavigate } from "react-router"
 
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
-import type { Reservation } from "~/types/custom/api.types"
+import { usePendingReservationReviews } from "~/hooks/useReviews"
+import { useCancelReservation, useConfirmReservation } from "~/hooks/useReservations"
+import { useUser } from "~/store/user_state"
+import type { PendingReservationReview, Reservation } from "~/types/custom/api.types"
 
 type ReservationCardReservation = Reservation & {
   listingTitle: string
   listingSubtitle?: string
   listingImage?: string
+  listingOwnerId?: string | null
 }
 
 function formatDateRange(startAtIso: string, endAtIso: string) {
@@ -79,25 +83,54 @@ function getBookedHours(startAtIso: string, endAtIso: string) {
 
 export function ReservationCard({
   reservation,
-  onOpenListing,
-  onOpenReservation,
-  actions,
 }: {
   reservation: ReservationCardReservation
-  onOpenListing?: () => void
-  onOpenReservation?: () => void
-  actions?: ReactNode
 }) {
+  const navigate = useNavigate()
+  const user = useUser()
+  const pendingReviewsQuery = usePendingReservationReviews({ enabled: Boolean(user?.id) })
+  const confirmMutation = useConfirmReservation()
+  const cancelMutation = useCancelReservation()
   const timeStatus = getReservationTimeStatus(reservation.start_at, reservation.end_at)
+  const isPast = timeStatus === "past"
+  const isHost = Boolean(user?.id && reservation.listingOwnerId && reservation.listingOwnerId === user.id)
+  const pendingReviewPrompt =
+    (((pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []).find(
+      (review) => review.reservation_id === reservation.id
+    )) ?? null
+  const reviewLabel = pendingReviewPrompt?.reviewer_role === "HOST_TO_BOOKER"
+    ? "Review guest"
+    : "Leave a review"
+  const actionsDisabled = confirmMutation.isPending || cancelMutation.isPending
+
+  const handleConfirm = async () => {
+    if (!isHost || reservation.status !== "PENDING" || isPast) return
+
+    try {
+      await confirmMutation.mutateAsync({ p_reservation_id: reservation.id })
+    } catch {
+      // handled by error store
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!isHost || reservation.status === "CANCELLED" || isPast) return
+    if (!confirm("Cancel this reservation?")) return
+
+    try {
+      await cancelMutation.mutateAsync({ p_reservation_id: reservation.id })
+    } catch {
+      // handled by error store
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex flex-col gap-4 sm:flex-row">
         <button
           type="button"
-          onClick={onOpenListing}
-          disabled={!onOpenListing}
-          className="group relative h-32 w-full overflow-hidden rounded-xl disabled:cursor-default sm:w-48"
+          onClick={() => navigate(`/listing/${reservation.listing_id}`)}
+          className="group relative h-32 w-full overflow-hidden rounded-xl sm:w-48"
         >
           {reservation.listingImage ? (
             <img
@@ -167,28 +200,52 @@ export function ReservationCard({
 
           <div className="mt-3 flex justify-end">
             <div className="flex gap-2">
-              {onOpenReservation ? (
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/reservation/${reservation.id}`)}
+                className="h-8 px-2"
+              >
+                Reservation details
+              </Button>
+
+              <Button
+                variant="ghost"
+                onClick={() => navigate(`/listing/${reservation.listing_id}`)}
+                className="h-8 gap-1 px-2 text-[#000000] hover:bg-[#f2f2f2]"
+              >
+                View listing
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+
+              {pendingReviewPrompt ? (
                 <Button
-                  variant="outline"
-                  onClick={onOpenReservation}
-                  className="h-8 px-2"
+                  className="gap-2 bg-[#000000] text-[#ffffff] shadow-[0_10px_24px_rgba(0,0,0,0.18)] hover:-translate-y-0.5 hover:bg-[#1f1f1f] hover:shadow-[0_14px_32px_rgba(0,0,0,0.22)]"
+                  onClick={() => navigate(`/reservation/${reservation.id}?leaveReview=1`)}
                 >
-                  Reservation details
+                  <Star className="h-4 w-4 fill-current" />
+                  {reviewLabel}
                 </Button>
               ) : null}
 
-              {onOpenListing ? (
+              {isHost && reservation.status === "PENDING" && !isPast ? (
                 <Button
-                  variant="ghost"
-                  onClick={onOpenListing}
-                  className="h-8 gap-1 px-2 text-[#000000] hover:bg-[#f2f2f2]"
+                  className="bg-[#237804] text-[#ffffff] hover:bg-[#1f6a03]"
+                  onClick={handleConfirm}
+                  disabled={actionsDisabled}
                 >
-                  View listing
-                  <ArrowRight className="h-4 w-4" />
+                  Confirm
                 </Button>
               ) : null}
 
-              {actions}
+              {isHost && reservation.status !== "CANCELLED" && !isPast ? (
+                <Button
+                  variant="destructive"
+                  onClick={handleCancel}
+                  disabled={actionsDisabled}
+                >
+                  Cancel
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>

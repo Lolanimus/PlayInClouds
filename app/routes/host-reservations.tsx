@@ -14,8 +14,6 @@ import {
 } from "~/components/ui/card"
 import { useListings } from "~/hooks/useListings"
 import {
-  useCancelReservation,
-  useConfirmReservation,
   useListHostMonthlyReservations,
 } from "~/hooks/useReservations"
 import { useUser } from "~/store/user_state"
@@ -50,12 +48,6 @@ function formatDayHeading(dateKey: string) {
   return `${monthLabel} ${toOrdinal(date.getDate())}`
 }
 
-function isPastReservation(endAtIso: string) {
-  const end = new Date(endAtIso)
-  if (Number.isNaN(end.getTime())) return false
-  return end.getTime() <= Date.now()
-}
-
 export default function HostReservationsPage() {
   const navigate = useNavigate()
   const user = useUser()
@@ -69,8 +61,6 @@ export default function HostReservationsPage() {
     { enabled: Boolean(user?.id) }
   )
   const listingsQuery = useListings()
-  const confirmMutation = useConfirmReservation()
-  const cancelMutation = useCancelReservation()
 
   useEffect(() => {
     if (!user) {
@@ -92,6 +82,7 @@ export default function HostReservationsPage() {
       listingTitle: listing?.title ?? "Listing",
       listingSubtitle: listing?.subtitle ?? "",
       listingImage: listing?.images?.[0] ?? "",
+      listingOwnerId: listing?.owner_id ?? null,
     }
   })
 
@@ -113,33 +104,12 @@ export default function HostReservationsPage() {
       }))
   }, [reservations])
 
-  const handleConfirm = async (reservationId: string, endAtIso: string) => {
-    if (isPastReservation(endAtIso)) return
-
-    try {
-      await confirmMutation.mutateAsync({ p_reservation_id: reservationId })
-    } catch {
-      // handled by error store
-    }
-  }
-
-  const handleCancel = async (reservationId: string, endAtIso: string) => {
-    if (isPastReservation(endAtIso)) return
-    if (!confirm("Cancel this reservation?")) return
-
-    try {
-      await cancelMutation.mutateAsync({ p_reservation_id: reservationId })
-    } catch {
-      // handled by error store
-    }
-  }
-
   return (
     <section className="h-full min-h-0 overflow-y-auto p-4 md:p-6 lg:p-8">
       <Card className="w-full border-[#e9e9e9] bg-[#ffffff] shadow-lg">
         <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+            <div className="pb-4">
               <CardTitle className="text-3xl text-[#000000]">Reservations</CardTitle>
               <CardDescription>Confirm or cancel reservations for your listings.</CardDescription>
             </div>
@@ -200,41 +170,10 @@ export default function HostReservationsPage() {
 
                 <div className="space-y-3">
                   {group.items.map((reservation) => (
-                    (() => {
-                      const isPast = isPastReservation(reservation.end_at)
-
-                      return (
                     <ReservationCard
                       key={reservation.id}
                       reservation={reservation}
-                      onOpenReservation={() => navigate(`/reservation/${reservation.id}`)}
-                      onOpenListing={() => navigate(`/listing/${reservation.listing_id}`)}
-                      actions={(
-                        <>
-                          {reservation.status === "PENDING" && !isPast ? (
-                            <Button
-                              className="bg-[#237804] text-[#ffffff] hover:bg-[#1f6a03]"
-                              onClick={() => handleConfirm(reservation.id, reservation.end_at)}
-                              disabled={confirmMutation.isPending || cancelMutation.isPending}
-                            >
-                              Confirm
-                            </Button>
-                          ) : null}
-
-                          {reservation.status !== "CANCELLED" && !isPast ? (
-                            <Button
-                              variant="destructive"
-                              onClick={() => handleCancel(reservation.id, reservation.end_at)}
-                              disabled={confirmMutation.isPending || cancelMutation.isPending}
-                            >
-                              Cancel
-                            </Button>
-                          ) : null}
-                        </>
-                      )}
                     />
-                      )
-                    })()
                   ))}
                 </div>
               </section>

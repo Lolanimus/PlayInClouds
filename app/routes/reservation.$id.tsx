@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router"
-import { CalendarClock, ChevronLeft, Clock3, ExternalLink, Hash, MapPin, MessageCircle, ReceiptText, Users } from "lucide-react"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router"
+import { CalendarClock, ChevronLeft, Clock3, ExternalLink, Hash, MapPin, MessageCircle, ReceiptText, Star, Users } from "lucide-react"
 
 import { MapView } from "~/components/map-view"
 import { Badge } from "~/components/ui/badge"
 import { Button } from "~/components/ui/button"
 import { ListingCard, type ListingItem } from "~/components/listings"
+import { Textarea } from "~/components/ui/textarea"
 import {
   Card,
   CardContent,
@@ -13,9 +14,11 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
+import { usePendingReservationReviews, useCreateReservationReview } from "~/hooks/useReviews"
 import { useCancelReservation, useConfirmReservation, useGetReservation } from "~/hooks/useReservations"
+import { useToast } from "~/hooks/use-toast"
 import { useUser } from "~/store/user_state"
-import type { Listing, Reservation } from "~/types/custom/api.types"
+import type { Listing, PendingReservationReview, Reservation } from "~/types/custom/api.types"
 
 type ReservationProfile = {
   id: string
@@ -124,13 +127,45 @@ function getStatusTextClass(status: string) {
   }
 }
 
+function formatReviewDeadline(value?: string) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function getReviewTitle(prompt: PendingReservationReview) {
+  return prompt.reviewer_role === "HOST_TO_BOOKER"
+    ? "Leave a review for your guest"
+    : "Leave a review for your host"
+}
+
+function getReviewContext(prompt: PendingReservationReview) {
+  return prompt.reviewer_role === "HOST_TO_BOOKER"
+    ? `You're reviewing ${prompt.reviewee_display_name} as the host.`
+    : `You're reviewing ${prompt.reviewee_display_name} as the guest.`
+}
+
 export default function ReservationDetailsPage() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { toast } = useToast()
   const user = useUser()
   const [showMoreInfo, setShowMoreInfo] = useState(false)
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false)
+  const [reviewRating, setReviewRating] = useState(0)
+  const [reviewText, setReviewText] = useState("")
+  const [hiddenHostRevieweeId, setHiddenHostRevieweeId] = useState<string | null>(null)
   const cancelReservationMutation = useCancelReservation()
   const confirmReservationMutation = useConfirmReservation()
+  const createReservationReviewMutation = useCreateReservationReview()
+  const pendingReviewsQuery = usePendingReservationReviews({ enabled: Boolean(user?.id) })
 
   const reservationQuery = useGetReservation(
     { p_reservation_id: id },
@@ -189,6 +224,21 @@ export default function ReservationDetailsPage() {
     ? (isRenter ? renterCanCancel : !isPast)
     : false
   const canConfirm = Boolean(reservation && isHost && reservation.status === "PENDING" && !isPast)
+  const pendingReviewPrompts = (pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []
+  const reviewPrompt = pendingReviewPrompts.find((prompt) => {
+    if (prompt.reservation_id !== reservation?.id) return false
+
+    if (
+      prompt.reviewer_role === "HOST_TO_BOOKER"
+      && hiddenHostRevieweeId
+      && prompt.reviewee_user_id === hiddenHostRevieweeId
+    ) {
+      return false
+    }
+
+    return true
+  }) ?? null
+  const canReview = Boolean(reviewPrompt)
   const mapListings = useMemo<ListingItem[]>(() => {
     return listingCardItem ? [listingCardItem] : []
   }, [listingCardItem])
@@ -199,6 +249,12 @@ export default function ReservationDetailsPage() {
   const profile = isHost ? booker : owner
   const profileDisplayName = getProfileDisplayName(profile, isHost ? "Booker" : "Host")
   const profileRoleLabel = isHost ? "Booker" : "Host"
+
+  useEffect(() => {
+    if (searchParams.get("leaveReview") === "1" && reviewPrompt) {
+      setIsReviewModalOpen(true)
+    }
+  }, [reviewPrompt, searchParams])
 
   const handleCancelReservation = async () => {
     if (!reservation) return
@@ -224,6 +280,55 @@ export default function ReservationDetailsPage() {
       await reservationQuery.refetch()
     } catch {
       // handled by global error state
+    }
+  }
+
+  const closeReviewModal = () => {
+    setIsReviewModalOpen(false)
+    setReviewRating(0)
+    setReviewText("")
+
+    if (searchParams.get("leaveReview") === "1") {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete("leaveReview")
+      setSearchParams(nextParams, { replace: true })
+    }
+  }
+
+  const handleOpenReviewModal = () => {
+    if (!reviewPrompt) return
+    setIsReviewModalOpen(true)
+  }
+
+  const handleSubmitReview = async () => {
+    if (!reservation || !reviewPrompt) return
+    if (reviewRating < 1 || !reviewText.trim()) return
+
+    try {
+      if (reviewPrompt.reviewer_role === "HOST_TO_BOOKER") {
+        setHiddenHostRevieweeId(reviewPrompt.reviewee_user_id)
+      }
+
+      await createReservationReviewMutation.mutateAsync({
+        p_reservation_id: reservation.id,
+        p_rating: reviewRating,
+        p_text: reviewText.trim(),
+      })
+      await pendingReviewsQuery.refetch()
+
+      toast({
+        title: "Review submitted",
+        description: "Thanks for sharing your feedback.",
+      })
+
+      closeReviewModal()
+    } catch {
+      setHiddenHostRevieweeId(null)
+      toast({
+        title: "Could not submit review",
+        description: "Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -317,7 +422,15 @@ export default function ReservationDetailsPage() {
                         </Badge>
                       </div>
                     ) : null}
-
+                    {canReview && reservation ? (
+                      <Button
+                        className="h-11 w-full gap-2 rounded-2xl bg-[#000000] text-[#ffffff] shadow-[0_10px_24px_rgba(0,0,0,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#1f1f1f] hover:shadow-[0_14px_32px_rgba(0,0,0,0.22)]"
+                        onClick={handleOpenReviewModal}
+                      >
+                        <Star className="h-4 w-4 fill-current" />
+                        {reviewPrompt ? getReviewTitle(reviewPrompt) : "Leave a review"}
+                      </Button>
+                    ) : null}
                     <div className="flex justify-start">
                       <button
                         type="button"
@@ -327,7 +440,6 @@ export default function ReservationDetailsPage() {
                         {showMoreInfo ? "Less info" : "More info"}
                       </button>
                     </div>
-
                     {showMoreInfo ? (
                       <div className="space-y-3">
                         <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
@@ -356,8 +468,11 @@ export default function ReservationDetailsPage() {
                     ) : null}
                   </div>
                 ) : null}
+                
               </CardHeader>
             </Card>
+
+
 
             {isLoading ? (
               <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-6 text-sm text-[#6a6a6a]">
@@ -386,12 +501,11 @@ export default function ReservationDetailsPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {listingCardItem ? (
-                      <div className="max-w-md">
                         <ListingCard
                           listing={listingCardItem}
                           onClick={() => navigate(`/listing/${reservation.listing_id}`)}
+                          className="w-full"
                         />
-                      </div>
                     ) : null}
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -441,6 +555,12 @@ export default function ReservationDetailsPage() {
                     <CardDescription>{profileCardDescription}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
+                    {profile?.id ? (
+                      <Button asChild variant="outline" className="w-full justify-center rounded-2xl border-[#dcdcdc] bg-[#ffffff] text-[#111111] hover:bg-[#fafafa]">
+                        <Link to={`/profile/${profile.id}`}>View {profileRoleLabel.toLowerCase()} profile</Link>
+                      </Button>
+                    ) : null}
+
                     <Link
                       to={`/chat?reservationId=${reservation.id}`}
                       className="flex items-start gap-4 rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 transition-colors hover:border-[#d8d8d8] hover:bg-[#f7f7f7]"
@@ -512,6 +632,76 @@ export default function ReservationDetailsPage() {
           )}
         </aside>
       </main>
+
+      {isReviewModalOpen && reviewPrompt ? (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-[#000000]/45 p-4">
+          <div className="w-full max-w-xl rounded-3xl border border-[#e9e9e9] bg-[#ffffff] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#6a6a6a]">
+                  {reviewPrompt.reviewer_role === "HOST_TO_BOOKER" ? "Reviewing as host" : "Reviewing as guest"}
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold text-[#000000]">{getReviewTitle(reviewPrompt)}</h2>
+                <p className="mt-2 text-sm text-[#6a6a6a]">{getReviewContext(reviewPrompt)}</p>
+                {formatReviewDeadline(reviewPrompt.expires_at) ? (
+                  <p className="mt-2 text-xs text-[#8a8a8a]">Submit by {formatReviewDeadline(reviewPrompt.expires_at)}</p>
+                ) : null}
+              </div>
+              <Button type="button" variant="outline" className="rounded-full" onClick={closeReviewModal}>
+                Close
+              </Button>
+            </div>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <p className="text-sm font-medium text-[#000000]">Rating</p>
+                <div className="mt-3 flex items-center gap-2">
+                  {Array.from({ length: 5 }, (_, index) => {
+                    const value = index + 1
+                    const active = value <= reviewRating
+
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setReviewRating(value)}
+                        className={`rounded-full p-2 transition-colors ${active ? "text-[#000000]" : "text-[#c7c7c7] hover:text-[#6a6a6a]"}`}
+                        aria-label={`Rate ${value} star${value === 1 ? "" : "s"}`}
+                      >
+                        <Star className={`h-6 w-6 ${active ? "fill-current" : ""}`} />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-[#000000]">Your review</p>
+                <Textarea
+                  value={reviewText}
+                  onChange={(event) => setReviewText(event.target.value)}
+                  placeholder={reviewPrompt.reviewer_role === "HOST_TO_BOOKER" ? "How was your guest to host?" : "How was your stay and host experience?"}
+                  className="mt-3 min-h-32"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={closeReviewModal}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSubmitReview}
+                  disabled={reviewRating < 1 || !reviewText.trim() || createReservationReviewMutation.isPending}
+                  className="bg-[#000000] text-[#ffffff] hover:bg-[#1f1f1f]"
+                >
+                  {createReservationReviewMutation.isPending ? "Submitting..." : "Submit review"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

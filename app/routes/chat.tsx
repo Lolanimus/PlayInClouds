@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
-import { ArrowLeft, Loader2, Search, Send, Trash2, UserCircle2 } from "lucide-react"
+import { ArrowLeft, Loader2, Search, Send, Star, Trash2, UserCircle2 } from "lucide-react"
 
 import { Button } from "~/components/ui/button"
 import {
@@ -14,6 +14,7 @@ import { Input } from "~/components/ui/input"
 import { useChatByUserId, useChats, useDeleteChat } from "~/hooks/useChats"
 import { useListings } from "~/hooks/useListings"
 import { useSendMessage, useMessages } from "~/hooks/useMessages"
+import { usePendingReservationReviews } from "~/hooks/useReviews"
 import {
   useListHostMonthlyReservations,
   useListUserActiveReservations,
@@ -21,7 +22,7 @@ import {
 import { useBroadcastChatsSubscription } from "~/hooks/realtime_broadcast/useRealtimeSuscriptionsFactory"
 import { useToast } from "~/hooks/use-toast"
 import { useUser } from "~/store/user_state"
-import type { Chat, ChatParticipantProfile, Listing, Message, Reservation } from "~/types/custom/api.types"
+import type { Chat, ChatParticipantProfile, Listing, Message, PendingReservationReview, Reservation } from "~/types/custom/api.types"
 
 type Conversation = {
   id: string
@@ -115,6 +116,30 @@ function normalizeMessages(messages: Message[] | undefined, userId?: string): Ch
     }))
 }
 
+function formatReviewDeadline(value?: string) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function getReviewPromptTitle(prompt: PendingReservationReview) {
+  return prompt.reviewer_role === "HOST_TO_BOOKER"
+    ? "Leave a review for your guest"
+    : "Leave a review for your host"
+}
+
+function getReviewPromptDescription(prompt: PendingReservationReview) {
+  return prompt.reviewer_role === "HOST_TO_BOOKER"
+    ? `You're reviewing ${prompt.reviewee_display_name} as the host for this completed stay.`
+    : `You're reviewing ${prompt.reviewee_display_name} as the guest for this completed stay.`
+}
+
 export default function ChatPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -130,6 +155,7 @@ export default function ChatPage() {
     { p_host_id: user?.id ?? null, p_month: new Date().getMonth() + 1 },
     { enabled: Boolean(user?.id) }
   )
+  const pendingReviewsQuery = usePendingReservationReviews({ enabled: Boolean(user?.id) })
   const sendMessageMutation = useSendMessage()
   const deleteChatMutation = useDeleteChat()
 
@@ -139,6 +165,7 @@ export default function ChatPage() {
   const [draft, setDraft] = useState("")
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const requestedReservationId = searchParams.get("reservationId")
+  const threadBottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!user) {
@@ -150,6 +177,7 @@ export default function ChatPage() {
   const chatRows = ((chatsQuery.data as Chat[] | null) ?? []).filter(isChat)
   const guestReservations = (guestReservationsQuery.data as Reservation[] | null) ?? []
   const hostReservations = (hostReservationsQuery.data as Reservation[] | null) ?? []
+  const pendingReviewPrompts = (pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []
 
   const listingsById = useMemo(() => new Map(listings.map((listing) => [listing.id, listing])), [listings])
 
@@ -314,6 +342,19 @@ export default function ChatPage() {
     ?? conversations.find((conversation) => conversation.id === activeConversationId)
     ?? null
 
+  const activeReviewPrompt = useMemo(() => {
+    if (!activeConversation) return null
+
+    return pendingReviewPrompts.find((prompt) => {
+      if (activeConversation.reservationId && prompt.reservation_id === activeConversation.reservationId) {
+        return true
+      }
+
+      return prompt.listing_id === activeConversation.listingId
+        && prompt.reviewee_user_id === activeConversation.targetUserId
+    }) ?? null
+  }, [activeConversation, pendingReviewPrompts])
+
   const activeDirectChatQuery = useChatByUserId(
     activeConversation?.targetUserId ?? "",
     activeConversation?.listingId ?? ""
@@ -325,6 +366,16 @@ export default function ChatPage() {
     const rows = messagesQuery.data?.messages ?? []
     return normalizeMessages(rows, user?.id)
   }, [messagesQuery.data?.messages, user?.id])
+
+  useEffect(() => {
+    if (!activeConversation) return
+
+    const frameId = window.requestAnimationFrame(() => {
+      threadBottomRef.current?.scrollIntoView({ block: "end" })
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [activeConversation?.id, activeMessages.length, activeReviewPrompt?.reservation_id])
 
   const isInitialLoading = chatsQuery.isLoading || guestReservationsQuery.isLoading || hostReservationsQuery.isLoading || listingsQuery.isLoading
 
@@ -391,7 +442,7 @@ export default function ChatPage() {
       <Card className="mx-auto flex h-[calc(100vh-8.5rem)] w-full max-w-6xl min-h-0 flex-col overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
         <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+            <div className="pb-4">
               <CardTitle className="text-3xl text-[#000000]">Messages</CardTitle>
               <CardDescription>Chat about your bookings and listing requests.</CardDescription>
             </div>
@@ -486,6 +537,18 @@ export default function ChatPage() {
                       <p className="truncate text-xs text-[#6a6a6a]">{activeConversation.peerLabel}</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {activeConversation.targetUserId ? (
+                        <Button asChild type="button" variant="outline" size="sm">
+                          <Link to={`/profile/${activeConversation.targetUserId}`}>
+                            View profile
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button type="button" variant="outline" size="sm" disabled>
+                          View profile
+                        </Button>
+                      )}
+
                       {activeConversation.listingId ? (
                         <Button asChild type="button" variant="outline" size="sm">
                           <Link to={`/listing/${activeConversation.listingId}`}>
@@ -535,7 +598,7 @@ export default function ChatPage() {
                       </div>
                     ) : null}
 
-                    {!messagesQuery.isLoading && activeMessages.length === 0 ? (
+                    {!messagesQuery.isLoading && activeMessages.length === 0 && !activeReviewPrompt ? (
                       <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
                         <div className="rounded-full bg-[#f2f2f2] p-3">
                           <UserCircle2 className="h-6 w-6 text-[#7a7a7a]" />
@@ -579,6 +642,34 @@ export default function ChatPage() {
                         </Fragment>
                       )
                     })}
+
+                    {activeReviewPrompt ? (
+                      <div className="flex justify-center pt-2">
+                        <div className="w-full max-w-md rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4 shadow-sm">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#000000] text-[#ffffff]">
+                              <Star className="h-4 w-4 fill-current" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-[#000000]">{getReviewPromptTitle(activeReviewPrompt)}</p>
+                              <p className="mt-1 text-sm text-[#6a6a6a]">{getReviewPromptDescription(activeReviewPrompt)}</p>
+                              {formatReviewDeadline(activeReviewPrompt.expires_at) ? (
+                                <p className="mt-2 text-xs text-[#8a8a8a]">Leave a review by {formatReviewDeadline(activeReviewPrompt.expires_at)}</p>
+                              ) : null}
+                              <Button
+                                type="button"
+                                onClick={() => navigate(`/reservation/${activeReviewPrompt.reservation_id}?leaveReview=1`)}
+                                className="mt-4 h-10 rounded-xl bg-[#000000] px-4 text-[#ffffff] hover:bg-[#1f1f1f]"
+                              >
+                                Leave a review
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div ref={threadBottomRef} />
                   </div>
 
                   <div className="shrink-0 border-t border-[#e9e9e9] bg-[#ffffff] p-3 md:p-4">
