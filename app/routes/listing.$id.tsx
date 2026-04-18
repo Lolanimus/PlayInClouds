@@ -2,7 +2,9 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
+import { UserProfileCard } from "@/components/user-profile-card"
 import { useGetListing } from "@/hooks/useListings"
+import { usePublicProfile } from "@/hooks/useProfile"
 import { useReviews } from "@/hooks/useReviews"
 import { queries } from "@/queries/queries"
 import { formatListingCategory } from "@/lib/utils"
@@ -10,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
 import { useUser } from "@/store/user_state"
-import type { Listing as ApiListing } from "@/types/custom/api.types"
+import type { Listing as ApiListing, PublicProfile } from "@/types/custom/api.types"
 import { useQueries } from "@tanstack/react-query"
 
 type DaySlot = {
@@ -20,6 +22,7 @@ type DaySlot = {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
+const REVIEWS_PAGE_SIZE = 6
 
 function getBookingWindowDays(maxMonthsAhead: number) {
   const today = new Date()
@@ -94,6 +97,13 @@ function getReviewPreview(text: string, max = 220) {
   return `${text.slice(0, max).trimEnd()}...`
 }
 
+function getReviewerInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "G"
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase()
+  return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase()
+}
+
 export default function ListingDetailsPage() {
   const navigate = useNavigate()
   const user = useUser()
@@ -113,6 +123,7 @@ export default function ListingDetailsPage() {
   const [selectedStartHour, setSelectedStartHour] = useState<number | null>(null)
   const [selectedEndHour, setSelectedEndHour] = useState<number | null>(null)
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false)
+  const [reviewsPage, setReviewsPage] = useState(1)
   const hasInitializedSelectionRef = useRef(false)
   const now = new Date()
   const upcomingDays = useMemo(() => getBookingWindowDays(1), [])
@@ -139,8 +150,8 @@ export default function ListingDetailsPage() {
     isUuidId && id
       ? {
           p_listing_id: id,
-          p_limit: 100,
-          p_offset: 0,
+          p_limit: REVIEWS_PAGE_SIZE,
+          p_offset: (reviewsPage - 1) * REVIEWS_PAGE_SIZE,
         }
       : undefined,
     { enabled: Boolean(isUuidId && id) }
@@ -172,6 +183,7 @@ export default function ListingDetailsPage() {
         priceNumber: remote.price,
         rating: remote.average_rating,
         reviews: remote.review_count,
+        ownerId: remote.owner_id,
         distance: "",
       }
     }
@@ -195,12 +207,23 @@ export default function ListingDetailsPage() {
         priceNumber: parseHourlyPrice(localListing.price),
         rating: localListing.rating,
         reviews: localListing.reviews,
+        ownerId: null,
         distance: localListing.distance,
       }
     }
 
     return null
   }, [listingQuery.data, localListing])
+
+  const hostProfileQuery = usePublicProfile(
+    {
+      p_user_id: listing?.ownerId ?? undefined,
+      p_limit: 6,
+      p_offset: 0,
+    },
+    { enabled: Boolean(listing?.ownerId) }
+  )
+  const hostProfile = (hostProfileQuery.data as PublicProfile | null) ?? null
 
   const galleryImages = listing?.images?.filter(Boolean) ?? []
   const primaryImage = galleryImages[0] ?? null
@@ -210,9 +233,11 @@ export default function ListingDetailsPage() {
     return rows
       .map((row) => {
         const ratingValue = Number(row.rating)
+        const reviewerUserId = typeof row.user_id === "string" ? row.user_id : ""
 
         return {
           id: String(row.id ?? ""),
+          reviewerUserId,
           rating: Number.isFinite(ratingValue) ? Math.max(0, Math.min(5, ratingValue)) : 0,
           text: typeof row.text === "string" ? row.text : "",
           createdAt: typeof row.created_at === "string" ? row.created_at : null,
@@ -228,8 +253,9 @@ export default function ListingDetailsPage() {
       })
       .filter((review) => review.id && review.text)
   }, [reviewsQuery.data])
-  const previewReviews = reviews.slice(0, 6)
-  const reviewCountForLabel = reviews.length > 0 ? reviews.length : listing?.reviews ?? 0
+  const previewReviews = reviews
+  const reviewCountForLabel = listing?.reviews ?? reviews.length
+  const totalReviewPages = Math.max(1, Math.ceil(reviewCountForLabel / REVIEWS_PAGE_SIZE))
   const homeTo = "/"
   const bookingWindowEndLabel = useMemo(() => {
     const lastDay = upcomingDays[upcomingDays.length - 1]
@@ -243,6 +269,20 @@ export default function ListingDetailsPage() {
 
     setGuestCount(participantsParam)
   }, [participantsParam])
+
+  useEffect(() => {
+    setReviewsPage((currentPage) => Math.min(currentPage, totalReviewPages))
+  }, [totalReviewPages])
+
+  const handleOpenReviewsModal = () => {
+    setReviewsPage(1)
+    setIsReviewsModalOpen(true)
+  }
+
+  const handleCloseReviewsModal = () => {
+    setIsReviewsModalOpen(false)
+    setReviewsPage(1)
+  }
 
   const slotMap = useMemo(() => {
     const rows = monthSlotsQueries.flatMap((query) =>
@@ -651,47 +691,108 @@ export default function ListingDetailsPage() {
               </p>
             </div>
 
+            {listing.ownerId ? (
+              <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
+                {hostProfileQuery.isLoading ? (
+                  <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-5 text-sm text-[#6a6a6a]">
+                    Loading host info...
+                  </div>
+                ) : null}
+
+                {hostProfileQuery.isError ? (
+                  <div className="rounded-2xl border border-[#f1c3bd] bg-[#fff3f2] px-4 py-5 text-sm text-[#b42318]">
+                    Could not load host info right now.
+                  </div>
+                ) : null}
+
+                {!hostProfileQuery.isLoading && !hostProfileQuery.isError && hostProfile ? (
+                  <UserProfileCard
+                    profile={hostProfile}
+                    variant="compact"
+                    title="Hosted by"
+                    description="See who runs this space before you book."
+                    className="p-0 border-none bg-transparent shadow-none"
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
             {listing.reviews > 0 ? (
               <div className="rounded-2xl bg-[#ffffff] p-6 shadow-sm">
-                <div className="mb-4 flex items-center gap-2">
-                  <Star className="h-5 w-5 fill-[#000000] text-[#000000]" />
-                  <h3 className="text-lg font-semibold text-[#000000]">
-                    {listing.rating} · {reviewCountForLabel} reviews
-                  </h3>
+                <div className="mb-6 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <Star className="h-5 w-5 fill-[#000000] text-[#000000]" />
+                    <h3 className="text-lg font-semibold text-[#000000]">
+                      {listing.rating} · {reviewCountForLabel} reviews
+                    </h3>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleOpenReviewsModal}
+                    className="rounded-full border-[#dadada] bg-[#ffffff] px-4"
+                  >
+                    Show all
+                  </Button>
                 </div>
 
                 {reviewsQuery.isLoading ? (
                   <p className="text-sm text-[#6a6a6a]">Loading reviews...</p>
                 ) : previewReviews.length > 0 ? (
-                  <>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      {previewReviews.map((review) => (
-                        <button
-                          key={review.id}
-                          type="button"
-                          onClick={() => setIsReviewsModalOpen(true)}
-                          className="rounded-xl border border-[#e9e9e9] p-4 text-left transition-colors hover:bg-[#f9f9f9]"
-                        >
-                          <p className="text-sm font-medium text-[#000000]">{review.author}</p>
-                          <p className="mt-1 text-xs text-[#6a6a6a]">
-                            {"★".repeat(Math.round(review.rating))}
-                            <span className="ml-2">{formatReviewMonth(review.createdAt)}</span>
-                          </p>
-                          <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">{getReviewPreview(review.text)}</p>
-                          <p className="mt-3 text-sm font-medium text-[#000000] underline">Show more</p>
-                        </button>
-                      ))}
-                    </div>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsReviewsModalOpen(true)}
-                      className="mt-5 rounded-xl border-[#dadada] bg-[#ffffff]"
-                    >
-                      Show all {reviewCountForLabel} reviews
-                    </Button>
-                  </>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {previewReviews.map((review) => (
+                      <div
+                        key={review.id}
+                        onClick={handleOpenReviewsModal}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault()
+                            handleOpenReviewsModal()
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        className="rounded-[1.5rem] border border-[#ececec] bg-[#ffffff] p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        <div className="flex items-start gap-3">
+                          {review.reviewerUserId ? (
+                            <Link
+                              to={`/profile/${review.reviewerUserId}`}
+                              onClick={(event) => event.stopPropagation()}
+                              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f3f3f3] text-sm font-semibold text-[#111111] transition-colors hover:bg-[#e7e7e7]"
+                              aria-label={`Open ${review.author} profile`}
+                            >
+                              {getReviewerInitials(review.author)}
+                            </Link>
+                          ) : (
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f3f3f3] text-sm font-semibold text-[#111111]">
+                              {getReviewerInitials(review.author)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            {review.reviewerUserId ? (
+                              <Link
+                                to={`/profile/${review.reviewerUserId}`}
+                                onClick={(event) => event.stopPropagation()}
+                                className="truncate text-sm font-semibold text-[#000000] underline-offset-4 hover:underline"
+                              >
+                                {review.author}
+                              </Link>
+                            ) : (
+                              <p className="truncate text-sm font-semibold text-[#000000]">{review.author}</p>
+                            )}
+                            <div className="mt-1 flex items-center gap-2 text-xs text-[#6a6a6a]">
+                              <span className="font-medium text-[#000000]">{"★".repeat(Math.max(1, Math.round(review.rating)))}</span>
+                              {formatReviewMonth(review.createdAt) ? <span>·</span> : null}
+                              {formatReviewMonth(review.createdAt) ? <span>{formatReviewMonth(review.createdAt)}</span> : null}
+                            </div>
+                          </div>
+                        </div>
+                        <p className="mt-4 text-sm leading-6 text-[#4a4a4a]">{getReviewPreview(review.text, 180)}</p>
+                        <p className="mt-4 text-sm font-medium text-[#000000] underline underline-offset-4">Show more</p>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <p className="text-sm text-[#6a6a6a]">No review comments available yet.</p>
                 )}
@@ -857,38 +958,123 @@ export default function ListingDetailsPage() {
 
       {isReviewsModalOpen ? (
         <div className="fixed inset-0 z-[160] flex items-center justify-center bg-[#000000]/45 p-4">
-          <div className="relative h-[min(90vh,52rem)] w-[min(96vw,62rem)] rounded-2xl border border-[#dadada] bg-[#ffffff] shadow-2xl">
+          <div className="relative h-[min(90vh,52rem)] w-[min(96vw,62rem)] overflow-hidden rounded-[2rem] border border-[#e5e5e5] bg-[#ffffff] shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
             <button
               type="button"
               aria-label="Close reviews"
-              onClick={() => setIsReviewsModalOpen(false)}
-              className="absolute right-3 top-3 z-20 rounded-full border border-[#dadada] bg-[#ffffff] p-1.5 text-[#4a4a4a] hover:bg-[#f5f5f5]"
+              onClick={handleCloseReviewsModal}
+              className="absolute right-4 top-4 z-20 rounded-full border border-[#dcdcdc] bg-[#ffffff]/95 p-2 text-[#4a4a4a] backdrop-blur hover:bg-[#f5f5f5]"
             >
               <X className="h-4 w-4" />
             </button>
 
             <div className="flex h-full flex-col">
-              <div className="border-b border-[#e9e9e9] px-5 py-4">
-                <h2 className="text-xl font-semibold text-[#000000]">{reviewCountForLabel} reviews</h2>
-                <p className="mt-1 text-sm text-[#6a6a6a]">{listing.title}</p>
+              <div className="border-b border-[#ececec] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff] px-6 py-5">
+                <div className="flex flex-col gap-4 pr-12 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#7a7a7a]">Guest reviews</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#000000]">{reviewCountForLabel} reviews</h2>
+                    <p className="mt-1 text-sm text-[#6a6a6a]">{listing.title}</p>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-sm">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#111111] text-[#ffffff]">
+                      <Star className="h-4 w-4 fill-current" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-[#000000]">{listing.rating}</p>
+                      <p className="text-xs text-[#6a6a6a]">Average rating across {reviewCountForLabel} review{reviewCountForLabel === 1 ? "" : "s"}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="flex-1 overflow-y-auto bg-[#fcfcfc] px-6 py-5">
                 {reviews.length > 0 ? (
-                  <div className="space-y-5">
-                    {reviews.map((review) => (
-                      <article key={review.id} className="border-b border-[#ececec] pb-5 last:border-0">
-                        <p className="text-sm font-semibold text-[#000000]">{review.author}</p>
-                        <p className="mt-1 text-xs text-[#6a6a6a]">
-                          {"★".repeat(Math.round(review.rating))}
-                          <span className="ml-2">{formatReviewMonth(review.createdAt)}</span>
-                        </p>
-                        <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">{review.text}</p>
-                      </article>
-                    ))}
-                  </div>
+                  <>
+                    <div className="space-y-4">
+                      {reviews.map((review) => (
+                        <article
+                          key={review.id}
+                          className="rounded-[1.6rem] border border-[#ececec] bg-[#ffffff] p-5 shadow-[0_8px_24px_rgba(17,17,17,0.04)]"
+                        >
+                          <div className="flex items-start gap-3">
+                            {review.reviewerUserId ? (
+                              <Link
+                                to={`/profile/${review.reviewerUserId}`}
+                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#f3f3f3] text-sm font-semibold text-[#111111] transition-colors hover:bg-[#e7e7e7]"
+                                aria-label={`Open ${review.author} profile`}
+                              >
+                                {getReviewerInitials(review.author)}
+                              </Link>
+                            ) : (
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#f3f3f3] text-sm font-semibold text-[#111111]">
+                                {getReviewerInitials(review.author)}
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                {review.reviewerUserId ? (
+                                  <Link
+                                    to={`/profile/${review.reviewerUserId}`}
+                                    className="truncate text-sm font-semibold text-[#000000] underline-offset-4 hover:underline"
+                                  >
+                                    {review.author}
+                                  </Link>
+                                ) : (
+                                  <p className="truncate text-sm font-semibold text-[#000000]">{review.author}</p>
+                                )}
+                                {formatReviewMonth(review.createdAt) ? (
+                                  <p className="text-xs text-[#8a8a8a]">{formatReviewMonth(review.createdAt)}</p>
+                                ) : null}
+                              </div>
+                              <div className="mt-2 flex items-center gap-2 text-xs">
+                                <span className="rounded-full bg-[#f7f7f7] px-2.5 py-1 font-medium text-[#111111]">
+                                  {"★".repeat(Math.max(1, Math.round(review.rating)))}
+                                </span>
+                                <span className="text-[#6a6a6a]">{Number.isInteger(review.rating) ? review.rating : review.rating.toFixed(1)} / 5</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <p className="mt-4 text-sm leading-7 text-[#4a4a4a]">{review.text}</p>
+                        </article>
+                      ))}
+                    </div>
+
+                    {reviewCountForLabel > REVIEWS_PAGE_SIZE ? (
+                      <div className="mt-5 flex items-center justify-between rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-sm">
+                        <p className="text-sm text-[#6a6a6a]">Page {reviewsPage} of {totalReviewPages}</p>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setReviewsPage((page) => Math.max(1, page - 1))}
+                            disabled={reviewsPage === 1 || reviewsQuery.isLoading}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setReviewsPage((page) => Math.min(totalReviewPages, page + 1))}
+                            disabled={reviewsPage === totalReviewPages || reviewsQuery.isLoading}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
                 ) : (
-                  <p className="text-sm text-[#6a6a6a]">No review comments available yet.</p>
+                  <div className="flex h-full min-h-[16rem] items-center justify-center rounded-[1.6rem] border border-dashed border-[#d8d8d8] bg-[#ffffff] px-6 text-center">
+                    <div>
+                      <p className="text-sm font-medium text-[#000000]">No review comments yet</p>
+                      <p className="mt-2 text-sm text-[#6a6a6a]">Once guests leave feedback, it will show up here.</p>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

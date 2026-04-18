@@ -15,6 +15,7 @@ export default [
 		route("chat", "routes/host-chat.tsx"),
 	]),
 	route("chat", "routes/chat.tsx"),
+	route("profile/:id", "routes/profile.$id.tsx"),
 	route("payment", "routes/payment.tsx"),
 	route("reservation/:id", "routes/reservation.$id.tsx"),
 	route("listing/:id", "routes/listing.$id.tsx"),
