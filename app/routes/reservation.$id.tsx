@@ -221,7 +221,7 @@ export default function ReservationDetailsPage() {
     ? canRenterCancel(reservation.start_at, reservation.end_at, listing.cancellation_policy_hours)
     : false
   const canCancel = reservation
-    ? (isRenter ? renterCanCancel : !isPast)
+    ? (isHost ? !isPast : isRenter ? renterCanCancel : false)
     : false
   const canConfirm = Boolean(reservation && isHost && reservation.status === "PENDING" && !isPast)
   const pendingReviewPrompts = (pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []
@@ -405,7 +405,7 @@ export default function ReservationDetailsPage() {
                       >
                         {confirmReservationMutation.isPending ? "Confirming..." : "Confirm reservation"}
                       </Button>
-                    ) : isRenter && !isPast ? (
+                    ) : isRenter && !isHost && !isPast ? (
                       <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
                         Cancellation window ended
                       </Badge>

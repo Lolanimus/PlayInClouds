@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router"
 import {
   Edit2,
@@ -8,6 +8,7 @@ import {
   Plus,
   Star,
   Trash2,
+  X,
 } from "lucide-react"
 
 import { Button } from "~/components/ui/button"
@@ -20,16 +21,29 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card"
-import { useDeleteListing, useListings } from "~/hooks/useListings"
-import { formatListingCategory } from "~/lib/utils"
+import { useDeleteListing, useOwnListings } from "~/hooks/useListings"
+import { dismissListingModerationMessage, formatListingCategory, isListingModerationMessageDismissed } from "~/lib/utils"
 import { useUser } from "~/store/user_state"
-import type { Listing as ApiListing } from "~/types/custom/api.types"
+import type { Listing as ApiListing, ListingModerationStatus } from "~/types/custom/api.types"
+
+function getModerationBadgeClass(status: ListingModerationStatus) {
+  if (status === "APPROVED") return "border-[#cde8d1] bg-[#effaf2] text-[#166534]"
+  if (status === "REJECTED") return "border-[#f4c7c3] bg-[#fff4f2] text-[#b42318]"
+  return "border-[#ead9b7] bg-[#fff8e8] text-[#9a6700]"
+}
+
+function getModerationLabel(status: ListingModerationStatus) {
+  if (status === "APPROVED") return "Approved"
+  if (status === "REJECTED") return "Rejected"
+  return "Pending review"
+}
 
 export default function HostDashboardPage() {
   const navigate = useNavigate()
   const user = useUser()
-  const listingsQuery = useListings()
+  const listingsQuery = useOwnListings({ enabled: Boolean(user) })
   const deleteListingMutation = useDeleteListing()
+  const [dismissedMessages, setDismissedMessages] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!user) {
@@ -37,10 +51,20 @@ export default function HostDashboardPage() {
     }
   }, [user, navigate])
 
+  useEffect(() => {
+    const listings = (listingsQuery.data as ApiListing[] | null) ?? []
+
+    setDismissedMessages(
+      Object.fromEntries(
+        listings.map((listing) => [listing.id, isListingModerationMessageDismissed(listing)])
+      )
+    )
+  }, [listingsQuery.data])
+
   if (!user) return null
 
   const allListings = ((listingsQuery.data as ApiListing[] | null) ?? [])
-  const listings = allListings.filter((listing) => listing.owner_id === user.id)
+  const listings = allListings
 
   const handleDeleteListing = (listingId: string) => {
     if (confirm("Are you sure you want to delete this listing?")) {
@@ -48,10 +72,22 @@ export default function HostDashboardPage() {
     }
   }
 
+  const handleDismissReviewMessage = (listing: ApiListing) => {
+    dismissListingModerationMessage(listing)
+    setDismissedMessages((prev) => ({ ...prev, [listing.id]: true }))
+  }
+
   const totalPhotos = listings.reduce((acc, listing) => acc + listing.images.length, 0)
+  const approvedListings = listings.filter((listing) => listing.moderation_status === "APPROVED").length
+  const pendingListings = listings.filter((listing) => listing.moderation_status === "PENDING_APPROVAL").length
+  const rejectedListings = listings.filter((listing) => listing.moderation_status === "REJECTED").length
   const averageRating =
-    listings.length > 0
-      ? (listings.reduce((acc, listing) => acc + listing.average_rating, 0) / listings.length).toFixed(1)
+    approvedListings > 0
+      ? (
+        listings
+          .filter((listing) => listing.moderation_status === "APPROVED")
+          .reduce((acc, listing) => acc + listing.average_rating, 0) / approvedListings
+      ).toFixed(1)
       : "0.0"
 
   return (
@@ -90,10 +126,18 @@ export default function HostDashboardPage() {
                 </div>
               )}
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
-                  <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Active listings</p>
-                  <p className="text-xl font-semibold text-[#000000]">{listings.length}</p>
+                  <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Approved listings</p>
+                  <p className="text-xl font-semibold text-[#000000]">{approvedListings}</p>
+                </div>
+                <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Pending review</p>
+                  <p className="text-xl font-semibold text-[#000000]">{pendingListings}</p>
+                </div>
+                <div className="rounded-xl border border-[#f4c7c3] bg-[#fff4f2] px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-[#b42318]">Rejected listings</p>
+                  <p className="text-xl font-semibold text-[#b42318]">{rejectedListings}</p>
                 </div>
                 <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
                   <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Uploaded photos</p>
@@ -130,7 +174,11 @@ export default function HostDashboardPage() {
                   {listings.map((listing) => (
                     <div
                       key={listing.id}
-                      className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md md:p-6"
+                      className={`rounded-2xl border p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md md:p-6 ${
+                        listing.moderation_status === "REJECTED"
+                          ? "border-[#f4c7c3] bg-[#fff9f8] shadow-[0_0_0_1px_rgba(180,35,24,0.06)]"
+                          : "border-[#e9e9e9] bg-[#ffffff]"
+                      }`}
                     >
                       <div className="flex flex-col gap-6 md:flex-row">
                         <div className="relative h-40 w-full overflow-hidden rounded-xl md:w-56 md:flex-shrink-0">
@@ -164,12 +212,68 @@ export default function HostDashboardPage() {
                                 {listing.address}
                               </p>
                             </div>
-                            <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                              {formatListingCategory(listing.category)}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
+                                {formatListingCategory(listing.category)}
+                              </Badge>
+                              <Badge variant="outline" className={getModerationBadgeClass(listing.moderation_status)}>
+                                {getModerationLabel(listing.moderation_status)}
+                              </Badge>
+                            </div>
                           </div>
 
                           <p className="mb-4 line-clamp-2 text-sm text-[#6a6a6a]">{listing.description}</p>
+
+                          {listing.moderation_status === "REJECTED" ? (
+                            <div className="mb-4 rounded-xl border border-[#f4c7c3] bg-[#fff4f2] px-3 py-3 text-sm text-[#b42318]">
+                              <p className="font-semibold">Listing rejected</p>
+                              <p className="mt-1">Update the listing details and resubmit it for review, or just delete the listing.</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button
+                                  asChild
+                                  variant="outline"
+                                  className="border-[#e74c3c] bg-[#ffffff] text-[#b42318] hover:bg-[#fff3f1]"
+                                >
+                                  <Link to={`/host/edit-listing/${listing.id}`}>
+                                    <Edit2 className="mr-2 h-4 w-4" />
+                                    Edit & Resubmit
+                                  </Link>
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => handleDeleteListing(listing.id)}
+                                  disabled={deleteListingMutation.isPending}
+                                  className="border-[#e74c3c] bg-[#ffffff] text-[#e74c3c] hover:bg-[#fff3f1]"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete listing
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {listing.moderation_message && !dismissedMessages[listing.id] ? (
+                            <div className={`mb-4 rounded-xl px-3 py-3 text-sm ${
+                              listing.moderation_status === "REJECTED"
+                                ? "border border-[#f4c7c3] bg-[#fff4f2] text-[#7a271a]"
+                                : "border border-[#ececec] bg-[#fafafa] text-[#4a4a4a]"
+                            }`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="font-medium text-[#000000]">Review message</p>
+                                  <p className="mt-1 whitespace-pre-wrap">{listing.moderation_message}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  aria-label="Dismiss review message"
+                                  onClick={() => handleDismissReviewMessage(listing)}
+                                  className="rounded-md p-1 text-[#6a6a6a] transition-colors hover:bg-[#ececec] hover:text-[#000000]"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
 
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
@@ -191,25 +295,29 @@ export default function HostDashboardPage() {
                               <Eye className="mr-2 h-4 w-4" />
                               View listing
                             </Button>
-                            <Button
-                              asChild
-                              variant="outline"
-                              className="border-[#dadada] text-[#000000] hover:bg-[#f2f2f2]"
-                            >
-                              <Link to={`/host/edit-listing/${listing.id}`}>
-                                <Edit2 className="mr-2 h-4 w-4" />
-                                Edit
-                              </Link>
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => handleDeleteListing(listing.id)}
-                              disabled={deleteListingMutation.isPending}
-                              className="border-[#e74c3c] text-[#e74c3c] hover:bg-[#fff3f1]"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </Button>
+                            {listing.moderation_status !== "REJECTED" ? (
+                              <Button
+                                asChild
+                                variant="outline"
+                                className="border-[#dadada] text-[#000000] hover:bg-[#f2f2f2]"
+                              >
+                                <Link to={`/host/edit-listing/${listing.id}`}>
+                                  <Edit2 className="mr-2 h-4 w-4" />
+                                  Edit
+                                </Link>
+                              </Button>
+                            ) : null}
+                            {listing.moderation_status !== "REJECTED" ? (
+                              <Button
+                                variant="outline"
+                                onClick={() => handleDeleteListing(listing.id)}
+                                disabled={deleteListingMutation.isPending}
+                                className="border-[#e74c3c] text-[#e74c3c] hover:bg-[#fff3f1]"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </Button>
+                            ) : null}
                           </div>
                         </div>
                       </div>

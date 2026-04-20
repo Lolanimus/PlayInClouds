@@ -34,10 +34,9 @@ export default function AccountSettingsPage() {
   const navigate = useNavigate()
   const user = useUser()
   const error = useError()
-  const { setError } = useErrorActions()
+  const { setError, setSuccess } = useErrorActions()
 
   const [isSaving, setIsSaving] = useState(false)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>({
     firstName: "",
     lastName: "",
@@ -62,12 +61,13 @@ export default function AccountSettingsPage() {
 
   useEffect(() => {
     setError(null)
-  }, [setError])
+    setSuccess(null)
+  }, [setError, setSuccess])
 
   if (!user) return null
 
   const onChangeField = (key: keyof FormState, value: string) => {
-    setSuccessMessage(null)
+    setSuccess(null)
     setError(null)
     setForm((prev) => ({ ...prev, [key]: value }))
   }
@@ -105,7 +105,7 @@ export default function AccountSettingsPage() {
 
     setIsSaving(true)
     setError(null)
-    setSuccessMessage(null)
+    setSuccess(null)
 
     await updateAccountSettings({
       first_name: firstName,
@@ -117,7 +117,7 @@ export default function AccountSettingsPage() {
     const latestError = errorStore.getState().error
 
     if (!latestError) {
-      setSuccessMessage("Account settings updated.")
+      setSuccess("Account settings updated.")
       setForm((prev) => ({ ...prev, newPassword: "", confirmNewPassword: "" }))
     }
 
@@ -197,11 +197,6 @@ export default function AccountSettingsPage() {
               </FieldError>
             )}
 
-            {successMessage && (
-              <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-700">
-                {successMessage}
-              </p>
-            )}
 
             <Button type="button" onClick={() => void handleSave()} className="h-10 w-full" disabled={isSaving}>
               {isSaving ? "Saving..." : "Save changes"}

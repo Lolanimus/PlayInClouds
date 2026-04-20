@@ -185,6 +185,18 @@ export default function ChatPage() {
     if (!user) return []
 
     const map = new Map<string, Conversation>()
+    const directChatTargetByListingId = new Map<string, string>()
+
+    for (const chat of chatRows) {
+      if (chat.chat_type !== "DIRECT" || !chat.listing_id) continue
+
+      const otherUserId = (chat.participant_ids ?? []).find((participantId) => participantId !== user.id)
+      if (!otherUserId || otherUserId === user.id) continue
+
+      if (!directChatTargetByListingId.has(chat.listing_id)) {
+        directChatTargetByListingId.set(chat.listing_id, otherUserId)
+      }
+    }
 
     const mergeConversation = (key: string, incoming: Conversation) => {
       const existing = map.get(key)
@@ -212,13 +224,14 @@ export default function ChatPage() {
 
     for (const reservation of guestReservations) {
       const listing = listingsById.get(reservation.listing_id)
-      const targetUserId = listing?.owner_id ?? undefined
+      const targetUserId = listing?.owner_id ?? directChatTargetByListingId.get(reservation.listing_id)
+      if (!targetUserId || targetUserId === user.id) continue
       const updatedAt = reservation.updated_at ?? reservation.created_at
-      const key = targetUserId ? `direct:${reservation.listing_id}:${targetUserId}` : `guest:${reservation.id}`
+      const key = `direct:${reservation.listing_id}:${targetUserId}`
 
       mergeConversation(key, {
         id: key,
-        peerLabel: targetUserId ? `Host • ${listing?.title ?? "Listing"}` : "Host",
+        peerLabel: `Host • ${listing?.title ?? "Listing"}`,
         listingTitle: listing?.title ?? "Listing",
         subtitle: `${reservation.guests} guest${reservation.guests !== 1 ? "s" : ""} • ${toDateKeyFromIso(reservation.start_at)}`,
         updatedAt,
@@ -232,6 +245,7 @@ export default function ChatPage() {
     for (const reservation of hostReservations) {
       const listing = listingsById.get(reservation.listing_id)
       const targetUserId = reservation.renter_id
+      if (!targetUserId || targetUserId === user.id) continue
       const updatedAt = reservation.updated_at ?? reservation.created_at
       const key = `direct:${reservation.listing_id}:${targetUserId}`
 
@@ -261,7 +275,7 @@ export default function ChatPage() {
         : undefined
       const updatedAt = chat.updated_at ?? new Date().toISOString()
 
-      if (chat.chat_type === "DIRECT" && listingId && otherUserId) {
+      if (chat.chat_type === "DIRECT" && listingId && otherUserId && otherUserId !== user.id) {
         mergeConversation(`direct:${listingId}:${otherUserId}`, {
           id: `direct:${listingId}:${otherUserId}`,
           peerLabel: formatParticipantName(otherParticipant) ?? shortLabel(otherUserId),

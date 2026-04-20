@@ -25,6 +25,21 @@ export const listings = createQueryKeys("listings", {
 			),
 	}),
 
+	own: () => ({
+		queryKey: ["own"],
+		queryFn: () => listingEvents.listOwnListings(),
+	}),
+
+	pending: () => ({
+		queryKey: ["pending"],
+		queryFn: () => listingEvents.listPendingListings(),
+	}),
+
+	adminStatus: () => ({
+		queryKey: ["admin-status"],
+		queryFn: () => listingEvents.currentUserIsAdmin(),
+	}),
+
 	// detail by id
 	detailById: (id?: string) => ({
 		queryKey: ["detail", id],

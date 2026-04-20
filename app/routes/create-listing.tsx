@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { processRpcRequest } from "@/api/helpers"
 import { useSetListingWeeklySlots } from "@/hooks/useHours"
 import { useCreateListing, useGetListing, useUpdateListing } from "@/hooks/useListings"
+import { dismissListingModerationMessage, isListingModerationMessageDismissed } from "@/lib/utils"
 import { useUser } from "@/store/user_state"
 import type { Listing as ApiListing, ListingBookingPolicy } from "@/types/custom/api.types"
 
@@ -118,6 +119,7 @@ export default function CreateListingPage() {
   const [form, setForm] = useState<ListingFormState>(initialFormState)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isModerationMessageHidden, setIsModerationMessageHidden] = useState(false)
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([])
   const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([])
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false)
@@ -140,10 +142,18 @@ export default function CreateListingPage() {
   const [isApplyingCrop, setIsApplyingCrop] = useState(false)
   const hasLoadedWeeklySlotsRef = useRef(false)
   const cropImageRef = useRef<HTMLImageElement>(null)
+  const currentListing = (listingQuery.data as ApiListing | null) ?? null
 
   const MIN_CROP_SIZE = 4
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+  const handleDismissModerationMessage = () => {
+    if (!currentListing) return
+
+    dismissListingModerationMessage(currentListing)
+    setIsModerationMessageHidden(true)
+  }
 
   useEffect(() => {
     if (!user) {
@@ -204,6 +214,15 @@ export default function CreateListingPage() {
       }))
     )
   }, [isEditMode, listingQuery.data])
+
+  useEffect(() => {
+    if (!currentListing) {
+      setIsModerationMessageHidden(false)
+      return
+    }
+
+    setIsModerationMessageHidden(isListingModerationMessageDismissed(currentListing))
+  }, [currentListing?.id, currentListing?.moderation_message, currentListing?.moderation_status, currentListing?.reviewed_at])
 
   useEffect(() => {
     if (!isEditMode || !id) return
@@ -578,7 +597,7 @@ export default function CreateListingPage() {
             }
 
             setIsSubmitting(false)
-            navigate(`/listing/${listingId}`)
+            navigate(`/host/dashboard`)
           },
           onError: (error: any) => {
             setFormError(error?.message || "Failed to update listing.")
@@ -637,7 +656,7 @@ export default function CreateListingPage() {
           }
 
           setIsSubmitting(false)
-          navigate(`/listing/${listingId}`)
+          navigate(`/host/dashboard`)
         },
         onError: (error: any) => {
           setFormError(error?.message || "Failed to create listing.")
@@ -918,12 +937,52 @@ export default function CreateListingPage() {
             <CardTitle className="text-3xl font-semibold text-[#000000]">{isEditMode ? "Edit your space" : "List your space"}</CardTitle>
             <CardDescription className="text-[#6a6a6a]">
               {isEditMode
-                ? "Update your listing details and save changes."
-                : "Fill all required fields to publish a complete listing page."}
+                ? "Update your listing details. Rejected listings are automatically resubmitted for review when saved."
+                : "Fill all required fields to submit your listing for review before it goes live."}
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-6 pb-6 pt-6">
+            {currentListing ? (
+              <div className={`rounded-2xl border px-4 py-4 text-sm ${
+                currentListing.moderation_status === "APPROVED"
+                  ? "border-[#cde8d1] bg-[#effaf2] text-[#166534]"
+                  : currentListing.moderation_status === "REJECTED"
+                    ? "border-[#f4c7c3] bg-[#fff4f2] text-[#b42318]"
+                    : "border-[#ead9b7] bg-[#fff8e8] text-[#9a6700]"
+              }`}>
+                <p className="font-semibold text-[#000000]">
+                  Status: {currentListing.moderation_status === "APPROVED" ? "Approved" : currentListing.moderation_status === "REJECTED" ? "Rejected" : "Pending review"}
+                </p>
+                <p className="mt-1">
+                  {currentListing.moderation_status === "APPROVED"
+                    ? "This listing is live on the platform."
+                    : currentListing.moderation_status === "REJECTED"
+                      ? "Update the listing and save to submit it for another review."
+                      : "This listing is saved and waiting for manual approval before it appears publicly."}
+                </p>
+                {currentListing.moderation_message && !isModerationMessageHidden ? (
+                  <div className="mt-2 rounded-xl bg-[#ffffff]/70 px-3 py-2 text-[#4a4a4a]">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="whitespace-pre-wrap">{currentListing.moderation_message}</p>
+                      <button
+                        type="button"
+                        aria-label="Dismiss review message"
+                        onClick={handleDismissModerationMessage}
+                        className="rounded-md p-1 text-current/70 transition-colors hover:bg-[#ffffff]/80 hover:text-current"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[#ead9b7] bg-[#fff8e8] px-4 py-4 text-sm text-[#9a6700]">
+                New listings are saved first and go live only after they are manually approved.
+              </div>
+            )}
+
             <section className="rounded-2xl border border-[#ececec] bg-[#ffffff] p-4 md:p-5">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[#6a6a6a]">Basics</h3>
               <div className="grid gap-4 md:grid-cols-2">
@@ -1429,7 +1488,13 @@ export default function CreateListingPage() {
                 disabled={isSubmitting}
                 className="h-11 rounded-xl bg-[#000000] px-7 text-[#ffffff] shadow-sm hover:bg-[#1a1a1a]"
               >
-                {isSubmitting ? (isEditMode ? "Updating..." : "Creating...") : (isEditMode ? "Update listing" : "Create listing")}
+                {isSubmitting
+                  ? (isEditMode ? "Saving..." : "Submitting...")
+                  : isEditMode
+                    ? currentListing?.moderation_status === "REJECTED"
+                      ? "Resubmit listing"
+                      : "Save listing"
+                    : "Submit listing"}
               </Button>
             </div>
           </CardContent>

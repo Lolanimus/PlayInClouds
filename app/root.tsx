@@ -17,7 +17,7 @@ import type { Route } from "./+types/root";
 import { Header } from "./components/header";
 import { FiltersModal } from "./components/filter-bar";
 import { useAuth } from "./hooks/useAuth";
-import { useError, useErrorActions } from "./store/error_state";
+import { useError, useErrorActions, useSuccess } from "./store/error_state";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -57,13 +57,15 @@ export default function App() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const location = useLocation();
   const error = useError();
-  const { setError } = useErrorActions();
+  const success = useSuccess();
+  const { setError, setSuccess } = useErrorActions();
 
   useAuth();
 
   useEffect(() => {
     setError(null)
-  }, [location.pathname, setError])
+    setSuccess(null)
+  }, [location.pathname, setError, setSuccess])
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -77,6 +79,20 @@ export default function App() {
               aria-label="Dismiss error"
               onClick={() => setError(null)}
               className="rounded-md p-1 text-[#b42318] transition-colors hover:bg-[#f9d7d3]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : success ? (
+        <div className="border-b border-[#cde8d1] bg-[#effaf2] px-4 py-3 text-[#166534]">
+          <div className="mx-auto flex max-w-6xl items-start justify-between gap-3">
+            <p className="text-sm font-medium">{success}</p>
+            <button
+              type="button"
+              aria-label="Dismiss success"
+              onClick={() => setSuccess(null)}
+              className="rounded-md p-1 text-[#166534] transition-colors hover:bg-[#d8f1dd]"
             >
               <X className="h-4 w-4" />
             </button>

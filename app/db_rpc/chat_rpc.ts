@@ -1,4 +1,5 @@
 import { processRpcRequest } from "@/api/helpers";
+import supabase from "@/utils/supabase";
 
 const getClientChats = async () => {
   return await processRpcRequest("get_client_chats");
@@ -18,6 +19,14 @@ const createDirectChat = async ({
   target_user_id: string;
   p_listing_id: string;
 }) => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user?.id && user.id === target_user_id) {
+    throw new Error("Cannot start a chat with yourself");
+  }
+
   return await processRpcRequest("create_direct_chat", {
     target_user_id: target_user_id,
     p_listing_id: p_listing_id,

@@ -65,6 +65,18 @@ const listListings = async (
   } as any);
 };
 
+const listOwnListings = async () => {
+  return await processRpcRequest("list_own_listings");
+};
+
+const listPendingListings = async () => {
+  return await processRpcRequest("list_pending_listings");
+};
+
+const currentUserIsAdmin = async () => {
+  return await processRpcRequest("current_user_is_admin");
+};
+
 const updateListing = async (args: {
   p_id: string;
   p_lat?: number;
@@ -93,11 +105,30 @@ const deleteListing = async (p_id: string) => {
   return await processRpcRequest("delete_listing", { p_id });
 };
 
+const approveListing = async (p_listing_id: string, p_message?: string | null) => {
+  return await processRpcRequest("approve_listing", {
+    p_listing_id,
+    p_message: p_message?.trim() ? p_message.trim() : null,
+  });
+};
+
+const rejectListing = async (p_listing_id: string, p_message?: string | null) => {
+  return await processRpcRequest("reject_listing", {
+    p_listing_id,
+    p_message: p_message?.trim() ? p_message.trim() : null,
+  });
+};
+
 export {
   createListing,
   getListing,
   listListings,
+  listOwnListings,
+  listPendingListings,
+  currentUserIsAdmin,
   updateListing,
   deleteListing,
+  approveListing,
+  rejectListing,
 };
 

@@ -5,6 +5,8 @@ export type User = Omit<Database["public"]["Tables"]["user"]["Insert"], "id"> & 
 export type UserLogin = { email: string; password: string };
 export type UserSignup = Writable<User & { password: string, confirmPassword: string }>;
 
+export type ListingModerationStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+
 export interface Listing {
 	id: string;
 	owner_id: string | null;
@@ -29,8 +31,18 @@ export interface Listing {
 	rating_sum: number;
 	average_rating: number;
 	review_count: number;
+	moderation_status: ListingModerationStatus;
+	moderation_message: string | null;
+	submitted_at: string;
+	reviewed_at: string | null;
+	reviewed_by: string | null;
 	created_at: string;
 	updated_at: string;
+}
+
+export interface ListingModerationQueueItem extends Listing {
+	owner_name: string;
+	owner_email: string | null;
 }
 
 export interface ListingBookingPolicy {

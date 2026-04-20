@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router"
 import { signup } from "~/api/auth"
 import { queryClient } from "~/queries/queries"
-import { errorStore, useError, useErrorActions } from "~/store/error_state"
+import { useError, useErrorActions } from "~/store/error_state"
 import type { UserSignup } from "~/types/custom/api.types"
 import { Button } from "~/components/ui/button"
 import {
@@ -36,11 +36,10 @@ export default function SignupPage() {
     password: "",
     confirmPassword: "",
   });
-  const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
   const error = useError();
-  const { setError } = useErrorActions();
+  const { setError, setSuccess } = useErrorActions();
   const redirectParam = searchParams.get("redirect")
   const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : null
 
@@ -57,8 +56,8 @@ export default function SignupPage() {
 
     // Clear any previous error before attempting login
     setIsSubmitting(true)
-    setSubmitted(false)
-    setError(null);
+    setSuccess(null)
+    setError(null)
 
     if (!formData.email || !formData.password || !formData.first_name || !formData.last_name) {
       setError("Please fill in all required fields.")
@@ -73,11 +72,15 @@ export default function SignupPage() {
     }
 
     try {
-      await signup(formData);
-      await queryClient.invalidateQueries();
+      const result = await signup(formData)
 
-      const latestError = errorStore.getState().error
-      if (!latestError) setSubmitted(true);
+      if (!result.success) {
+        setError(result.message)
+        return
+      }
+
+      await queryClient.invalidateQueries()
+      setSuccess(result.message)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed. Please try again.")
     } finally {
@@ -87,9 +90,9 @@ export default function SignupPage() {
 
   useEffect(() => {
     setIsHydrated(true)
-    setError(null);
-    setSubmitted(false);
-  }, [setError]);
+    setError(null)
+    setSuccess(null)
+  }, [setError, setSuccess])
 
   return (
     <main className="min-h-[calc(100vh-5.5rem)] bg-muted/40 px-4 py-10">
@@ -176,10 +179,6 @@ export default function SignupPage() {
               <FieldError className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-center">
                 {error}
               </FieldError>
-            ) : isHydrated && submitted ? (
-              <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-700">
-                Successfully Signed Up! Go to Login tab to Log In
-              </p>
             ) : null}
           </FieldGroup>
         </CardContent>

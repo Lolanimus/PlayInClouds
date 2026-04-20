@@ -1,6 +1,6 @@
 import type { Database as DatabaseGenerated, Json } from "../database-generated.types";
 import type { MergeDeep } from "type-fest";
-import type { Chat, Listing, ListingBookingPolicy, ListingHourSlot, Message, Messages, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
+import type { Chat, Listing, ListingBookingPolicy, ListingHourSlot, ListingModerationQueueItem, Message, Messages, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
 
 export type Database = MergeDeep<
   DatabaseGenerated,
@@ -55,6 +55,9 @@ export type Database = MergeDeep<
         get_direct_chat_by_user_id: {
           Returns: Chat
         }
+        current_user_is_admin: {
+          Returns: boolean
+        }
         get_listing: {
           Returns: Listing 
         }
@@ -75,6 +78,12 @@ export type Database = MergeDeep<
         }
         list_listing_week_slots: {
           Returns: ListingHourSlot[]
+        }
+        list_own_listings: {
+          Returns: Listing[]
+        }
+        list_pending_listings: {
+          Returns: ListingModerationQueueItem[]
         }
         list_pending_reservation_reviews: {
           Returns: PendingReservationReview[]
@@ -99,6 +108,12 @@ export type Database = MergeDeep<
         }
         list_reviews: {
           Returns: Review[]
+        }
+        approve_listing: {
+          Returns: Listing
+        }
+        reject_listing: {
+          Returns: Listing
         }
         set_listing_weekly_slots: {
           Returns: ListingHourSlot[]

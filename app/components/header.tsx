@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router"
 import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { Button } from "@/components/ui/button"
+import { useCurrentUserIsAdmin } from "@/hooks/useListings"
 import { cn } from "@/lib/utils"
 import { signout } from "@/api/auth"
 import { useSearchStore } from "@/store/search-store"
@@ -186,6 +187,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const navigate = useNavigate()
   const routeLocation = useLocation()
   const user = useUser()
+  const adminStatusQuery = useCurrentUserIsAdmin({ enabled: Boolean(user) })
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
@@ -230,6 +232,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const closingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const pendingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const didAttemptIpAutoFillRef = useRef(false)
+  const isAdmin = Boolean(adminStatusQuery.data)
 
   const transitionToField = useCallback((nextField: "where" | "when" | "who" | null) => {
     const currentField = activeFieldRef.current
@@ -1011,6 +1014,15 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                     >
                       Host tools
                     </button>
+                    {isAdmin ? (
+                      <Link
+                        to="/admin/listings"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                      >
+                        Review listings
+                      </Link>
+                    ) : null}
                     <Link
                       to="/account-settings"
                       onClick={() => setIsUserMenuOpen(false)}

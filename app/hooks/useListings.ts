@@ -86,6 +86,33 @@ export const useGetListing = (id?: string) => {
   return query;
 };
 
+export const useOwnListings = (config?: { enabled?: boolean }) => {
+  const query = useQuery({
+    ...queries.listings.own(),
+    enabled: config?.enabled ?? true,
+  });
+
+  return query;
+};
+
+export const usePendingListings = (config?: { enabled?: boolean }) => {
+  const query = useQuery({
+    ...queries.listings.pending(),
+    enabled: config?.enabled ?? true,
+  });
+
+  return query;
+};
+
+export const useCurrentUserIsAdmin = (config?: { enabled?: boolean }) => {
+  const query = useQuery({
+    ...queries.listings.adminStatus(),
+    enabled: config?.enabled ?? true,
+  });
+
+  return query;
+};
+
 export const useCreateListing = () => {
   const queryClient = useQueryClient();
 
@@ -249,6 +276,38 @@ export const useDeleteListing = () => {
     },
     onError: (err: any) => {
       console.error("Error deleting listing", err);
+    },
+  });
+};
+
+export const useApproveListing = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { p_listing_id: string; p_message?: string | null }) => {
+      return await listingEvents.approveListing(payload.p_listing_id, payload.p_message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queries.listings._def });
+    },
+    onError: (err: any) => {
+      console.error("Error approving listing", err);
+    },
+  });
+};
+
+export const useRejectListing = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { p_listing_id: string; p_message?: string | null }) => {
+      return await listingEvents.rejectListing(payload.p_listing_id, payload.p_message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queries.listings._def });
+    },
+    onError: (err: any) => {
+      console.error("Error rejecting listing", err);
     },
   });
 };

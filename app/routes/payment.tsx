@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { useGetListing } from "@/hooks/useListings"
 import { useCreateReservation } from "@/hooks/useReservations"
+import { useErrorActions } from "@/store/error_state"
 import { useHostListings } from "@/store/host_listings_state"
 import { useUser } from "@/store/user_state"
 import { useReservationsActions } from "@/store/reservations_state"
@@ -94,6 +95,7 @@ export default function PaymentPage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const { addReservation } = useReservationsActions()
   const createReservationMutation = useCreateReservation()
+  const { setError, setSuccess } = useErrorActions()
   const [params] = useSearchParams()
   const listingIdParam = params.get("listingId") ?? ""
   const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(listingIdParam)
@@ -193,6 +195,9 @@ export default function PaymentPage() {
       return
     }
 
+    setError(null)
+    setSuccess(null)
+
     const reservationStart = listingLocalDateHourToUtc(dateKey, startHour, listing.timezone)
     const reservationEnd = listingLocalDateHourToUtc(dateKey, endHour, listing.timezone)
 
@@ -205,6 +210,7 @@ export default function PaymentPage() {
       })
     } catch (error) {
       console.error("Failed to create reservation", error)
+      setError(error instanceof Error ? error.message : "This time slot is no longer available. Please choose another time.")
       return
     }
 
@@ -242,7 +248,7 @@ export default function PaymentPage() {
 
         <main>
           <Card className="mx-auto max-w-3xl border-[#e2e2e2] bg-[#ffffff] p-5">
-            <CardHeader className="px-0 pt-0">
+            <CardHeader className="px-0 pt-0 pb-4">
               <CardTitle className="text-3xl text-[#000000]">Review your reservation</CardTitle>
               <CardDescription className="text-sm text-[#6a6a6a]">
                 Check details below and complete your booking.
