@@ -1,6 +1,6 @@
 import type { Database as DatabaseGenerated, Json } from "../database-generated.types";
 import type { MergeDeep } from "type-fest";
-import type { Chat, Listing, ListingBookingPolicy, ListingHourSlot, ListingModerationQueueItem, Message, Messages, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
+import type { Chat, Listing, ListingBookingPolicy, ListingHourSlot, ListingModerationQueueItem, Message, Messages, Notification, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
 
 export type Database = MergeDeep<
   DatabaseGenerated,
@@ -97,6 +97,9 @@ export type Database = MergeDeep<
         count_user_past_reservations: {
           Returns: number
         }
+        count_unread_notifications: {
+          Returns: number
+        }
         list_user_past_reservations: {
           Returns: Reservation[]
         }
@@ -106,8 +109,17 @@ export type Database = MergeDeep<
         list_listings: {
           Returns: Listing[]
         }
+        list_notifications: {
+          Returns: Notification[]
+        }
         list_reviews: {
           Returns: Review[]
+        }
+        mark_all_notifications_read: {
+          Returns: number
+        }
+        mark_notification_read: {
+          Returns: Notification
         }
         approve_listing: {
           Returns: Listing

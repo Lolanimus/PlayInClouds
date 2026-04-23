@@ -12,3 +12,11 @@ export const useBroadcastChatsSubscription = () => {
     RealtimeEvents.chats_update
   );
 };
+
+export const useBroadcastNotificationsSubscription = () => {
+  return useBroadcastSubscription(
+    "notifications",
+    { queryKey: queries.notifications._def },
+    RealtimeEvents.notifications_update
+  );
+};

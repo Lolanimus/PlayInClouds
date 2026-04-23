@@ -7,6 +7,7 @@ import { useEffect } from "react";
 export enum RealtimeEvents {
   contacts_update = "contacts_update",
   chats_update = "chats_update",
+  notifications_update = "notifications_update",
 }
 
 export const useBroadcastSubscription = (
