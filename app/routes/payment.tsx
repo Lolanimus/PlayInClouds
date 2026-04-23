@@ -98,7 +98,7 @@ export default function PaymentPage() {
   const { setError, setSuccess } = useErrorActions()
   const [params] = useSearchParams()
   const listingIdParam = params.get("listingId") ?? ""
-  const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(listingIdParam)
+  const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(listingIdParam)
   const listingQuery = useGetListing(isUuidId ? listingIdParam : undefined)
   const dateKey = params.get("date") ?? ""
   const startHour = Number(params.get("start"))

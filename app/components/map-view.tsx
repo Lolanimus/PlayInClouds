@@ -12,6 +12,8 @@ import { useSearchStore } from "@/store/search-store"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
+const DEFAULT_SEARCH_MAP_CENTER = { lat: 39.8283, lng: -98.5795 }
+const DEFAULT_SEARCH_MAP_ZOOM = 3
 
 function PriceMarker({
   price,
@@ -128,12 +130,14 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
   const navigate = useNavigate()
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
-  const markerEntriesRef = useRef<Array<{ id: string; price: string; root: Root }>>([])
+  const markerEntriesRef = useRef<Array<{ id: string; price: string; root: Root; isUnmounted: boolean }>>([])
   const isTearingDownRef = useRef(false)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [activeListingId, setActiveListingId] = useState<string | null>(null)
   const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const whereQuery = whereValue.trim().toLowerCase()
+  const shouldUseSearchContext = !disableFilters && !listingsOverride
+  const whereQuery = shouldUseSearchContext ? whereValue.trim().toLowerCase() : ""
+  const hasSpecifiedLocation = !shouldUseSearchContext || whereQuery.length > 0
   const hasSelectedSlot =
     selectedDateParam &&
     selectedStartParam !== null &&
@@ -171,15 +175,26 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
     return earthRadiusKm * c
   }
 
-  const filteredListings = disableFilters
+  const filteredListings = !hasSpecifiedLocation
+    ? []
+    : disableFilters
     ? allListings
     : allListings
         .filter((listing) => {
           if (!whereQuery) return true
-          return [listing.title, listing.subtitle, listing.category, listing.address]
+
+          const matchesText = [listing.title, listing.subtitle, listing.category, listing.address]
             .join(" ")
             .toLowerCase()
             .includes(whereQuery)
+
+          if (matchesText) return true
+          if (!searchCoords) return false
+
+          const distanceKm = getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
+          if (!Number.isFinite(distanceKm)) return false
+
+          return distanceKm <= distanceMaxParam
         })
         .filter((listing) => {
           if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
@@ -232,7 +247,9 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
   const renderMarkerButtons = () => {
     if (isTearingDownRef.current) return
 
-    markerEntriesRef.current.forEach(({ id, price, root }) => {
+    markerEntriesRef.current.forEach(({ id, price, root, isUnmounted }) => {
+      if (isUnmounted) return
+
       if (!filteredListingIds.has(id)) {
         root.render(<></>)
         return
@@ -292,11 +309,15 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
     const initMap = () => {
       if (!mapRef.current || !window.google?.maps) return
 
-      const map = new window.google.maps.Map(mapRef.current, {
-        center: allListings[0]
+      const initialCenter =
+        hasSpecifiedLocation && allListings[0]
           ? { lat: allListings[0].lat, lng: allListings[0].lng }
-          : { lat: 40.7505, lng: -73.9934 },
-        zoom: 15,
+          : DEFAULT_SEARCH_MAP_CENTER
+      const initialZoom = hasSpecifiedLocation && allListings[0] ? 15 : DEFAULT_SEARCH_MAP_ZOOM
+
+      const map = new window.google.maps.Map(mapRef.current, {
+        center: initialCenter,
+        zoom: initialZoom,
         styles: [
           {
             featureType: "all",
@@ -332,7 +353,7 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
       })
       mapInstanceRef.current = map
 
-      if (allListings.length > 1) {
+      if (hasSpecifiedLocation && allListings.length > 1) {
         const bounds = new window.google.maps.LatLngBounds()
         allListings.forEach((listing) => {
           bounds.extend(new window.google.maps.LatLng(listing.lat, listing.lng))
@@ -346,8 +367,9 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
 
         const container = document.createElement("div")
         const root = createRoot(container)
+        const markerEntry = { id: listingId, price, root, isUnmounted: false }
         markerRoots.push(root)
-        markerEntriesRef.current.push({ id: listingId, price, root })
+        markerEntriesRef.current.push(markerEntry)
 
         class PriceOverlay extends window.google.maps.OverlayView {
           private div: HTMLDivElement | null = null
@@ -361,22 +383,28 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
               event.stopPropagation()
             })
 
-            root.render(
-              markerVariant === "pin" ? (
-                <PinMarker
-                  isActive={activeListingId === listingId}
-                  onClick={() => setActiveListingId(listingId)}
-                />
-              ) : (
-                <PriceMarker
-                  price={price}
-                  isActive={activeListingId === listingId}
-                  isAvailableInSelectedSlot={availableNowListingIds.has(listingId)}
-                  hasSelectedSlot={Boolean(hasSelectedSlot)}
-                  onClick={() => setActiveListingId(listingId)}
-                />
+            if (isTearingDownRef.current || markerEntry.isUnmounted) return
+
+            if (filteredListingIds.has(listingId)) {
+              root.render(
+                markerVariant === "pin" ? (
+                  <PinMarker
+                    isActive={activeListingId === listingId}
+                    onClick={() => setActiveListingId(listingId)}
+                  />
+                ) : (
+                  <PriceMarker
+                    price={price}
+                    isActive={activeListingId === listingId}
+                    isAvailableInSelectedSlot={availableNowListingIds.has(listingId)}
+                    hasSelectedSlot={Boolean(hasSelectedSlot)}
+                    onClick={() => setActiveListingId(listingId)}
+                  />
+                )
               )
-            )
+            } else {
+              root.render(<></>)
+            }
 
             this.div.appendChild(container)
             this.getPanes()?.overlayMouseTarget?.appendChild(this.div)
@@ -421,6 +449,9 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
     return () => {
       isTearingDownRef.current = true
       markerOverlays.forEach((overlay) => overlay.setMap(null))
+      markerEntriesRef.current.forEach((entry) => {
+        entry.isUnmounted = true
+      })
       markerEntriesRef.current = []
       mapInstanceRef.current = null
 
@@ -429,9 +460,14 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
         markerRoots.forEach((root) => root.unmount())
       }, 0)
     }
-  }, [allListings, activeListingId, availableNowListingIds, hasSelectedSlot, markerVariant])
+  }, [allListings, markerVariant])
 
   useEffect(() => {
+    if (!shouldUseSearchContext) {
+      setSearchCoords(null)
+      return
+    }
+
     const where = whereValue.trim()
     if (!where) {
       setSearchCoords(null)
@@ -477,7 +513,24 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
     return () => {
       controller.abort()
     }
-  }, [whereValue, mapLoaded])
+  }, [whereValue, mapLoaded, shouldUseSearchContext])
+
+  useEffect(() => {
+    if (!mapLoaded || !mapInstanceRef.current || !window.google?.maps) return
+    if (filteredListings.length === 0) return
+
+    if (filteredListings.length === 1) {
+      mapInstanceRef.current.panTo({ lat: filteredListings[0].lat, lng: filteredListings[0].lng })
+      mapInstanceRef.current.setZoom(14)
+      return
+    }
+
+    const bounds = new window.google.maps.LatLngBounds()
+    filteredListings.forEach((listing) => {
+      bounds.extend(new window.google.maps.LatLng(listing.lat, listing.lng))
+    })
+    mapInstanceRef.current.fitBounds(bounds, 80)
+  }, [filteredListings, mapLoaded])
 
   useEffect(() => {
     if (activeListingId && !filteredListingIds.has(activeListingId)) {
@@ -514,6 +567,13 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
           <div className="mt-1.5 flex items-center gap-2 text-xs text-[#2a2a2a]">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#9e9e9e]" />
             <span>Available at other times</span>
+          </div>
+        </div>
+      )}
+      {!hasSpecifiedLocation && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#f5f5f5]/80 backdrop-blur-[1px]">
+          <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] px-5 py-4 text-center shadow-sm">
+            <p className="text-sm font-medium text-[#000000]">Enter a location to see listings on the map</p>
           </div>
         </div>
       )}

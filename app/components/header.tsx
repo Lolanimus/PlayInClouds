@@ -30,13 +30,6 @@ type GoogleAutocompleteResponse = {
   }>
 }
 
-type GoogleGeolocationResponse = {
-  location?: {
-    lat?: number
-    lng?: number
-  }
-}
-
 type GoogleGeocodeResponse = {
   results?: Array<{
     formatted_address?: string
@@ -231,7 +224,6 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const closingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const pendingFieldRef = useRef<"where" | "when" | "who" | null>(null)
-  const didAttemptIpAutoFillRef = useRef(false)
   const isAdmin = Boolean(adminStatusQuery.data)
 
   const transitionToField = useCallback((nextField: "where" | "when" | "who" | null) => {
@@ -349,68 +341,6 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     setStoreDuration(duration)
     setStoreParticipants(participantCount)
   }, [location, locationSearch, selectedDate, startHour, duration, participantCount, setWhere, setStoreDate, setStoreStartHour, setStoreDuration, setStoreParticipants])
-
-  useEffect(() => {
-    if (didAttemptIpAutoFillRef.current) return
-    if (location || locationSearch) return
-
-    didAttemptIpAutoFillRef.current = true
-
-    const controller = new AbortController()
-
-    const fetchCityByGoogle = async () => {
-      try {
-        if (!GOOGLE_MAPS_API_KEY) return
-
-        const geolocateResponse = await fetch(`https://www.googleapis.com/geolocation/v1/geolocate?key=${GOOGLE_MAPS_API_KEY}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            considerIp: true,
-          }),
-          signal: controller.signal,
-        })
-
-        if (!geolocateResponse.ok) return
-
-        const geolocateData = (await geolocateResponse.json()) as GoogleGeolocationResponse
-        const lat = geolocateData.location?.lat
-        const lng = geolocateData.location?.lng
-
-        if (typeof lat !== "number" || typeof lng !== "number") return
-
-        const geocodeResponse = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&result_type=locality|postal_town|administrative_area_level_3&key=${GOOGLE_MAPS_API_KEY}`,
-          {
-            signal: controller.signal,
-          }
-        )
-
-        if (!geocodeResponse.ok) return
-
-        const geocodeData = (await geocodeResponse.json()) as GoogleGeocodeResponse
-        const formattedAddress = geocodeData.results?.[0]?.formatted_address?.trim()
-
-        if (!formattedAddress) return
-
-        setLocation(formattedAddress)
-        setLocationSearch("")
-        setIsSearchSummary(true)
-
-        setWhere(formattedAddress)
-      } catch {
-        // ignore IP lookup errors; user can still type manually
-      }
-    }
-
-    fetchCityByGoogle()
-
-    return () => {
-      controller.abort()
-    }
-  }, [location, locationSearch, setWhere])
 
   useEffect(() => {
     const trimmedQuery = locationSearch.trim()

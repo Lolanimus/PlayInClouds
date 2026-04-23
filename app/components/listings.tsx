@@ -194,9 +194,6 @@ export function Listings() {
   const selectedDateParam = useSearchStore((state) => state.date)
   const selectedStartParam = useSearchStore((state) => state.startHour)
   const selectedDurationParam = useSearchStore((state) => state.duration)
-  const [hasUserGeolocation, setHasUserGeolocation] = useState(false)
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [userGeoCity, setUserGeoCity] = useState<string | null>(null)
   const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
   const whereQuery = whereValue.trim().toLowerCase()
   const hasSelectedSlot =
@@ -206,34 +203,6 @@ export function Listings() {
     selectedStartParam <= 23 &&
     selectedDurationParam >= 1 &&
     selectedDurationParam <= 12
-
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) return
-
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        setHasUserGeolocation(true)
-        setUserCoords({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        })
-      },
-      () => {
-        setHasUserGeolocation(false)
-        setUserCoords(null)
-        setUserGeoCity(null)
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 5 * 60 * 1000,
-      }
-    )
-
-    return () => {
-      navigator.geolocation.clearWatch(watchId)
-    }
-  }, [])
 
   useEffect(() => {
     const where = whereValue.trim()
@@ -281,57 +250,6 @@ export function Listings() {
     }
   }, [whereValue])
 
-  useEffect(() => {
-    if (!hasUserGeolocation || !userCoords) return
-    if (!GOOGLE_MAPS_API_KEY) {
-      setUserGeoCity(null)
-      return
-    }
-
-    const controller = new AbortController()
-
-    const resolveUserCity = async () => {
-      try {
-        const response = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${userCoords.lat},${userCoords.lng}&result_type=locality|postal_town|administrative_area_level_3&key=${GOOGLE_MAPS_API_KEY}`,
-          { signal: controller.signal }
-        )
-
-        if (!response.ok) {
-          setUserGeoCity(null)
-          return
-        }
-
-        const data = (await response.json()) as {
-          results?: Array<{
-            address_components?: Array<{
-              long_name?: string
-              types?: string[]
-            }>
-          }>
-        }
-
-        const components = data.results?.[0]?.address_components ?? []
-        const city = components.find((component) =>
-          (component.types ?? []).some((type) =>
-            type === "locality" || type === "postal_town" || type === "administrative_area_level_3"
-          )
-        )?.long_name
-
-        setUserGeoCity(city ? city.trim().toLowerCase() : null)
-      } catch {
-        setUserGeoCity(null)
-      }
-    }
-
-    resolveUserCity()
-
-    return () => {
-      controller.abort()
-    }
-  }, [hasUserGeolocation, userCoords])
-
-  const getCityName = (value: string) => value.split(",")[0]?.trim().toLowerCase() ?? ""
   const parseListingPrice = (value: string) => {
     const match = value.match(/\$\s*(\d+(?:\.\d+)?)/)
     if (!match) return Number.POSITIVE_INFINITY
@@ -360,40 +278,33 @@ export function Listings() {
     return earthRadiusKm * c
   }
 
-  const searchedCity = getCityName(whereValue.trim())
-
-  const getDistanceLabel = (listing: ListingItem) => {
-    if (!hasUserGeolocation || !userCoords) return null
-    if (!searchedCity || !userGeoCity) return null
-    if (userGeoCity !== searchedCity) return null
-
-    const distanceKm = getDistanceKm(userCoords, { lat: listing.lat, lng: listing.lng })
-    if (!Number.isFinite(distanceKm)) return null
-
-    if (distanceKm < 1) return "<1 km away"
-    return `${distanceKm.toFixed(1)} km away`
-  }
-
   const getFilterDistanceKm = (listing: ListingItem) => {
     if (searchCoords) {
       return getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
     }
 
-    if (hasUserGeolocation && userCoords) {
-      return getDistanceKm(userCoords, { lat: listing.lat, lng: listing.lng })
-    }
-
     return parseListingDistance(listing.distance)
   }
 
+  const matchesWhereFilter = (listing: ListingItem) => {
+    if (!whereQuery) return true
+
+    const matchesText = [listing.title, listing.subtitle, listing.category, listing.address]
+      .join(" ")
+      .toLowerCase()
+      .includes(whereQuery)
+
+    if (matchesText) return true
+    if (!searchCoords) return false
+
+    const distanceKm = getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
+    if (!Number.isFinite(distanceKm)) return false
+
+    return distanceKm <= distanceMaxParam
+  }
+
   const filteredListings = allListings
-    .filter((listing) => {
-      if (!whereQuery) return true
-      return [listing.title, listing.subtitle, listing.category, listing.address]
-        .join(" ")
-        .toLowerCase()
-        .includes(whereQuery)
-    })
+    .filter(matchesWhereFilter)
     .filter((listing) => {
       if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
       return parseListingPrice(listing.price) <= priceMaxParam
@@ -465,7 +376,6 @@ export function Listings() {
           <ListingCard
             key={String(listing.id)}
             listing={listing}
-            distanceLabel={getDistanceLabel(listing)}
             onClick={() => navigate(`/listing/${listing.id}`)}
           />
         ))}
@@ -482,7 +392,6 @@ export function Listings() {
               <ListingCard
                 key={String(listing.id)}
                 listing={listing}
-                distanceLabel={getDistanceLabel(listing)}
                 onClick={() => navigate(`/listing/${listing.id}`)}
               />
             ))}
