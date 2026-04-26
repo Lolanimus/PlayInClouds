@@ -572,6 +572,7 @@ insert into public.reservations (
   status,
   total_price,
   guests,
+  confirm_by_at,
   created_at,
   updated_at
 )
@@ -585,6 +586,7 @@ select * from (
     'CONFIRMED'::public.reservation_status as status,
     105::double precision as total_price,
     4 as guests,
+    null::timestamptz as confirm_by_at,
     rt.today_start - interval '8 days' as created_at,
     rt.today_start - interval '5 days' as updated_at
   from reservation_times rt
@@ -600,6 +602,7 @@ select * from (
     'PENDING'::public.reservation_status,
     105::double precision,
     3,
+    rt.today_start + interval '3 days' + interval '16 hours',
     rt.today_start - interval '1 day',
     rt.today_start - interval '1 day'
   from reservation_times rt
@@ -615,6 +618,7 @@ select * from (
     'CONFIRMED'::public.reservation_status,
     165::double precision,
     2,
+    null::timestamptz,
     rt.today_start - interval '2 days',
     rt.today_start - interval '2 days'
   from reservation_times rt
@@ -630,6 +634,7 @@ select * from (
     'CANCELLED'::public.reservation_status,
     110::double precision,
     2,
+    null::timestamptz,
     rt.today_start - interval '4 days',
     rt.today_start - interval '3 days'
   from reservation_times rt
@@ -645,6 +650,7 @@ select * from (
     'CONFIRMED'::public.reservation_status,
     110::double precision,
     1,
+    null::timestamptz,
     rt.today_start - interval '4 days',
     rt.today_start - interval '2 days'
   from reservation_times rt
