@@ -1,4 +1,4 @@
-import { processRpcRequest } from "@/api/helpers";
+import { processRpcRequest } from "~/api/supabase/helpers";
 
 /* Listings RPC */
 const createListing = async (
@@ -77,30 +77,6 @@ const currentUserIsAdmin = async () => {
   return await processRpcRequest("current_user_is_admin");
 };
 
-const updateListing = async (args: {
-  p_id: string;
-  p_lat?: number;
-  p_lng?: number;
-  p_address?: string;
-  p_title?: string;
-  p_subtitle?: string;
-  p_category?: any;
-  p_price?: number;
-  p_images?: string[];
-  p_description?: string;
-  p_equipment_desc?: string;
-  p_conveniences_desc?: string;
-  p_area_m2?: number;
-  p_cancellation_policy_hours?: number | null;
-  p_advance_notice_hours?: number | null;
-  p_timezone?: string;
-  p_host_confirmation_message?: string | null;
-  p_rules?: string | null;
-  p_instructions?: string | null;
-}) => {
-  return await processRpcRequest("update_listing", args);
-};
-
 const deleteListing = async (p_id: string) => {
   return await processRpcRequest("delete_listing", { p_id });
 };
@@ -126,7 +102,6 @@ export {
   listOwnListings,
   listPendingListings,
   currentUserIsAdmin,
-  updateListing,
   deleteListing,
   approveListing,
   rejectListing,

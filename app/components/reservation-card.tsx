@@ -1,12 +1,12 @@
 import { ArrowRight, CalendarClock, Clock3, Star, Users } from "lucide-react"
 import { useNavigate } from "react-router"
 
-import { Badge } from "~/components/ui/badge"
-import { Button } from "~/components/ui/button"
-import { usePendingReservationReviews } from "~/hooks/useReviews"
-import { useCancelReservation, useConfirmReservation } from "~/hooks/useReservations"
-import { useUser } from "~/store/user_state"
-import type { PendingReservationReview, Reservation } from "~/types/custom/api.types"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { usePendingReservationReviews } from "@/hooks/useReviews"
+import { useCancelReservation, useConfirmReservation } from "@/hooks/useReservations"
+import { useUser } from "@/store/user_state"
+import type { PendingReservationReview, Reservation } from "@/types/custom/api.types"
 
 type ReservationCardReservation = Reservation & {
   listingTitle: string

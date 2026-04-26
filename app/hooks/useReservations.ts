@@ -1,7 +1,8 @@
-import * as reservationsEvents from "@/db_rpc/reservations_rpc";
+import * as reservationsEvents from "~/api/backend/reservations";
 import { queries } from "@/queries/queries";
 import { errorStore } from "@/store/error_state";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Reservation } from "@/types/custom/api.types";
+import { type UseQueryResult, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 function getMutationErrorMessage(fallback: string) {
   return errorStore.getState().error ?? fallback
@@ -10,61 +11,61 @@ function getMutationErrorMessage(fallback: string) {
 export const useGetReservation = (
   opts?: { p_reservation_id?: string },
   config?: { enabled?: boolean }
-) => {
+): UseQueryResult<Reservation | null, Error> => {
   const query = useQuery({
     ...queries.reservations.detailById(opts),
     enabled: config?.enabled ?? Boolean(opts?.p_reservation_id),
   });
 
-  return query;
+  return query as UseQueryResult<Reservation | null, Error>;
 };
 
 export const useListUserActiveReservations = (
   opts?: { p_renter_id?: string | null },
   config?: { enabled?: boolean }
-) => {
+): UseQueryResult<Reservation[] | null, Error> => {
   const query = useQuery({
     ...queries.reservations.listUserActive(opts),
     enabled: config?.enabled ?? true,
   });
 
-  return query;
+  return query as UseQueryResult<Reservation[] | null, Error>;
 };
 
 export const useListUserPastReservations = (
   opts?: { p_renter_id?: string | null; p_page?: number; p_page_size?: number },
   config?: { enabled?: boolean }
-) => {
+): UseQueryResult<Reservation[] | null, Error> => {
   const query = useQuery({
     ...queries.reservations.listUserPast(opts),
     enabled: config?.enabled ?? true,
   });
 
-  return query;
+  return query as UseQueryResult<Reservation[] | null, Error>;
 };
 
 export const useCountUserPastReservations = (
   opts?: { p_renter_id?: string | null },
   config?: { enabled?: boolean }
-) => {
+): UseQueryResult<number | null, Error> => {
   const query = useQuery({
     ...queries.reservations.countUserPast(opts),
     enabled: config?.enabled ?? true,
   });
 
-  return query;
+  return query as UseQueryResult<number | null, Error>;
 };
 
 export const useListHostMonthlyReservations = (
   opts?: { p_host_id?: string | null; p_month?: number },
   config?: { enabled?: boolean }
-) => {
+): UseQueryResult<Reservation[] | null, Error> => {
   const query = useQuery({
     ...queries.reservations.listHostMonthly(opts),
     enabled: config?.enabled ?? true,
   });
 
-  return query;
+  return query as UseQueryResult<Reservation[] | null, Error>;
 };
 
 export const useCreateReservation = () => {

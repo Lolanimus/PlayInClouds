@@ -16,7 +16,7 @@ import type { Listing as ApiListing, PublicProfile } from "@/types/custom/api.ty
 import { useQueries } from "@tanstack/react-query"
 
 type DaySlot = {
-  date: Date
+  dateKey: string
   dayLabel: string
   monthDayLabel: string
 }
@@ -24,25 +24,64 @@ type DaySlot = {
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const REVIEWS_PAGE_SIZE = 6
 
-function getBookingWindowDays(maxMonthsAhead: number) {
-  const today = new Date()
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const end = new Date(start)
-  end.setMonth(end.getMonth() + maxMonthsAhead)
+function getFormatterForTimeZone(
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions = {}
+) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    ...options,
+  })
+}
 
-  const days: DaySlot[] = []
-  const cursor = new Date(start)
+function getTimeZoneDateTimeParts(date: Date, timeZone: string) {
+  const parts = getFormatterForTimeZone(timeZone, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
 
-  while (cursor.getTime() <= end.getTime()) {
-    days.push({
-      date: new Date(cursor),
-      dayLabel: cursor.toLocaleDateString("en-US", { weekday: "short" }),
-      monthDayLabel: cursor.toLocaleDateString("en-US", { day: "numeric", month: "short" }),
-    })
-    cursor.setDate(cursor.getDate() + 1)
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)])
+  ) as Record<string, number>
+
+  return {
+    year: values.year,
+    month: values.month,
+    day: values.day,
+    hour: values.hour ?? 0,
+    minute: values.minute ?? 0,
+    second: values.second ?? 0,
   }
+}
 
-  return days
+function getTimeZoneOffsetMs(date: Date, timeZone: string) {
+  const values = getTimeZoneDateTimeParts(date, timeZone)
+
+  const asUtc = Date.UTC(
+    values.year,
+    (values.month ?? 1) - 1,
+    values.day ?? 1,
+    values.hour ?? 0,
+    values.minute ?? 0,
+    values.second ?? 0,
+    0
+  )
+
+  return asUtc - date.getTime()
+}
+
+function getDateKeyFromUtcDate(date: Date) {
+  const year = date.getUTCFullYear()
+  const month = `${date.getUTCMonth() + 1}`.padStart(2, "0")
+  const day = `${date.getUTCDate()}`.padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 function parseHourlyPrice(price: string) {
@@ -66,23 +105,80 @@ function getDateKey(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-function getMonthStartKey(date: Date) {
-  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-01`
+function getMonthStartKey(dateKey: string) {
+  return `${dateKey.slice(0, 7)}-01`
 }
 
-function getMinimumBookableStart(referenceAt: Date, advanceNoticeHours?: number | null) {
-  const minimumStart = new Date(referenceAt)
-  minimumStart.setMinutes(0, 0, 0)
+function listingLocalDateHourToUtc(dateKey: string, hour: number, timeZone: string) {
+  const [yearRaw, monthRaw, dayRaw] = dateKey.split("-")
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
 
-  if (minimumStart.getTime() < referenceAt.getTime()) {
-    minimumStart.setHours(minimumStart.getHours() + 1)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(hour)) {
+    return new Date(NaN)
+  }
+
+  const baseUtc = Date.UTC(year, month - 1, day, hour, 0, 0, 0)
+  let result = new Date(baseUtc)
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const offset = getTimeZoneOffsetMs(result, timeZone)
+    const next = new Date(baseUtc - offset)
+    if (next.getTime() === result.getTime()) break
+    result = next
+  }
+
+  return result
+}
+
+function getBookingWindowDays(maxMonthsAhead: number, timeZone: string) {
+  const now = new Date()
+  const nowParts = getTimeZoneDateTimeParts(now, timeZone)
+  const start = new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day, 12, 0, 0, 0))
+  const end = new Date(start)
+  end.setUTCMonth(end.getUTCMonth() + maxMonthsAhead)
+
+  const dayFormatter = getFormatterForTimeZone(timeZone, { weekday: "short" })
+  const monthDayFormatter = getFormatterForTimeZone(timeZone, { day: "numeric", month: "short" })
+  const days: DaySlot[] = []
+  const cursor = new Date(start)
+
+  while (cursor.getTime() <= end.getTime()) {
+    const dateKey = getDateKeyFromUtcDate(cursor)
+    const displayDate = listingLocalDateHourToUtc(dateKey, 12, timeZone)
+
+    days.push({
+      dateKey,
+      dayLabel: dayFormatter.format(displayDate),
+      monthDayLabel: monthDayFormatter.format(displayDate),
+    })
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  return days
+}
+
+function getMinimumBookableStart(referenceAt: Date, advanceNoticeHours: number | null | undefined, timeZone: string) {
+  const localParts = getTimeZoneDateTimeParts(referenceAt, timeZone)
+  const minimumStartDate = new Date(Date.UTC(localParts.year, localParts.month - 1, localParts.day, 12, 0, 0, 0))
+  let minimumStartHour = localParts.hour
+
+  if (localParts.minute > 0 || localParts.second > 0) {
+    minimumStartHour += 1
   }
 
   if (typeof advanceNoticeHours === "number" && advanceNoticeHours > 0) {
-    minimumStart.setHours(minimumStart.getHours() + advanceNoticeHours)
+    minimumStartHour += advanceNoticeHours
   }
 
-  return minimumStart
+  if (minimumStartHour >= 24) {
+    minimumStartDate.setUTCDate(minimumStartDate.getUTCDate() + Math.floor(minimumStartHour / 24))
+    minimumStartHour %= 24
+  }
+
+  return listingLocalDateHourToUtc(getDateKeyFromUtcDate(minimumStartDate), minimumStartHour, timeZone)
 }
 
 function formatReviewMonth(value?: string | null) {
@@ -126,17 +222,24 @@ export default function ListingDetailsPage() {
   const [reviewsPage, setReviewsPage] = useState(1)
   const hasInitializedSelectionRef = useRef(false)
   const now = new Date()
-  const upcomingDays = useMemo(() => getBookingWindowDays(1), [])
-  const monthStartsForWindow = useMemo(
-    () => Array.from(new Set(upcomingDays.map((day) => getMonthStartKey(day.date)))),
-    [upcomingDays]
-  )
+  const localBrowserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
   const { id } = useParams()
   const isUuidId = useMemo(
     () => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)),
     [id]
   )
   const listingQuery = useGetListing(isUuidId ? id : undefined)
+  const remoteListing = listingQuery.data as ApiListing | null
+  const localListing = useMemo(() => {
+    if (!id) return null
+    return hostListings.find((item) => String(item.id) === id) ?? null
+  }, [hostListings, id])
+  const listingTimeZone = remoteListing?.timezone ?? localBrowserTimeZone
+  const upcomingDays = useMemo(() => getBookingWindowDays(1, listingTimeZone), [listingTimeZone])
+  const monthStartsForWindow = useMemo(
+    () => Array.from(new Set(upcomingDays.map((day) => getMonthStartKey(day.dateKey)))),
+    [upcomingDays]
+  )
   const monthSlotsQueries = useQueries({
     queries: (id ? monthStartsForWindow : []).map((monthStart) => ({
       ...queries.hours.listMonthSlots({
@@ -156,13 +259,9 @@ export default function ListingDetailsPage() {
       : undefined,
     { enabled: Boolean(isUuidId && id) }
   )
-  const localListing = useMemo(() => {
-    if (!id) return null
-    return hostListings.find((item) => String(item.id) === id) ?? null
-  }, [hostListings, id])
 
   const listing = useMemo(() => {
-    const remote = listingQuery.data as ApiListing | null
+    const remote = remoteListing
 
     if (remote) {
       return {
@@ -178,6 +277,7 @@ export default function ListingDetailsPage() {
         areaM2: remote.area_m2,
         cancellationPolicyHours: remote.cancellation_policy_hours,
         advanceNoticeHours: remote.advance_notice_hours,
+        timezone: remote.timezone,
         images: remote.images,
         priceLabel: `$${remote.price} CAD/hour`,
         priceNumber: remote.price,
@@ -202,6 +302,7 @@ export default function ListingDetailsPage() {
         areaM2: localListing.areaM2,
         cancellationPolicyHours: null,
         advanceNoticeHours: localListing.advanceNoticeHours ?? null,
+        timezone: localBrowserTimeZone,
         images: localListing.images,
         priceLabel: localListing.price,
         priceNumber: parseHourlyPrice(localListing.price),
@@ -213,7 +314,7 @@ export default function ListingDetailsPage() {
     }
 
     return null
-  }, [listingQuery.data, localListing])
+  }, [remoteListing, localListing, localBrowserTimeZone])
 
   const hostProfileQuery = usePublicProfile(
     {
@@ -260,8 +361,10 @@ export default function ListingDetailsPage() {
   const bookingWindowEndLabel = useMemo(() => {
     const lastDay = upcomingDays[upcomingDays.length - 1]
     if (!lastDay) return ""
-    return lastDay.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-  }, [upcomingDays])
+    return getFormatterForTimeZone(listingTimeZone, { month: "short", day: "numeric", year: "numeric" }).format(
+      listingLocalDateHourToUtc(lastDay.dateKey, 12, listingTimeZone)
+    )
+  }, [listingTimeZone, upcomingDays])
 
   useEffect(() => {
     if (!Number.isFinite(participantsParam)) return
@@ -318,9 +421,8 @@ export default function ListingDetailsPage() {
     const booked = new Set<string>()
 
     upcomingDays.forEach((day, dayIndex) => {
-      const dayKey = getDateKey(day.date)
       HOURS.forEach((hour) => {
-        const slot = slotMap.get(`${dayKey}-${hour}`)
+        const slot = slotMap.get(`${day.dateKey}-${hour}`)
         if (slot?.isBooked) {
           booked.add(getSlotKey(dayIndex, hour))
         }
@@ -335,48 +437,33 @@ export default function ListingDetailsPage() {
   }
 
   const isPastCell = (day: DaySlot, hour: number) => {
-    const slotStart = new Date(
-      day.date.getFullYear(),
-      day.date.getMonth(),
-      day.date.getDate(),
-      hour,
-      0,
-      0,
-      0
-    )
+    if (!listing) return false
+    const slotStart = listingLocalDateHourToUtc(day.dateKey, hour, listing.timezone)
 
     return slotStart.getTime() < now.getTime()
   }
 
   const isBaseAvailabilityWindow = (day: DaySlot, hour: number) => {
-    const slot = slotMap.get(`${getDateKey(day.date)}-${hour}`)
+    const slot = slotMap.get(`${day.dateKey}-${hour}`)
     return typeof slot?.price === "number" && Number.isFinite(slot.price) && slot.price > 0
   }
 
   const isRestrictedByAdvanceBooking = (day: DaySlot, hour: number) => {
-    const slot = slotMap.get(`${getDateKey(day.date)}-${hour}`)
+    const slot = slotMap.get(`${day.dateKey}-${hour}`)
     return Boolean(slot?.isBookingRestricted)
   }
 
   const isInAdvanceNoticeWindow = (day: DaySlot, hour: number) => {
     if (!listing) return false
 
-    const minimumBookableStart = getMinimumBookableStart(new Date(), listing.advanceNoticeHours)
-    const slotStart = new Date(
-      day.date.getFullYear(),
-      day.date.getMonth(),
-      day.date.getDate(),
-      hour,
-      0,
-      0,
-      0
-    )
+    const minimumBookableStart = getMinimumBookableStart(new Date(), listing.advanceNoticeHours, listing.timezone)
+    const slotStart = listingLocalDateHourToUtc(day.dateKey, hour, listing.timezone)
 
     return slotStart.getTime() >= now.getTime() && slotStart.getTime() < minimumBookableStart.getTime()
   }
 
   const getSlotPrice = (day: DaySlot, hour: number) => {
-    const slot = slotMap.get(`${getDateKey(day.date)}-${hour}`)
+    const slot = slotMap.get(`${day.dateKey}-${hour}`)
     return typeof slot?.price === "number" && Number.isFinite(slot.price) ? slot.price : null
   }
 
@@ -442,15 +529,7 @@ export default function ListingDetailsPage() {
 
     if (typeof listing.cancellationPolicyHours !== "number") return null
 
-    const selectedStart = new Date(
-      selectedDay.date.getFullYear(),
-      selectedDay.date.getMonth(),
-      selectedDay.date.getDate(),
-      selectedStartHour,
-      0,
-      0,
-      0
-    )
+    const selectedStart = listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing.timezone)
 
     const msUntilStart = selectedStart.getTime() - Date.now()
     const hoursUntilStart = msUntilStart / (1000 * 60 * 60)
@@ -468,7 +547,7 @@ export default function ListingDetailsPage() {
 
     const params = new URLSearchParams({
       listingId: String(listing.id),
-      date: getDateKey(selectedDay.date),
+      date: selectedDay.dateKey,
       start: String(selectedStartHour),
       end: String(selectedEndHour),
       guests: String(guestCount),
@@ -502,7 +581,7 @@ export default function ListingDetailsPage() {
       durationParam <= 24
     ) {
 
-      const matchedDayIndex = upcomingDays.findIndex((day) => getDateKey(day.date) === dateParam)
+      const matchedDayIndex = upcomingDays.findIndex((day) => day.dateKey === dateParam)
       if (matchedDayIndex >= 0) {
         const matchedDay = upcomingDays[matchedDayIndex]
         const selectedRangeEnd = startParam + durationParam
@@ -527,21 +606,13 @@ export default function ListingDetailsPage() {
     }
 
     const currentNow = new Date()
-    const minimumBookableStart = getMinimumBookableStart(currentNow, listing.advanceNoticeHours)
+    const minimumBookableStart = getMinimumBookableStart(currentNow, listing.advanceNoticeHours, listing.timezone)
 
     for (let dayIndex = 0; dayIndex < upcomingDays.length; dayIndex += 1) {
       const day = upcomingDays[dayIndex]
 
       for (let hour = 0; hour <= 23; hour += 1) {
-        const slotStart = new Date(
-          day.date.getFullYear(),
-          day.date.getMonth(),
-          day.date.getDate(),
-          hour,
-          0,
-          0,
-          0
-        )
+        const slotStart = listingLocalDateHourToUtc(day.dateKey, hour, listing.timezone)
 
         if (slotStart.getTime() < minimumBookableStart.getTime()) continue
         if (!canBookCell(day, dayIndex, hour)) continue
@@ -1093,7 +1164,7 @@ export default function ListingDetailsPage() {
 
           const params = new URLSearchParams({
             listingId: String(listing.id),
-            date: getDateKey(selectedDay.date),
+            date: selectedDay.dateKey,
             start: String(selectedStartHour),
             end: String(selectedEndHour),
             guests: String(guestCount),
@@ -1109,7 +1180,7 @@ export default function ListingDetailsPage() {
 
           const params = new URLSearchParams({
             listingId: String(listing.id),
-            date: getDateKey(selectedDay.date),
+            date: selectedDay.dateKey,
             start: String(selectedStartHour),
             end: String(selectedEndHour),
             guests: String(guestCount),

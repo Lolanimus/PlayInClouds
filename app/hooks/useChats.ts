@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queries } from "../queries/queries";
-import { createDirectChat, deleteChat } from "@/db_rpc/chat_rpc";
+import { createDirectChat, deleteChat } from "~/backend/src/middleware/db_rpc/chat_rpc";
 
 export const useChats = () => {
   return useQuery({

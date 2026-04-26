@@ -1,5 +1,5 @@
 import { createQueryKeys } from "@lukemorales/query-key-factory";
-import * as reviewsEvents from "../db_rpc/reviews_rpc";
+import * as reviewsEvents from "~/api/backend/reviews";
 
 export const reviews = createQueryKeys("reviews", {
   pendingReservation: () => ({

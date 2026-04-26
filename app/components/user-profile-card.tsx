@@ -2,18 +2,18 @@ import { Ban, MessageCircleMore, ShieldCheck, Star } from "lucide-react"
 import type { ReactNode } from "react"
 import { Link } from "react-router"
 
-import { Badge } from "~/components/ui/badge"
-import { Button } from "~/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { useToast } from "~/hooks/use-toast"
-import { cn } from "~/lib/utils"
-import { useUser } from "~/store/user_state"
+} from "@/components/ui/card"
+import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
+import { useUser } from "@/store/user_state"
 
 export type UserProfileCardData = {
   id?: string | null

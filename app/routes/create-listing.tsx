@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { processRpcRequest } from "@/api/helpers"
+import { processRpcRequest } from "~/api/supabase/helpers"
 import { useSetListingWeeklySlots } from "@/hooks/useHours"
 import { useCreateListing, useGetListing, useUpdateListing } from "@/hooks/useListings"
 import { dismissListingModerationMessage, isListingModerationMessageDismissed } from "@/lib/utils"

@@ -2,22 +2,22 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
-import { Badge } from "~/components/ui/badge"
-import { ReservationCard } from "~/components/reservation-card"
-import { Button } from "~/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { ReservationCard } from "@/components/reservation-card"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { useListings } from "~/hooks/useListings"
+} from "@/components/ui/card"
+import { useListings } from "@/hooks/useListings"
 import {
   useListHostMonthlyReservations,
-} from "~/hooks/useReservations"
-import { useUser } from "~/store/user_state"
-import type { Listing, Reservation } from "~/types/custom/api.types"
+} from "@/hooks/useReservations"
+import { useUser } from "@/store/user_state"
+import type { Listing, Reservation } from "@/types/custom/api.types"
 
 function toDateKeyFromIso(isoValue: string) {
   const date = new Date(isoValue)

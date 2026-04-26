@@ -1,28 +1,28 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router"
-import { ArrowLeft, Loader2, Search, Send, Star, Trash2, UserCircle2 } from "lucide-react"
+import { Link, useLocation, useNavigate } from "react-router"
+import { ArrowLeft, LifeBuoy, Loader2, Search, Send, Star, Trash2, UserCircle2 } from "lucide-react"
 
-import { Button } from "~/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { Input } from "~/components/ui/input"
-import { useChatByUserId, useChats, useDeleteChat } from "~/hooks/useChats"
-import { useListings } from "~/hooks/useListings"
-import { useSendMessage, useMessages } from "~/hooks/useMessages"
-import { usePendingReservationReviews } from "~/hooks/useReviews"
+} from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { useChatByUserId, useChats, useDeleteChat } from "@/hooks/useChats"
+import { useListings } from "@/hooks/useListings"
+import { useSendMessage, useMessages } from "@/hooks/useMessages"
+import { usePendingReservationReviews } from "@/hooks/useReviews"
 import {
   useListHostMonthlyReservations,
   useListUserActiveReservations,
-} from "~/hooks/useReservations"
-import { useBroadcastChatsSubscription } from "~/hooks/realtime_broadcast/useRealtimeSuscriptionsFactory"
-import { useToast } from "~/hooks/use-toast"
-import { useUser } from "~/store/user_state"
-import type { Chat, ChatParticipantProfile, Listing, Message, PendingReservationReview, Reservation } from "~/types/custom/api.types"
+} from "@/hooks/useReservations"
+import { useBroadcastChatsSubscription } from "@/hooks/realtime_broadcast/useRealtimeSuscriptionsFactory"
+import { useToast } from "@/hooks/use-toast"
+import { useUser } from "@/store/user_state"
+import type { Chat, ChatParticipantProfile, Listing, Message, PendingReservationReview, Reservation } from "@/types/custom/api.types"
 
 type Conversation = {
   id: string
@@ -44,8 +44,18 @@ type ChatMessage = {
   timestamp: string
 }
 
+type ChatLocationState = {
+  reservationId?: string
+  listingId?: string
+  targetUserId?: string
+}
+
 function shortLabel(userId: string) {
   return `User ${userId.slice(0, 6)}`
+}
+
+function isFallbackUserLabel(value: string) {
+  return /^User\s+[A-Za-z0-9]{1,}$/.test(value.trim())
 }
 
 function formatParticipantName(participant?: ChatParticipantProfile) {
@@ -140,9 +150,18 @@ function getReviewPromptDescription(prompt: PendingReservationReview) {
     : `You're reviewing ${prompt.reviewee_display_name} as the guest for this completed stay.`
 }
 
+function isReservationChatRelevant(reservation: Reservation) {
+  if (reservation.status === "CANCELLED") return false
+
+  const endAt = new Date(reservation.end_at)
+  if (Number.isNaN(endAt.getTime())) return true
+
+  return endAt.getTime() > Date.now()
+}
+
 export default function ChatPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const location = useLocation()
   const { toast } = useToast()
   const user = useUser()
   const chatsQuery = useChats()
@@ -164,7 +183,10 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [draft, setDraft] = useState("")
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
-  const requestedReservationId = searchParams.get("reservationId")
+  const locationState = (location.state as ChatLocationState | null) ?? null
+  const requestedListingId = locationState?.listingId
+  const requestedTargetUserId = locationState?.targetUserId
+  const requestedReservationIdFromState = locationState?.reservationId
   const threadBottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -176,7 +198,8 @@ export default function ChatPage() {
   const listings = (listingsQuery.data as Listing[] | null) ?? []
   const chatRows = ((chatsQuery.data as Chat[] | null) ?? []).filter(isChat)
   const guestReservations = (guestReservationsQuery.data as Reservation[] | null) ?? []
-  const hostReservations = (hostReservationsQuery.data as Reservation[] | null) ?? []
+  const hostReservations = ((hostReservationsQuery.data as Reservation[] | null) ?? [])
+    .filter(isReservationChatRelevant)
   const pendingReviewPrompts = (pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []
 
   const listingsById = useMemo(() => new Map(listings.map((listing) => [listing.id, listing])), [listings])
@@ -207,11 +230,18 @@ export default function ChatPage() {
       }
 
       const keepExistingText = existing.updatedAt >= incoming.updatedAt
+      const preferIncomingPeerLabel =
+        isFallbackUserLabel(existing.peerLabel)
+        && !isFallbackUserLabel(incoming.peerLabel)
 
       map.set(key, {
         ...existing,
         ...incoming,
-        peerLabel: keepExistingText ? existing.peerLabel : incoming.peerLabel,
+        peerLabel: preferIncomingPeerLabel
+          ? incoming.peerLabel
+          : keepExistingText
+            ? existing.peerLabel
+            : incoming.peerLabel,
         listingTitle: keepExistingText ? existing.listingTitle : incoming.listingTitle,
         subtitle: keepExistingText ? existing.subtitle : incoming.subtitle,
         updatedAt: existing.updatedAt >= incoming.updatedAt ? existing.updatedAt : incoming.updatedAt,
@@ -327,16 +357,28 @@ export default function ChatPage() {
   }, [conversations])
 
   useEffect(() => {
-    if (!requestedReservationId || conversations.length === 0) return
+    if (!requestedReservationIdFromState || conversations.length === 0) return
 
     const matchingConversation = conversations.find(
-      (conversation) => conversation.reservationId === requestedReservationId
+      (conversation) => conversation.reservationId === requestedReservationIdFromState
     )
 
     if (matchingConversation) {
       setActiveConversationId(matchingConversation.id)
     }
-  }, [conversations, requestedReservationId])
+  }, [conversations, requestedReservationIdFromState])
+
+  useEffect(() => {
+    if (!requestedListingId || !requestedTargetUserId || conversations.length === 0) return
+
+    const matchingConversation = conversations.find(
+      (conversation) => conversation.listingId === requestedListingId && conversation.targetUserId === requestedTargetUserId
+    )
+
+    if (matchingConversation) {
+      setActiveConversationId(matchingConversation.id)
+    }
+  }, [conversations, requestedListingId, requestedTargetUserId])
 
   const filteredConversations = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -484,7 +526,25 @@ export default function ChatPage() {
                 />
               </div>
 
-              <div className="space-y-2 overflow-y-auto md:max-h-[calc(100vh-19rem)]">
+              <Link
+                to="/contactus"
+                state={{ page: `${location.pathname}${location.search}${location.hash}` }}
+                className="mb-3 flex w-full rounded-xl border border-[#d9d9d9] bg-[#ffffff] p-3 text-left transition-colors hover:bg-[#f6f6f6]"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#e9e9e9] bg-[#f4f4f4]">
+                    <LifeBuoy className="h-5 w-5 text-[#4a4a4a]" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#1f1f1f]">Support</p>
+                    <p className="truncate text-xs text-[#6a6a6a]">Need help or found a bug?</p>
+                    <p className="mt-1 truncate text-xs text-[#8a8a8a]">Open the contact form</p>
+                  </div>
+                </div>
+              </Link>
+
+              <div className="space-y-2 overflow-y-auto md:max-h-[calc(100vh-22rem)]">
                 {isInitialLoading ? (
                   <div className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-4 text-sm text-[#6a6a6a]">
                     Loading conversations...

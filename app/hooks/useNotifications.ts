@@ -1,4 +1,4 @@
-import * as notificationEvents from "@/db_rpc/notifications_rpc"
+import * as notificationEvents from "~/backend/src/middleware/db_rpc/notifications_rpc"
 import { queries } from "@/queries/queries"
 import { errorStore } from "@/store/error_state"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"

@@ -1,8 +1,8 @@
-import { errorStore } from "../store/error_state";
-import supabase from "../utils/supabase";
+import { errorStore } from "@/store/error_state";
+import supabase from "@/utils/supabase";
 import { AuthError } from "@supabase/supabase-js";
 import * as z from "zod";
-import type { Function, Functions } from "../types/custom/rpc.types";
+import type { Function, Functions } from "@/types/custom/rpc.types";
 
 type RpcArgs<T extends keyof Functions> = Function<T> extends { Args: infer Args }
   ? Args

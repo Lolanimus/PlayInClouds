@@ -1,4 +1,4 @@
-import { cn } from "~/lib/utils"
+import { cn } from "@/lib/utils"
 
 function Separator({ className, orientation = "horizontal", ...props }: React.ComponentProps<"div"> & { orientation?: "horizontal" | "vertical" }) {
   return (

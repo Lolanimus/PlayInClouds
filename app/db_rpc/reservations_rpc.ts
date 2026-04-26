@@ -1,4 +1,4 @@
-import { processRpcRequest } from "@/api/helpers";
+import { processRpcRequest } from "~/api/supabase/helpers";
 
 const getReservation = async (p_reservation_id: string) => {
   return await processRpcRequest("get_reservation", {

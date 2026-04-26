@@ -11,8 +11,8 @@ import {
   X,
 } from "lucide-react"
 
-import { Button } from "~/components/ui/button"
-import { Badge } from "~/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -20,11 +20,11 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { useDeleteListing, useOwnListings } from "~/hooks/useListings"
-import { dismissListingModerationMessage, formatListingCategory, isListingModerationMessageDismissed } from "~/lib/utils"
-import { useUser } from "~/store/user_state"
-import type { Listing as ApiListing, ListingModerationStatus } from "~/types/custom/api.types"
+} from "@/components/ui/card"
+import { useDeleteListing, useOwnListings } from "@/hooks/useListings"
+import { dismissListingModerationMessage, formatListingCategory, isListingModerationMessageDismissed } from "@/lib/utils"
+import { useUser } from "@/store/user_state"
+import type { Listing as ApiListing, ListingModerationStatus } from "@/types/custom/api.types"
 
 function getModerationBadgeClass(status: ListingModerationStatus) {
   if (status === "APPROVED") return "border-[#cde8d1] bg-[#effaf2] text-[#166534]"

@@ -4,10 +4,11 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
+import { NotificationsMenu } from "@/components/notifications-menu"
 import { Button } from "@/components/ui/button"
 import { useCurrentUserIsAdmin } from "@/hooks/useListings"
 import { cn } from "@/lib/utils"
-import { signout } from "@/api/auth"
+import { signout } from "~/api/supabase/auth"
 import { useSearchStore } from "@/store/search-store"
 import { useUser } from "@/store/user_state"
 
@@ -908,6 +909,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
           >
             List your space
           </Button>
+          {user ? <NotificationsMenu /> : null}
           <div ref={userMenuRef} className="relative">
             <Button
               size="icon"
@@ -929,6 +931,13 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                       className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
                     >
                       Dashboard
+                    </Link>
+                    <Link
+                      to={`/profile/${user.id}`}
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Profile
                     </Link>
                     <Link
                       to="/chat"
@@ -959,6 +968,13 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                       className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
                     >
                       Account settings
+                    </Link>
+                    <Link
+                      to="/contactus"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Contact us
                     </Link>
                     <button
                       type="button"
@@ -991,6 +1007,13 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                     >
                       Host tools
                     </button>
+                    <Link
+                      to="/contactus"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="block rounded-lg px-4 py-2 text-sm text-[#000000] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      Contact us
+                    </Link>
                   </>
                 )}
               </div>

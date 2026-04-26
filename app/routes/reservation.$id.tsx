@@ -2,23 +2,23 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router"
 import { CalendarClock, ChevronLeft, Clock3, ExternalLink, Hash, MapPin, MessageCircle, ReceiptText, Star, Users } from "lucide-react"
 
-import { MapView } from "~/components/map-view"
-import { Badge } from "~/components/ui/badge"
-import { Button } from "~/components/ui/button"
-import { ListingCard, type ListingItem } from "~/components/listings"
-import { Textarea } from "~/components/ui/textarea"
+import { MapView } from "@/components/map-view"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { ListingCard, type ListingItem } from "@/components/listings"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { usePendingReservationReviews, useCreateReservationReview } from "~/hooks/useReviews"
-import { useCancelReservation, useConfirmReservation, useGetReservation } from "~/hooks/useReservations"
-import { useToast } from "~/hooks/use-toast"
-import { useUser } from "~/store/user_state"
-import type { Listing, PendingReservationReview, Reservation } from "~/types/custom/api.types"
+} from "@/components/ui/card"
+import { usePendingReservationReviews, useCreateReservationReview } from "@/hooks/useReviews"
+import { useCancelReservation, useConfirmReservation, useGetReservation } from "@/hooks/useReservations"
+import { useToast } from "@/hooks/use-toast"
+import { useUser } from "@/store/user_state"
+import type { Listing, PendingReservationReview, Reservation } from "@/types/custom/api.types"
 
 type ReservationProfile = {
   id: string
@@ -174,9 +174,9 @@ export default function ReservationDetailsPage() {
 
   useEffect(() => {
     if (!user) {
-      navigate(`/login?redirect=${encodeURIComponent(`/reservation/${id ?? ""}`)}`, { replace: true })
+      navigate("/login", { replace: true })
     }
-  }, [user, navigate, id])
+  }, [user, navigate])
 
   if (!user) return null
 
@@ -249,6 +249,13 @@ export default function ReservationDetailsPage() {
   const profile = isHost ? booker : owner
   const profileDisplayName = getProfileDisplayName(profile, isHost ? "Booker" : "Host")
   const profileRoleLabel = isHost ? "Booker" : "Host"
+  const reservationChatState = reservation
+    ? {
+        reservationId: reservation.id,
+        listingId: reservation.listing_id,
+        targetUserId: profile?.id ?? undefined,
+      }
+    : undefined
 
   useEffect(() => {
     if (searchParams.get("leaveReview") === "1" && reviewPrompt) {
@@ -513,7 +520,7 @@ export default function ReservationDetailsPage() {
                         asChild
                         className="h-11 w-full rounded-2xl bg-[#111111] px-4 text-[#ffffff] shadow-[0_8px_24px_rgba(17,17,17,0.14)] transition-all hover:-translate-y-0.5 hover:bg-[#222222] hover:shadow-[0_12px_28px_rgba(17,17,17,0.18)]"
                       >
-                        <Link to={`/chat`} className="flex w-full items-center justify-center gap-2.5">
+                        <Link to="/chat" state={reservationChatState} className="flex w-full items-center justify-center gap-2.5">
                           <MessageCircle className="h-4 w-4" />
                           <span className="font-medium">Chat</span>
                         </Link>
@@ -562,7 +569,8 @@ export default function ReservationDetailsPage() {
                     ) : null}
 
                     <Link
-                      to={`/chat?reservationId=${reservation.id}`}
+                      to="/chat"
+                      state={reservationChatState}
                       className="flex items-start gap-4 rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4 transition-colors hover:border-[#d8d8d8] hover:bg-[#f7f7f7]"
                     >
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#111111] text-sm font-semibold text-[#ffffff]">
@@ -610,7 +618,7 @@ export default function ReservationDetailsPage() {
                         Help Center
                         </Button>
                         <Button asChild variant="outline" className="rounded-full border-[#d7d7d7] bg-[#ffffff]">
-                          <Link to="/chat">Contact support</Link>
+                          <Link to="/contactus">Contact support</Link>
                         </Button>
                       </div>
                     </div>

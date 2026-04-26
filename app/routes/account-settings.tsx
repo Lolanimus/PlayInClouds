@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router"
 
-import { updateAccountSettings } from "~/api/auth"
-import { Button } from "~/components/ui/button"
+import { updateAccountSettings } from "~/api/supabase/auth"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -10,17 +10,17 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
+} from "@/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "~/components/ui/field"
-import { Input } from "~/components/ui/input"
-import { errorStore, useError, useErrorActions } from "~/store/error_state"
-import { useUser } from "~/store/user_state"
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { errorStore, useError, useErrorActions } from "@/store/error_state"
+import { useUser } from "@/store/user_state"
 
 type FormState = {
   firstName: string

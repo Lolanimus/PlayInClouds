@@ -1,5 +1,5 @@
 import { createQueryKeys } from "@lukemorales/query-key-factory"
-import * as notificationEvents from "../db_rpc/notifications_rpc"
+import * as notificationEvents from "../../backend/src/middleware/db_rpc/notifications_rpc"
 
 export const notifications = createQueryKeys("notifications", {
   list: (p?: { p_limit?: number; p_offset?: number }) => ({

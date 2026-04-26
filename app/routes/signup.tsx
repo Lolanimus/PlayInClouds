@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router"
-import { signup } from "~/api/auth"
-import { queryClient } from "~/queries/queries"
-import { useError, useErrorActions } from "~/store/error_state"
-import type { UserSignup } from "~/types/custom/api.types"
-import { Button } from "~/components/ui/button"
+import { signup } from "~/api/supabase/auth"
+import { queryClient } from "@/queries/queries"
+import { useError, useErrorActions } from "@/store/error_state"
+import type { UserSignup } from "@/types/custom/api.types"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -12,20 +12,20 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
+} from "@/components/ui/card"
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "~/components/ui/field"
-import { Input } from "~/components/ui/input"
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupText,
-} from "~/components/ui/input-group"
+} from "@/components/ui/input-group"
 
 export default function SignupPage() {
   const [searchParams] = useSearchParams()

@@ -1,19 +1,19 @@
 import { ChevronLeft, Star } from "lucide-react"
 import { Link, useParams } from "react-router"
 
-import { UserProfileCard } from "~/components/user-profile-card"
-import { Badge } from "~/components/ui/badge"
-import { Button } from "~/components/ui/button"
+import { UserProfileCard } from "@/components/user-profile-card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { usePublicProfile } from "~/hooks/useProfile"
-import { useUser } from "~/store/user_state"
-import type { PublicProfile, PublicProfileReview } from "~/types/custom/api.types"
+} from "@/components/ui/card"
+import { usePublicProfile } from "@/hooks/useProfile"
+import { useUser } from "@/store/user_state"
+import type { PublicProfile, PublicProfileReview } from "@/types/custom/api.types"
 
 function formatReviewDate(value: string) {
   const date = new Date(value)

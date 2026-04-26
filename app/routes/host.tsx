@@ -8,7 +8,7 @@ import {
   Settings,
 } from "lucide-react"
 
-import { Button } from "~/components/ui/button"
+import { Button } from "@/components/ui/button"
 
 export default function HostLayoutPage() {
   const location = useLocation()
@@ -64,7 +64,7 @@ export default function HostLayoutPage() {
             })}
           </div>
 
-          <Button asChild variant="outline" size="icon" className="h-11 w-11 rounded-xl border-[#dadada]">
+          <Button asChild variant="outline" size="icon" className="mb-16 h-11 w-11 rounded-xl border-[#dadada]">
             <Link to="/dashboard" title="Back to dashboard">
               <ArrowLeft className="h-5 w-5" />
               <span className="sr-only">Back to dashboard</span>

@@ -1,8 +1,10 @@
-import * as listingEvents from "@/db_rpc/listings_rpc";
-import { deleteFile, uploadFile, getPublicUrl } from "@/api/blob";
+import * as listingEvents from "~/api/backend/listings";
+import { deleteFile, uploadFile, getPublicUrl } from "~/api/supabase/blob";
 import { queries } from "@/queries/queries";
+import type { Listing, ListingModerationQueueItem } from "@/types/custom/api.types";
 import supabase from "@/utils/supabase";
 import {
+  type UseQueryResult,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -16,13 +18,13 @@ export const useListings = (opts?: {
   p_max_price?: number;
   p_limit?: number;
   p_offset?: number;
-}) => {
+}): UseQueryResult<Listing[] | null, Error> => {
   const query = useQuery({
     ...queries.listings.list(opts),
     enabled: true,
   });
 
-  return query;
+  return query as UseQueryResult<Listing[] | null, Error>;
 };
 
 const extractStorageObjectName = (value: string, bucket = "images"): string | null => {
@@ -64,7 +66,7 @@ export const useInfiniteListings = (
   opts?: { p_address?: string; p_category?: any; p_min_price?: number; p_max_price?: number; p_limit?: number },
   initialPageParam = 0
 ) => {
-  const query = useInfiniteQuery({
+  const query = useInfiniteQuery<Listing[] | null>({
     ...queries.listings.infiniteListings(opts),
     initialPageParam,
     getNextPageParam: (_lastPage, pages) => {
@@ -83,34 +85,40 @@ export const useGetListing = (id?: string) => {
     enabled: !!id,
   });
 
-  return query;
+  return query as UseQueryResult<Listing | null, Error>;
 };
 
-export const useOwnListings = (config?: { enabled?: boolean }) => {
+export const useOwnListings = (
+  config?: { enabled?: boolean }
+): UseQueryResult<Listing[] | null, Error> => {
   const query = useQuery({
     ...queries.listings.own(),
     enabled: config?.enabled ?? true,
   });
 
-  return query;
+  return query as UseQueryResult<Listing[] | null, Error>;
 };
 
-export const usePendingListings = (config?: { enabled?: boolean }) => {
+export const usePendingListings = (
+  config?: { enabled?: boolean }
+): UseQueryResult<ListingModerationQueueItem[] | null, Error> => {
   const query = useQuery({
     ...queries.listings.pending(),
     enabled: config?.enabled ?? true,
   });
 
-  return query;
+  return query as UseQueryResult<ListingModerationQueueItem[] | null, Error>;
 };
 
-export const useCurrentUserIsAdmin = (config?: { enabled?: boolean }) => {
+export const useCurrentUserIsAdmin = (
+  config?: { enabled?: boolean }
+): UseQueryResult<boolean | null, Error> => {
   const query = useQuery({
     ...queries.listings.adminStatus(),
     enabled: config?.enabled ?? true,
   });
 
-  return query;
+  return query as UseQueryResult<boolean | null, Error>;
 };
 
 export const useCreateListing = () => {

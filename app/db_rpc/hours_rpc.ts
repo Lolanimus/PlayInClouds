@@ -1,4 +1,4 @@
-import { processRpcRequest } from "@/api/helpers";
+import { processRpcRequest } from "~/api/supabase/helpers";
 
 const getCurrentIsoDate = () => new Date().toISOString().slice(0, 10);
 

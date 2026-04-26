@@ -1,6 +1,6 @@
 import { createQueryKeys } from "@lukemorales/query-key-factory";
-import * as messageEvents from "../db_rpc/messages_rpc";
-import * as chatEvents from "../db_rpc/chat_rpc";
+import * as messageEvents from "../../backend/src/middleware/db_rpc/messages_rpc";
+import * as chatEvents from "../../backend/src/middleware/db_rpc/chat_rpc";
 
 export const chats = createQueryKeys("chats", {
   list: {

@@ -1,4 +1,4 @@
-import { processRpcRequest } from "@/api/helpers";
+import { processRpcRequest } from "~/api/supabase/helpers";
 
 const getPublicProfile = async (
   p_user_id: string,

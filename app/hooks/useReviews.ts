@@ -1,4 +1,4 @@
-import * as reviewsEvents from "@/db_rpc/reviews_rpc";
+import * as reviewsEvents from "~/api/backend/reviews";
 import { queries } from "@/queries/queries";
 import {
   useMutation,

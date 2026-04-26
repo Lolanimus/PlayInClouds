@@ -1,5 +1,5 @@
 import { createQueryKeys } from "@lukemorales/query-key-factory";
-import * as hoursEvents from "../db_rpc/hours_rpc";
+import * as hoursEvents from "~/api/backend/hours";
 
 const getCurrentIsoDate = () => new Date().toISOString().slice(0, 10);
 

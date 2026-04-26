@@ -30,10 +30,21 @@ function formatNotificationTime(value: string) {
   })
 }
 
+function happenedWhileUserWasHere(notification: Notification, mountedAt: number) {
+  const createdAt = new Date(notification.created_at).getTime()
+
+  if (Number.isNaN(createdAt)) {
+    return false
+  }
+
+  return createdAt >= mountedAt
+}
+
 export function NotificationsMenu() {
   const navigate = useNavigate()
   const { toast } = useToast()
   const containerRef = useRef<HTMLDivElement>(null)
+  const mountedAtRef = useRef(Date.now())
   const hasInitializedRef = useRef(false)
   const seenIdsRef = useRef<Set<string>>(new Set())
   const [isOpen, setIsOpen] = useState(false)
@@ -72,14 +83,24 @@ export function NotificationsMenu() {
     }
 
     const newUnreadNotifications = notifications.filter(
-      (notification) => !notification.is_read && !seenIdsRef.current.has(notification.id)
+      (notification) =>
+        !notification.is_read &&
+        !seenIdsRef.current.has(notification.id) &&
+        happenedWhileUserWasHere(notification, mountedAtRef.current)
     )
 
     if (newUnreadNotifications.length > 0) {
       const latestNotification = newUnreadNotifications[0]
-      toast({
+      const toastRef = toast({
         title: latestNotification.title,
         description: latestNotification.body ?? undefined,
+        onClick: () => {
+          toastRef.dismiss()
+          void handleOpenNotification(latestNotification)
+        },
+        className: latestNotification.action_url
+          ? "cursor-pointer hover:border-[#d8d8d8] hover:bg-[#fafafa]"
+          : undefined,
       })
     }
 

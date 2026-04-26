@@ -2,24 +2,24 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router"
 import { CheckCircle2, ChevronLeft, Clock3, MapPin, ShieldAlert, XCircle } from "lucide-react"
 
-import { Button } from "~/components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { Textarea } from "~/components/ui/textarea"
+} from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
 import {
   useApproveListing,
   useCurrentUserIsAdmin,
   usePendingListings,
-} from "~/hooks/useListings"
-import { useRejectListing } from "~/hooks/useListings"
-import { formatListingCategory } from "~/lib/utils"
-import { useUser } from "~/store/user_state"
-import type { ListingModerationQueueItem } from "~/types/custom/api.types"
+} from "@/hooks/useListings"
+import { useRejectListing } from "@/hooks/useListings"
+import { formatListingCategory } from "@/lib/utils"
+import { useUser } from "@/store/user_state"
+import type { ListingModerationQueueItem } from "@/types/custom/api.types"
 
 function formatSubmittedAt(value: string) {
   const date = new Date(value)

@@ -1,5 +1,5 @@
 
-import supabase from "../utils/supabase";
+import supabase from "@/utils/supabase";
 import { processBlobRequest } from "./helpers";
 
 

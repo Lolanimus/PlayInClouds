@@ -1,5 +1,5 @@
-import { createDirectChat } from "@/db_rpc/chat_rpc";
-import { createMessage, deleteMessages } from "@/db_rpc/messages_rpc";
+import { createDirectChat } from "~/backend/src/middleware/db_rpc/chat_rpc";
+import { createMessage, deleteMessages } from "~/backend/src/middleware/db_rpc/messages_rpc";
 import { queries } from "@/queries/queries";
 import type { Messages } from "@/types/custom/api.types";
 import {

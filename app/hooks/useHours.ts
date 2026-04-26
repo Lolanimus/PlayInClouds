@@ -1,4 +1,4 @@
-import * as hoursEvents from "@/db_rpc/hours_rpc";
+import * as hoursEvents from "~/api/backend/hours";
 import { queries } from "@/queries/queries";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 

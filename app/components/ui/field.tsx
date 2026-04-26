@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { cn } from "~/lib/utils"
+import { cn } from "@/lib/utils"
 
 export function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("space-y-4", className)} {...props} />
