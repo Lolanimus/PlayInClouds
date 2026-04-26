@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
-import { Button } from "~/components/ui/button"
-import { login } from "~/api/auth"
-import { queryClient } from "~/queries/queries"
-import { useError, useErrorActions } from "~/store/error_state"
-import { useUser } from "~/store/user_state"
-import type { UserLogin } from "~/types/custom/api.types"
+import { Button } from "@/components/ui/button"
+import { login } from "~/api/supabase/auth"
+import { queryClient } from "@/queries/queries"
+import { useError, useErrorActions } from "@/store/error_state"
+import { useLoading } from "@/store/loading_state"
+import { useUser } from "@/store/user_state"
+import type { UserLogin } from "@/types/custom/api.types"
 import {
   Card,
   CardContent,
@@ -13,21 +14,22 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
+} from "@/components/ui/card"
 import {
   Field,
   FieldError,
   FieldGroup,
   FieldLabel,
-} from "~/components/ui/field"
-import { Input } from "~/components/ui/input"
+} from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 
 export default function AuthPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const user = useUser()
-    const redirectParam = searchParams.get("redirect")
-    const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : "/dashboard"
+  const isAuthLoading = useLoading()
+  const redirectParam = searchParams.get("redirect")
+  const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : "/dashboard"
 
   const [formData, setFormData] = useState<UserLogin>({
     email: "",
@@ -57,10 +59,10 @@ export default function AuthPage() {
   }, [formData]);
 
   useEffect(() => {
-    if (user) {
+    if (!isAuthLoading && user) {
       navigate(safeRedirect, { replace: true })
     }
-  }, [user, navigate, safeRedirect])
+  }, [isAuthLoading, user, navigate, safeRedirect])
 
   return (
     <main className="min-h-[calc(100vh-5.5rem)] bg-muted/40 px-4 py-10">

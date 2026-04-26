@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router"
 import { ChevronLeft, ChevronRight, PlusCircle, Settings } from "lucide-react"
 
-import { ReservationCard } from "~/components/reservation-card"
-import { Button } from "~/components/ui/button"
-import { Badge } from "~/components/ui/badge"
+import { ReservationCard } from "@/components/reservation-card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Card,
   CardContent,
@@ -12,29 +12,31 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "~/components/ui/card"
-import { useListings } from "~/hooks/useListings"
+} from "@/components/ui/card"
+import { useListings } from "@/hooks/useListings"
 import {
   useCountUserPastReservations,
   useListUserActiveReservations,
   useListUserPastReservations,
-} from "~/hooks/useReservations"
-import { useUser } from "~/store/user_state"
-import { useHostListings } from "~/store/host_listings_state"
+} from "@/hooks/useReservations"
+import { useLoading } from "@/store/loading_state"
+import { useUser } from "@/store/user_state"
+import { useHostListings } from "@/store/host_listings_state"
 
 const PAST_RESERVATIONS_PAGE_SIZE = 6
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const isAuthLoading = useLoading()
   const [pastReservationsPage, setPastReservationsPage] = useState(1)
   const activeReservationsQuery = useListUserActiveReservations(
     { p_renter_id: user?.id ?? null },
-    { enabled: Boolean(user?.id) }
+    { enabled: Boolean(user?.id) && !isAuthLoading }
   )
   const pastReservationsCountQuery = useCountUserPastReservations(
     { p_renter_id: user?.id ?? null },
-    { enabled: Boolean(user?.id) }
+    { enabled: Boolean(user?.id) && !isAuthLoading }
   )
   const pastReservationsQuery = useListUserPastReservations(
     {
@@ -42,7 +44,7 @@ export default function DashboardPage() {
       p_page: pastReservationsPage,
       p_page_size: PAST_RESERVATIONS_PAGE_SIZE,
     },
-    { enabled: Boolean(user?.id) }
+    { enabled: Boolean(user?.id) && !isAuthLoading }
   )
   const listingsQuery = useListings()
   const hostListings = useHostListings()
@@ -82,10 +84,20 @@ export default function DashboardPage() {
   }, [totalPastReservationPages])
 
   useEffect(() => {
-    if (!user) {
+    if (!isAuthLoading && !user) {
       navigate("/login?redirect=%2Fdashboard", { replace: true })
     }
-  }, [user, navigate])
+  }, [isAuthLoading, user, navigate])
+
+  if (isAuthLoading) {
+    return (
+      <main className="min-h-[calc(100vh-5.5rem)] bg-muted/40 px-4 py-10">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-center rounded-2xl border border-[#e9e9e9] bg-[#ffffff] px-6 py-12 text-sm text-muted-foreground shadow-sm">
+          Loading your dashboard...
+        </div>
+      </main>
+    )
+  }
 
   if (!user) return null
 
