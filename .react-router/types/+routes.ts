@@ -55,6 +55,9 @@ type Pages = {
   "/chat": {
     params: {};
   };
+  "/contactus": {
+    params: {};
+  };
   "/profile/:id": {
     params: {
       "id": string;
@@ -78,7 +81,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/login" | "/signup" | "/dashboard" | "/account-settings" | "/host/create-listing" | "/host/edit-listing/:id" | "/host" | "/host/dashboard" | "/host/calendar" | "/host/reservations" | "/host/chat" | "/admin/listings" | "/chat" | "/profile/:id" | "/payment" | "/reservation/:id" | "/listing/:id";
+    page: "/" | "/login" | "/signup" | "/dashboard" | "/account-settings" | "/host/create-listing" | "/host/edit-listing/:id" | "/host" | "/host/dashboard" | "/host/calendar" | "/host/reservations" | "/host/chat" | "/admin/listings" | "/chat" | "/contactus" | "/profile/:id" | "/payment" | "/reservation/:id" | "/listing/:id";
   };
   "routes/home.tsx": {
     id: "routes/home";
@@ -136,6 +139,10 @@ type RouteFiles = {
     id: "routes/chat";
     page: "/chat";
   };
+  "routes/contactus.tsx": {
+    id: "routes/contactus";
+    page: "/contactus";
+  };
   "routes/profile.$id.tsx": {
     id: "routes/profile.$id";
     page: "/profile/:id";
@@ -170,6 +177,7 @@ type RouteModules = {
   "routes/host-chat": typeof import("./app/routes/host-chat.tsx");
   "routes/admin-listings": typeof import("./app/routes/admin-listings.tsx");
   "routes/chat": typeof import("./app/routes/chat.tsx");
+  "routes/contactus": typeof import("./app/routes/contactus.tsx");
   "routes/profile.$id": typeof import("./app/routes/profile.$id.tsx");
   "routes/payment": typeof import("./app/routes/payment.tsx");
   "routes/reservation.$id": typeof import("./app/routes/reservation.$id.tsx");

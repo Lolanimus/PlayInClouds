@@ -1,5 +1,6 @@
 import {
   isRouteErrorResponse,
+  Link,
   Links,
   Meta,
   Outlet,
@@ -10,12 +11,13 @@ import {
 import { useEffect, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { X } from "lucide-react";
+import { Bug, X } from "lucide-react";
 import { queryClient } from "./queries/queries";
 
 import type { Route } from "./+types/root";
 import { Header } from "./components/header";
 import { FiltersModal } from "./components/filter-bar";
+import { Toaster } from "./components/ui/toaster";
 import { useAuth } from "./hooks/useAuth";
 import { useError, useErrorActions, useSuccess } from "./store/error_state";
 import "./app.css";
@@ -100,7 +102,18 @@ export default function App() {
         </div>
       ) : null}
       <Outlet />
+      {location.pathname !== "/contactus" ? (
+        <Link
+          to="/contactus"
+          state={{ page: `${location.pathname}${location.search}${location.hash}` }}
+          className="fixed bottom-4 left-4 z-40 inline-flex items-center gap-2 rounded-full border border-[#d7d7d7] bg-[#ffffff] px-3 py-2 text-sm font-medium text-[#111111] shadow-[0_8px_24px_rgba(17,17,17,0.08)] transition-colors hover:bg-[#f5f5f5]"
+        >
+          <Bug className="h-4 w-4" />
+          Bug report
+        </Link>
+      ) : null}
       <FiltersModal isOpen={isFiltersOpen} onClose={() => setIsFiltersOpen(false)} />
+      <Toaster />
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

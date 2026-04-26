@@ -16,6 +16,7 @@ export default [
 	]),
 	route("admin/listings", "routes/admin-listings.tsx"),
 	route("chat", "routes/chat.tsx"),
+	route("contactus", "routes/contactus.tsx"),
 	route("profile/:id", "routes/profile.$id.tsx"),
 	route("payment", "routes/payment.tsx"),
 	route("reservation/:id", "routes/reservation.$id.tsx"),
