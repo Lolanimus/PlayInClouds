@@ -7,6 +7,7 @@ import type { PublicProfileQuery } from "../schemas/profile";
 export async function getPublicProfile(args: {
   userId: string;
   query: PublicProfileQuery;
+  accessToken?: string;
 }) {
   return withClientErrorHandling(async () => {
     const data = await getPublicProfileRpc(args);

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
 import { sendRouteError } from "../lib/http";
-import { requireAccessToken } from "../middleware/auth";
+import { getOptionalAccessToken, requireAccessToken } from "../middleware/auth";
 import {
   createListingBodySchema,
   listListingsQuerySchema,
@@ -12,7 +12,6 @@ import {
 import {
   approveListingService,
   createListingService,
-  currentUserIsAdminService,
   deleteListingService,
   getListingService,
   listListingsService,
@@ -23,7 +22,7 @@ import {
 } from "../services/listings";
 
 export async function registerListingRoutes(app: FastifyInstance) {
-  app.get("/api/listings/me/own", async (request, reply) => {
+  app.get("/api/listings/me", async (request, reply) => {
     try {
       const auth = await requireAccessToken(request);
       const listings = await listOwnListingsService({ accessToken: auth.accessToken });
@@ -37,7 +36,10 @@ export async function registerListingRoutes(app: FastifyInstance) {
   app.get("/api/listings/moderation/pending", async (request, reply) => {
     try {
       const auth = await requireAccessToken(request);
-      const listings = await listPendingListingsService({ accessToken: auth.accessToken });
+      const listings = await listPendingListingsService({
+        actor: auth.actor,
+        accessToken: auth.accessToken,
+      });
 
       return reply.code(200).send({ listings });
     } catch (error) {
@@ -48,7 +50,7 @@ export async function registerListingRoutes(app: FastifyInstance) {
   app.get("/api/listings/me/admin-status", async (request, reply) => {
     try {
       const auth = await requireAccessToken(request);
-      const isAdmin = await currentUserIsAdminService({ accessToken: auth.accessToken });
+      const isAdmin = auth.actor.isAdmin;
 
       return reply.code(200).send({ isAdmin });
     } catch (error) {
@@ -58,8 +60,12 @@ export async function registerListingRoutes(app: FastifyInstance) {
 
   app.get("/api/listings", async (request, reply) => {
     try {
+      const auth = await getOptionalAccessToken(request);
       const query = listListingsQuerySchema.parse(request.query ?? {});
-      const listings = await listListingsService({ query });
+      const listings = await listListingsService({
+        query,
+        accessToken: auth?.accessToken,
+      });
 
       return reply.code(200).send({ listings });
     } catch (error) {
@@ -69,8 +75,12 @@ export async function registerListingRoutes(app: FastifyInstance) {
 
   app.get("/api/listings/:id", async (request, reply) => {
     try {
+      const auth = await getOptionalAccessToken(request);
       const params = updateListingParamsSchema.parse(request.params);
-      const listing = await getListingService({ listingId: params.id });
+      const listing = await getListingService({
+        listingId: params.id,
+        accessToken: auth?.accessToken,
+      });
 
       return reply.code(200).send({ listing });
     } catch (error) {
@@ -83,6 +93,7 @@ export async function registerListingRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const body = createListingBodySchema.parse(request.body ?? {});
       const listing = await createListingService({
+  		actor: auth.actor,
         accessToken: auth.accessToken,
         input: body,
       });
@@ -100,6 +111,7 @@ export async function registerListingRoutes(app: FastifyInstance) {
       const body = updateListingBodySchema.parse(request.body ?? {});
 
       const listing = await updateListingService({
+		    actor: auth.actor,
         accessToken: auth.accessToken,
         listingId: params.id,
         input: body,
@@ -116,6 +128,7 @@ export async function registerListingRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const params = updateListingParamsSchema.parse(request.params);
       const deleted = await deleteListingService({
+  		actor: auth.actor,
         accessToken: auth.accessToken,
         listingId: params.id,
       });
@@ -132,6 +145,7 @@ export async function registerListingRoutes(app: FastifyInstance) {
       const params = updateListingParamsSchema.parse(request.params);
       const body = moderateListingBodySchema.parse(request.body ?? {});
       const listing = await approveListingService({
+  		actor: auth.actor,
         accessToken: auth.accessToken,
         listingId: params.id,
         input: body,
@@ -149,6 +163,7 @@ export async function registerListingRoutes(app: FastifyInstance) {
       const params = updateListingParamsSchema.parse(request.params);
       const body = moderateListingBodySchema.parse(request.body ?? {});
       const listing = await rejectListingService({
+  		actor: auth.actor,
         accessToken: auth.accessToken,
         listingId: params.id,
         input: body,

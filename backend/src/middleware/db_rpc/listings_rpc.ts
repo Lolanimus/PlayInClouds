@@ -23,8 +23,13 @@ export async function createListingRpc(args: {
   return data as Listing | null;
 }
 
-export async function getListingRpc(args: { listingId: string }) {
-  const supabase = createPublicSupabaseClient();
+export async function getListingRpc(args: {
+  listingId: string;
+  accessToken?: string;
+}) {
+  const supabase = args.accessToken
+    ? createAuthedSupabaseClient(args.accessToken)
+    : createPublicSupabaseClient();
   const { data, error } = await supabase.rpc("get_listing", { p_id: args.listingId });
 
   if (error) throw error;
@@ -32,8 +37,13 @@ export async function getListingRpc(args: { listingId: string }) {
   return data as Listing | null;
 }
 
-export async function listListingsRpc(args: { query: ListListingsQuery }) {
-  const supabase = createPublicSupabaseClient();
+export async function listListingsRpc(args: {
+  query: ListListingsQuery;
+  accessToken?: string;
+}) {
+  const supabase = args.accessToken
+    ? createAuthedSupabaseClient(args.accessToken)
+    : createPublicSupabaseClient();
   const { data, error } = await supabase.rpc("list_listings", {
     p_address: args.query.p_address ?? null,
     p_category: args.query.p_category ?? null,

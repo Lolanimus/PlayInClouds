@@ -4,6 +4,26 @@ import type { Writable } from "type-fest";
 export type User = Omit<Database["public"]["Tables"]["user"]["Insert"], "id"> & { id?: string };
 export type UserLogin = { email: string; password: string };
 export type UserSignup = Writable<User & { password: string, confirmPassword: string }>;
+export type AccountStatus = Database["public"]["Enums"]["account_status"];
+export type RecordStatus = Database["public"]["Enums"]["record_status"];
+export type UserRole = Database["public"]["Enums"]["user_role"];
+export type ActorPermission = "listings.moderate" | "admin.access" | "support.access";
+
+export interface ActorContextPayload {
+	userId: string;
+	email: string | null;
+	accountStatus: AccountStatus;
+	roles: UserRole[];
+}
+
+export interface CurrentActor {
+	userId: string;
+	email: string | null;
+	accountStatus: AccountStatus;
+	roles: UserRole[];
+	permissions: ActorPermission[];
+	isAdmin: boolean;
+}
 
 export type ListingModerationStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 
@@ -26,6 +46,7 @@ export interface Listing {
 	equipment_desc: string;
 	conveniences_desc: string;
 	area_m2: number;
+	status: RecordStatus;
 	cancellation_policy_hours: number | null;
 	advance_notice_hours: number | null;
 	rating_sum: number;
@@ -61,6 +82,7 @@ export interface Review {
 	listing_id: string;
 	user_id: string;
 	rating: number;
+	status: RecordStatus;
 	text: string;
 	created_at: string;
 	updated_at: string;
@@ -76,6 +98,7 @@ export interface ReservationReview {
 	reviewee_user_id: string;
 	reviewer_role: ReservationReviewRole;
 	rating: number;
+	status: RecordStatus;
 	text: string;
 	created_at: string;
 	updated_at: string;
@@ -131,6 +154,7 @@ export interface Notification {
 	payload: JSON | null;
 	is_read: boolean;
 	read_at: string | null;
+	status: RecordStatus;
 	created_at: string;
 }
 
@@ -166,6 +190,7 @@ export interface Chat {
   chat_type: Database["public"]["Enums"]["chat_type"];
 	listing_id: string | null;
 	metadata: JSON | null;
+	status: RecordStatus;
 	participants?: ChatParticipantProfile[] | null;
 	participant_ids?: string[] | null;
 	updated_at?: string | null;
@@ -178,6 +203,7 @@ export interface Message {
   contents: string;
   created_at: Date;
   metadata: JSON;
+	status: RecordStatus;
 }
 
 export interface Messages {

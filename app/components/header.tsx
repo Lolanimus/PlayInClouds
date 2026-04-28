@@ -6,7 +6,7 @@ import { Search, X, Menu, MapPin, ChevronLeft, ChevronRight, SlidersHorizontal }
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { NotificationsMenu } from "@/components/notifications-menu"
 import { Button } from "@/components/ui/button"
-import { useCurrentUserIsAdmin } from "@/hooks/useListings"
+import { useCurrentActor } from "@/hooks/useCurrentActor"
 import { cn } from "@/lib/utils"
 import { signout } from "~/api/supabase/auth"
 import { useSearchStore } from "@/store/search-store"
@@ -181,7 +181,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const navigate = useNavigate()
   const routeLocation = useLocation()
   const user = useUser()
-  const adminStatusQuery = useCurrentUserIsAdmin({ enabled: Boolean(user) })
+  const actorQuery = useCurrentActor({ enabled: Boolean(user) })
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
@@ -225,7 +225,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   const activeFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const closingFieldRef = useRef<"where" | "when" | "who" | null>(null)
   const pendingFieldRef = useRef<"where" | "when" | "who" | null>(null)
-  const isAdmin = Boolean(adminStatusQuery.data)
+  const canModerateListings = Boolean(
+    actorQuery.data?.accountStatus === "ACTIVE"
+    && actorQuery.data.permissions.includes("listings.moderate")
+  )
 
   const transitionToField = useCallback((nextField: "where" | "when" | "who" | null) => {
     const currentField = activeFieldRef.current
@@ -953,7 +956,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
                     >
                       Host tools
                     </button>
-                    {isAdmin ? (
+                    {canModerateListings ? (
                       <Link
                         to="/admin/listings"
                         onClick={() => setIsUserMenuOpen(false)}

@@ -27,6 +27,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const query = listUserActiveReservationsQuerySchema.parse(request.query ?? {});
       const reservations = await listUserActiveReservationsService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         query,
       });
@@ -42,6 +43,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const query = countUserPastReservationsQuerySchema.parse(request.query ?? {});
       const count = await countUserPastReservationsService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         query,
       });
@@ -57,6 +59,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const query = listUserPastReservationsQuerySchema.parse(request.query ?? {});
       const reservations = await listUserPastReservationsService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         query,
       });
@@ -72,6 +75,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const query = listHostMonthlyReservationsQuerySchema.parse(request.query ?? {});
       const reservations = await listHostMonthlyReservationsService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         query,
       });
@@ -87,6 +91,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const params = reservationIdParamsSchema.parse(request.params);
       const reservation = await getReservationService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         reservationId: params.id,
       });
@@ -102,6 +107,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const body = createReservationBodySchema.parse(request.body ?? {});
       const reservation = await createReservationService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         input: body,
       });
@@ -117,6 +123,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const params = reservationIdParamsSchema.parse(request.params);
       const reservation = await cancelReservationService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         reservationId: params.id,
       });
@@ -132,6 +139,7 @@ export async function registerReservationRoutes(app: FastifyInstance) {
       const auth = await requireAccessToken(request);
       const params = reservationIdParamsSchema.parse(request.params);
       const reservation = await confirmReservationService({
+        actor: auth.actor,
         accessToken: auth.accessToken,
         reservationId: params.id,
       });

@@ -14,14 +14,20 @@ import type {
   UpsertListingWeeklySlotBody,
 } from "../schemas/hours";
 
-export async function listListingWeekSlots(args: { query: ListListingWeekSlotsQuery }) {
+export async function listListingWeekSlots(args: {
+  query: ListListingWeekSlotsQuery;
+  accessToken?: string;
+}) {
   return withClientErrorHandling(async () => {
     const data = await listListingWeekSlotsRpc(args);
     return data as ListingHourSlot[] | null;
   }, "Failed to list listing week slots");
 }
 
-export async function listListingMonthSlots(args: { query: ListListingMonthSlotsQuery }) {
+export async function listListingMonthSlots(args: {
+  query: ListListingMonthSlotsQuery;
+  accessToken?: string;
+}) {
   return withClientErrorHandling(async () => {
     const data = await listListingMonthSlotsRpc(args);
     return data as ListingHourSlot[] | null;

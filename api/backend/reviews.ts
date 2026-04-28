@@ -3,6 +3,7 @@ import type { PendingReservationReview, ReservationReview, Review } from "@/type
 import {
   buildQueryString,
   getAccessToken,
+  getOptionalAccessToken,
   requestBackend,
 } from "./shared";
 
@@ -45,8 +46,10 @@ export async function listReviews(
   p_limit = 6,
   p_offset = 0
 ): Promise<Review[] | null> {
+  const accessToken = await getOptionalAccessToken();
   const payload = await requestBackend<{ reviews: Review[] | null }>({
     path: `/api/reviews${buildQueryString({ p_listing_id, p_limit, p_offset })}`,
+    accessToken,
     fallbackMessage: "Failed to list reviews",
   });
 

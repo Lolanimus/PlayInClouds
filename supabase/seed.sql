@@ -6,6 +6,7 @@
 --   leo@airdrums.demo          -> host with approved + rejected listings
 --   gina@airdrums.demo         -> verified guest with completed + future stays
 --   sam@airdrums.demo          -> guest with pending request + review reminder
+--   antox.qscwdv@gmail.com     -> demo user account for Artem Melnikov
 --
 -- Run with:
 --   supabase db reset
@@ -23,12 +24,16 @@ begin;
 -- leo  : 10000000-0000-4000-8000-000000000003
 -- gina : 10000000-0000-4000-8000-000000000004
 -- sam  : 10000000-0000-4000-8000-000000000005
+-- artem: 10000000-0000-4000-8000-000000000006
 --
 -- listings
 -- loft    : 20000000-0000-4000-8000-000000000001
 -- night   : 20000000-0000-4000-8000-000000000002
 -- pending : 20000000-0000-4000-8000-000000000003
 -- reject  : 20000000-0000-4000-8000-000000000004
+-- soho    : 20000000-0000-4000-8000-000000000005
+-- brooklyn: 20000000-0000-4000-8000-000000000006
+-- harlem  : 20000000-0000-4000-8000-000000000007
 
 -- ---------------------------------------------------------------------------
 -- Cleanup existing demo data so the seed is idempotent.
@@ -97,7 +102,10 @@ where listing_id in (
   '20000000-0000-4000-8000-000000000001',
   '20000000-0000-4000-8000-000000000002',
   '20000000-0000-4000-8000-000000000003',
-  '20000000-0000-4000-8000-000000000004'
+  '20000000-0000-4000-8000-000000000004',
+  '20000000-0000-4000-8000-000000000005',
+  '20000000-0000-4000-8000-000000000006',
+  '20000000-0000-4000-8000-000000000007'
 );
 
 delete from public.listing_booking_policies
@@ -105,7 +113,10 @@ where listing_id in (
   '20000000-0000-4000-8000-000000000001',
   '20000000-0000-4000-8000-000000000002',
   '20000000-0000-4000-8000-000000000003',
-  '20000000-0000-4000-8000-000000000004'
+  '20000000-0000-4000-8000-000000000004',
+  '20000000-0000-4000-8000-000000000005',
+  '20000000-0000-4000-8000-000000000006',
+  '20000000-0000-4000-8000-000000000007'
 );
 
 delete from public.listings
@@ -113,7 +124,10 @@ where id in (
   '20000000-0000-4000-8000-000000000001',
   '20000000-0000-4000-8000-000000000002',
   '20000000-0000-4000-8000-000000000003',
-  '20000000-0000-4000-8000-000000000004'
+  '20000000-0000-4000-8000-000000000004',
+  '20000000-0000-4000-8000-000000000005',
+  '20000000-0000-4000-8000-000000000006',
+  '20000000-0000-4000-8000-000000000007'
 );
 
 delete from auth.identities
@@ -122,14 +136,16 @@ where user_id in (
   '10000000-0000-4000-8000-000000000002',
   '10000000-0000-4000-8000-000000000003',
   '10000000-0000-4000-8000-000000000004',
-  '10000000-0000-4000-8000-000000000005'
+  '10000000-0000-4000-8000-000000000005',
+  '10000000-0000-4000-8000-000000000006'
 )
 or provider_id in (
   'admin@airdrums.demo',
   'mona@airdrums.demo',
   'leo@airdrums.demo',
   'gina@airdrums.demo',
-  'sam@airdrums.demo'
+  'sam@airdrums.demo',
+  'antox.qscwdv@gmail.com'
 );
 
 delete from auth.users
@@ -138,14 +154,16 @@ where id in (
   '10000000-0000-4000-8000-000000000002',
   '10000000-0000-4000-8000-000000000003',
   '10000000-0000-4000-8000-000000000004',
-  '10000000-0000-4000-8000-000000000005'
+  '10000000-0000-4000-8000-000000000005',
+  '10000000-0000-4000-8000-000000000006'
 )
 or email in (
   'admin@airdrums.demo',
   'mona@airdrums.demo',
   'leo@airdrums.demo',
   'gina@airdrums.demo',
-  'sam@airdrums.demo'
+  'sam@airdrums.demo',
+  'antox.qscwdv@gmail.com'
 );
 
 -- ---------------------------------------------------------------------------
@@ -238,6 +256,20 @@ values
     now(),
     now(),
     '', '', '', ''
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
+    '10000000-0000-4000-8000-000000000006',
+    'authenticated',
+    'authenticated',
+    'antox.qscwdv@gmail.com',
+    extensions.crypt('sukablya', extensions.gen_salt('bf')),
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{"first_name":"Artem","last_name":"Melnikov"}'::jsonb,
+    now(),
+    now(),
+    '', '', '', ''
   );
 
 insert into auth.identities (
@@ -290,14 +322,19 @@ values
     'email',
     'sam@airdrums.demo',
     now(), now(), now()
+  ),
+  (
+    '11000000-0000-4000-8000-000000000006',
+    '10000000-0000-4000-8000-000000000006',
+    '{"sub":"10000000-0000-4000-8000-000000000006","email":"antox.qscwdv@gmail.com"}'::jsonb,
+    'email',
+    'antox.qscwdv@gmail.com',
+    now(), now(), now()
   );
 
 update public."user"
 set
-  is_admin = case
-    when id = '10000000-0000-4000-8000-000000000001' then true
-    else false
-  end,
+  account_status = 'ACTIVE'::public.account_status,
   id_verified_at = case
     when id in (
       '10000000-0000-4000-8000-000000000001',
@@ -313,8 +350,20 @@ where id in (
   '10000000-0000-4000-8000-000000000002',
   '10000000-0000-4000-8000-000000000003',
   '10000000-0000-4000-8000-000000000004',
-  '10000000-0000-4000-8000-000000000005'
+  '10000000-0000-4000-8000-000000000005',
+  '10000000-0000-4000-8000-000000000006'
 );
+
+insert into public.user_roles (user_id, role)
+values
+  ('10000000-0000-4000-8000-000000000001', 'USER'::public.user_role),
+  ('10000000-0000-4000-8000-000000000001', 'ADMIN'::public.user_role),
+  ('10000000-0000-4000-8000-000000000002', 'USER'::public.user_role),
+  ('10000000-0000-4000-8000-000000000003', 'USER'::public.user_role),
+  ('10000000-0000-4000-8000-000000000004', 'USER'::public.user_role),
+  ('10000000-0000-4000-8000-000000000005', 'USER'::public.user_role),
+  ('10000000-0000-4000-8000-000000000006', 'USER'::public.user_role)
+on conflict (user_id, role) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- Listings: approved, instant-booking approved, pending moderation, rejected.
@@ -342,6 +391,7 @@ insert into public.listings (
   instructions,
   moderation_status,
   moderation_message,
+  status,
   submitted_at,
   reviewed_at,
   reviewed_by,
@@ -375,6 +425,7 @@ values
     'Use the side entrance keypad. Code is shared once your stay is confirmed.',
     'APPROVED',
     null,
+    'ACTIVE',
     now() - interval '21 days',
     now() - interval '20 days',
     '10000000-0000-4000-8000-000000000001',
@@ -407,6 +458,7 @@ values
     'Please arrive 5 minutes early so I can help you get patched in.',
     'APPROVED',
     null,
+    'ACTIVE',
     now() - interval '18 days',
     now() - interval '17 days',
     '10000000-0000-4000-8000-000000000001',
@@ -438,6 +490,7 @@ values
     'Entrance is around the back of the building near the alley gate.',
     'PENDING_APPROVAL',
     null,
+    'ACTIVE',
     now() - interval '2 days',
     null,
     null,
@@ -469,11 +522,111 @@ values
     'Check in with the venue manager upstairs on arrival.',
     'REJECTED',
     'Please upload brighter photos and clarify parking/access details before resubmitting.',
+    'ACTIVE',
     now() - interval '5 days',
     now() - interval '3 days',
     '10000000-0000-4000-8000-000000000001',
     now() - interval '5 days',
     now() - interval '3 days'
+  ),
+  (
+    '20000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000002',
+    40.7228,
+    -74.0007,
+    '121 Wooster Street, New York, NY',
+    'SoHo Session Suite',
+    'Polished downtown studio for writing and overdubs',
+    'RECORDING_STUDIO',
+    48,
+    array[
+      'https://images.unsplash.com/photo-1516280030429-27679b3dc9cf?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=1200&q=80'
+    ],
+    'A warm SoHo writing room with enough isolation for tight overdubs, vocal takes, and late-afternoon production sessions.',
+    'Maple kit, upright piano, stereo monitors, outboard preamps, ribbon mic, headphone mixer.',
+    'Elevator access, espresso bar, lounge sofa, fast Wi-Fi, freight elevator for load-in.',
+    38,
+    12,
+    1,
+    'America/New_York',
+    'I usually meet guests downstairs for the first visit and can help with load-in if you message ahead.',
+    'No smoking, keep drinks off the desk, and use the rug under heavy stands to protect the floor.',
+    'Use the Mercer entrance after 5pm and message when you arrive so I can buzz you up.',
+    'APPROVED',
+    null,
+    'ACTIVE',
+    now() - interval '16 days',
+    now() - interval '15 days',
+    '10000000-0000-4000-8000-000000000001',
+    now() - interval '16 days',
+    now() - interval '1 day'
+  ),
+  (
+    '20000000-0000-4000-8000-000000000006',
+    '10000000-0000-4000-8000-000000000002',
+    40.6782,
+    -73.9442,
+    '80 Atlantic Avenue, Brooklyn, NY',
+    'Brooklyn Band House',
+    'Big live room for rehearsals, showcases, and pre-tour run-throughs',
+    'REHEARSAL_SPACE',
+    42,
+    array[
+      'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1200&q=80'
+    ],
+    'A roomy Brooklyn rehearsal spot with enough footprint for full bands, playback rehearsals, and production rehearsals.',
+    'Five-piece house kit, bass stack, two guitar cabs, small mixer, vocal wedges, rolling risers.',
+    'Street-level load-in, HVAC, water station, coat rack, private restroom.',
+    55,
+    24,
+    2,
+    'America/New_York',
+    'Happy to leave extra mic stands out if you tell me your input list before arrival.',
+    'Keep the front door closed during rehearsals and reset the room before leaving.',
+    'Ring the gray side doorbell and take the hallway all the way to Studio 3.',
+    'APPROVED',
+    null,
+    'ACTIVE',
+    now() - interval '14 days',
+    now() - interval '13 days',
+    '10000000-0000-4000-8000-000000000001',
+    now() - interval '14 days',
+    now() - interval '12 hours'
+  ),
+  (
+    '20000000-0000-4000-8000-000000000007',
+    '10000000-0000-4000-8000-000000000002',
+    40.8116,
+    -73.9465,
+    '230 Lenox Avenue, New York, NY',
+    'Harlem Creative Loft',
+    'Airy uptown room for lessons, rehearsals, and content shoots',
+    'OTHER',
+    39,
+    array[
+      'https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1460723237483-7a6dc9d0b212?auto=format&fit=crop&w=1200&q=80'
+    ],
+    'A bright Harlem loft that works for compact rehearsals, drum lessons, and music content sessions with natural light.',
+    'Compact drum kit, keyboard stand, combo amp, ring lights, folding producer desk, PA speaker.',
+    'Natural light, freight elevator, kitchenette, portable AC, nearby parking garage.',
+    46,
+    24,
+    3,
+    'America/New_York',
+    'Please share your planned setup if you need the room staged differently before arrival.',
+    'Shoes off on the rug, no glitter or smoke effects, and keep hallway noise low after 8pm.',
+    'Take the elevator to floor 4 and use the call box marked Loft C if the door is locked.',
+    'APPROVED',
+    null,
+    'ACTIVE',
+    now() - interval '12 days',
+    now() - interval '11 days',
+    '10000000-0000-4000-8000-000000000001',
+    now() - interval '12 days',
+    now() - interval '6 hours'
   );
 
 insert into public.listing_booking_policies (
@@ -526,6 +679,36 @@ values
     '{}'::jsonb,
     now() - interval '5 days',
     now() - interval '5 days'
+  ),
+  (
+    '20000000-0000-4000-8000-000000000005',
+    true,
+    1,
+    1,
+    true,
+    '{"preferred_session_types":["writing","overdubs","vocals"]}'::jsonb,
+    now() - interval '16 days',
+    now() - interval '16 days'
+  ),
+  (
+    '20000000-0000-4000-8000-000000000006',
+    false,
+    null,
+    null,
+    false,
+    '{"notes":"Best for full-band rehearsals and playback sessions."}'::jsonb,
+    now() - interval '14 days',
+    now() - interval '14 days'
+  ),
+  (
+    '20000000-0000-4000-8000-000000000007',
+    false,
+    null,
+    null,
+    false,
+    '{"notes":"Natural-light setup works well for lessons and content days."}'::jsonb,
+    now() - interval '12 days',
+    now() - interval '12 days'
   );
 
 insert into public.listing_weekly_slots (
@@ -548,7 +731,10 @@ from (
     ('20000000-0000-4000-8000-000000000001'::uuid, 35::double precision),
     ('20000000-0000-4000-8000-000000000002'::uuid, 55::double precision),
     ('20000000-0000-4000-8000-000000000003'::uuid, 22::double precision),
-    ('20000000-0000-4000-8000-000000000004'::uuid, 18::double precision)
+    ('20000000-0000-4000-8000-000000000004'::uuid, 18::double precision),
+    ('20000000-0000-4000-8000-000000000005'::uuid, 48::double precision),
+    ('20000000-0000-4000-8000-000000000006'::uuid, 42::double precision),
+    ('20000000-0000-4000-8000-000000000007'::uuid, 39::double precision)
 ) as listing_data(listing_id, price)
 cross join generate_series(0, 6) as weekday_series(weekday)
 cross join generate_series(8, 22) as hour_series(hour);
@@ -661,25 +847,28 @@ alter table public.reservations enable trigger validate_and_price_reservation;
 -- ---------------------------------------------------------------------------
 -- Chats and messages tied to reservations/listings.
 -- ---------------------------------------------------------------------------
-insert into public.chats (id, chat_type, metadata, listing_id)
+insert into public.chats (id, chat_type, metadata, listing_id, status)
 values
   (
     '50000000-0000-4000-8000-000000000001',
     'DIRECT',
     '{}'::jsonb,
-    '20000000-0000-4000-8000-000000000001'
+    '20000000-0000-4000-8000-000000000001',
+    'ACTIVE'
   ),
   (
     '50000000-0000-4000-8000-000000000002',
     'DIRECT',
     '{}'::jsonb,
-    '20000000-0000-4000-8000-000000000002'
+    '20000000-0000-4000-8000-000000000002',
+    'ACTIVE'
   ),
   (
     '50000000-0000-4000-8000-000000000003',
     'DIRECT',
     '{}'::jsonb,
-    '20000000-0000-4000-8000-000000000001'
+    '20000000-0000-4000-8000-000000000001',
+    'ACTIVE'
   );
 
 insert into public.chat_participants (chat_id, participant_id, metadata)
@@ -694,7 +883,7 @@ values
 with message_times as (
   select date_trunc('day', now()) as today_start
 )
-insert into public.chat_messages (id, sender_id, chat_id, contents, created_at, metadata)
+insert into public.chat_messages (id, sender_id, chat_id, contents, created_at, metadata, status)
 select * from (
   select
     '51000000-0000-4000-8000-000000000001'::uuid,
@@ -702,7 +891,8 @@ select * from (
     '50000000-0000-4000-8000-000000000001'::uuid,
     'Thanks again for booking the loft. Let me know if you want me to leave the extra snare stand out.',
     mt.today_start - interval '6 days' + interval '11 hours',
-    '{}'::jsonb
+    '{}'::jsonb,
+    'ACTIVE'::public.record_status
   from message_times mt
 
   union all
@@ -713,7 +903,8 @@ select * from (
     '50000000-0000-4000-8000-000000000001'::uuid,
     'That would be perfect. The room sounded great for our drum takes.',
     mt.today_start - interval '5 days' + interval '22 hours',
-    '{}'::jsonb
+    '{}'::jsonb,
+    'ACTIVE'::public.record_status
   from message_times mt
 
   union all
@@ -724,7 +915,8 @@ select * from (
     '50000000-0000-4000-8000-000000000002'::uuid,
     'Your session is wrapped up. If you need stems exported, I can send them over tonight.',
     mt.today_start - interval '1 day' + interval '20 hours',
-    '{}'::jsonb
+    '{}'::jsonb,
+    'ACTIVE'::public.record_status
   from message_times mt
 
   union all
@@ -735,7 +927,8 @@ select * from (
     '50000000-0000-4000-8000-000000000002'::uuid,
     'Amazing, thanks. I still need to leave you a review too.',
     mt.today_start - interval '1 day' + interval '21 hours',
-    '{}'::jsonb
+    '{}'::jsonb,
+    'ACTIVE'::public.record_status
   from message_times mt
 
   union all
@@ -746,7 +939,8 @@ select * from (
     '50000000-0000-4000-8000-000000000003'::uuid,
     'Hey Mona, I just sent a reservation request for Friday evening.',
     mt.today_start + interval '1 hour',
-    '{}'::jsonb
+    '{}'::jsonb,
+    'ACTIVE'::public.record_status
   from message_times mt
 ) seeded_messages;
 
@@ -762,6 +956,7 @@ insert into public.reservation_reviews (
   reviewer_role,
   rating,
   text,
+  status,
   created_at,
   updated_at
 )
@@ -775,6 +970,7 @@ values
     'BOOKER_TO_HOST',
     4.8,
     'Mona was responsive, the room was exactly as described, and the kit setup made load-in super easy.',
+    'ACTIVE',
     now() - interval '4 days',
     now() - interval '4 days'
   ),
@@ -787,6 +983,7 @@ values
     'HOST_TO_BOOKER',
     5.0,
     'Gina and her band were punctual, respectful, and left the room in excellent shape.',
+    'ACTIVE',
     now() - interval '4 days' + interval '30 minutes',
     now() - interval '4 days' + interval '30 minutes'
   );
@@ -807,6 +1004,7 @@ insert into public.notifications (
   payload,
   is_read,
   read_at,
+  status,
   created_at
 )
 values
@@ -822,6 +1020,7 @@ values
     jsonb_build_object('listing_id', '20000000-0000-4000-8000-000000000001', 'moderation_status', 'APPROVED'),
     true,
     now() - interval '19 days',
+    'ACTIVE',
     now() - interval '19 days'
   ),
   (
@@ -836,6 +1035,7 @@ values
     jsonb_build_object('listing_id', '20000000-0000-4000-8000-000000000004', 'moderation_status', 'REJECTED'),
     false,
     null,
+    'ACTIVE',
     now() - interval '3 days'
   ),
   (
@@ -850,6 +1050,7 @@ values
     jsonb_build_object('reservation_id', '40000000-0000-4000-8000-000000000002', 'listing_id', '20000000-0000-4000-8000-000000000001'),
     false,
     null,
+    'ACTIVE',
     now() - interval '1 day'
   ),
   (
@@ -864,6 +1065,7 @@ values
     jsonb_build_object('reservation_id', '40000000-0000-4000-8000-000000000003', 'listing_id', '20000000-0000-4000-8000-000000000002'),
     false,
     null,
+    'ACTIVE',
     now() - interval '2 days'
   ),
   (
@@ -878,6 +1080,7 @@ values
     jsonb_build_object('reservation_id', '40000000-0000-4000-8000-000000000004', 'listing_id', '20000000-0000-4000-8000-000000000002'),
     true,
     now() - interval '3 days',
+    'ACTIVE',
     now() - interval '3 days'
   ),
   (
@@ -892,6 +1095,7 @@ values
     jsonb_build_object('chat_id', '50000000-0000-4000-8000-000000000003', 'listing_id', '20000000-0000-4000-8000-000000000001', 'sender_id', '10000000-0000-4000-8000-000000000005'),
     false,
     null,
+    'ACTIVE',
     now() - interval '2 hours'
   ),
   (
@@ -906,6 +1110,7 @@ values
     jsonb_build_object('review_id', '60000000-0000-4000-8000-000000000001', 'reservation_id', '40000000-0000-4000-8000-000000000001'),
     false,
     null,
+    'ACTIVE',
     now() - interval '4 days'
   ),
   (
@@ -920,6 +1125,7 @@ values
     jsonb_build_object('review_id', '60000000-0000-4000-8000-000000000002', 'reservation_id', '40000000-0000-4000-8000-000000000001'),
     false,
     null,
+    'ACTIVE',
     now() - interval '4 days' + interval '30 minutes'
   ),
   (
@@ -941,6 +1147,7 @@ values
     ),
     false,
     null,
+    'ACTIVE',
     now() - interval '1 day'
   ),
   (
@@ -962,6 +1169,7 @@ values
     ),
     false,
     null,
+    'ACTIVE',
     now() - interval '1 day'
   );
 

@@ -1,6 +1,6 @@
 import type { Database as DatabaseGenerated, Json } from "../database-generated.types";
 import type { MergeDeep } from "type-fest";
-import type { Chat, Listing, ListingBookingPolicy, ListingHourSlot, ListingModerationQueueItem, Message, Messages, Notification, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
+import type { ActorContextPayload, Chat, Listing, ListingBookingPolicy, ListingHourSlot, ListingModerationQueueItem, Message, Messages, Notification, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
 
 export type Database = MergeDeep<
   DatabaseGenerated,
@@ -57,6 +57,9 @@ export type Database = MergeDeep<
         }
         current_user_is_admin: {
           Returns: boolean
+        }
+        get_actor_context_by_user_id: {
+          Returns: ActorContextPayload | null
         }
         get_listing: {
           Returns: Listing 

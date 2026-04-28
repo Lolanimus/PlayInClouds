@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 
 import { sendRouteError } from "../lib/http";
-import { requireAccessToken } from "../middleware/auth";
+import { getOptionalAccessToken, requireAccessToken } from "../middleware/auth";
 import {
   createReservationReviewBodySchema,
   listReviewsQuerySchema,
@@ -31,8 +31,12 @@ export async function registerReviewRoutes(app: FastifyInstance) {
 
   app.get("/api/reviews", async (request, reply) => {
     try {
+      const auth = await getOptionalAccessToken(request);
       const query = listReviewsQuerySchema.parse(request.query ?? {});
-      const reviews = await listReviewsService({ query });
+      const reviews = await listReviewsService({
+        query,
+        accessToken: auth?.accessToken,
+      });
 
       return reply.code(200).send({ reviews });
     } catch (error) {

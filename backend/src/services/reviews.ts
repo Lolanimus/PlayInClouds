@@ -25,10 +25,15 @@ export async function updateReservationReviewService(args: {
   return updateReservationReview(args);
 }
 
-export async function listReviewsService(args: { query: ListReviewsQuery }) {
+export async function listReviewsService(args: {
+  query: ListReviewsQuery;
+  accessToken?: string;
+}) {
   return listReviews(args);
 }
 
-export async function listPendingReservationReviewsService(args: { accessToken: string }) {
+export async function listPendingReservationReviewsService(args: {
+  accessToken: string;
+}) {
   return listPendingReservationReviews(args);
 }

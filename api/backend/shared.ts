@@ -18,6 +18,14 @@ export async function getAccessToken(message: string) {
   return accessToken;
 }
 
+export async function getOptionalAccessToken() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.access_token ?? undefined;
+}
+
 export function buildQueryString(params: Record<string, string | number | null | undefined>) {
   const searchParams = new URLSearchParams();
 

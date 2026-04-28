@@ -1,6 +1,7 @@
 import "dotenv/config";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
+import { registerAuthRoutes } from "./routes/auth";
 import { registerHourRoutes } from "./routes/hours";
 import { registerListingRoutes } from "./routes/listings";
 import { registerProfileRoutes } from "./routes/profile";
@@ -35,6 +36,7 @@ app.get("/health", async () => {
     return { ok: true };
 });
 
+await registerAuthRoutes(app);
 await registerListingRoutes(app);
 await registerReviewRoutes(app);
 await registerReservationRoutes(app);

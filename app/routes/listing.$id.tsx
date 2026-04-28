@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
-import { ChevronLeft, Heart, Plus, Share, Star, X, Minus } from "lucide-react"
+import { ChevronLeft, Heart, MessageCircle, Plus, Share, Star, X, Minus } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { UserProfileCard } from "@/components/user-profile-card"
 import { useGetListing } from "@/hooks/useListings"
@@ -219,6 +219,7 @@ export default function ListingDetailsPage() {
   const [selectedStartHour, setSelectedStartHour] = useState<number | null>(null)
   const [selectedEndHour, setSelectedEndHour] = useState<number | null>(null)
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false)
+  const [authModalIntent, setAuthModalIntent] = useState<"booking" | "chat">("booking")
   const [reviewsPage, setReviewsPage] = useState(1)
   const hasInitializedSelectionRef = useRef(false)
   const now = new Date()
@@ -554,11 +555,35 @@ export default function ListingDetailsPage() {
     })
 
     if (!user) {
+    setAuthModalIntent("booking")
       setIsAuthModalOpen(true)
       return
     }
 
     navigate(`/payment?${params.toString()}`)
+  }
+
+  const hostChatUrl = useMemo(() => {
+  if (!listing?.id || !listing.ownerId) return null
+
+  const params = new URLSearchParams({
+    listingId: String(listing.id),
+    targetUserId: listing.ownerId,
+  })
+
+  return `/chat?${params.toString()}`
+  }, [listing?.id, listing?.ownerId])
+
+  const handleHostChatClick = () => {
+  if (!hostChatUrl) return
+
+  if (!user) {
+    setAuthModalIntent("chat")
+    setIsAuthModalOpen(true)
+    return
+  }
+
+  navigate(hostChatUrl)
   }
 
   useEffect(() => {
@@ -782,6 +807,18 @@ export default function ListingDetailsPage() {
                     variant="compact"
                     title="Hosted by"
                     description="See who runs this space before you book."
+                    footer={
+            hostChatUrl && user?.id !== listing.ownerId ? (
+            <Button
+              type="button"
+              onClick={handleHostChatClick}
+              className="w-full rounded-2xl bg-[#111111] text-[#ffffff] hover:bg-[#222222]"
+            >
+              <MessageCircle className="mr-2 h-4 w-4" />
+              Chat with host
+            </Button>
+            ) : null
+          }
                     className="p-0 border-none bg-transparent shadow-none"
                   />
                 ) : null}
@@ -1157,6 +1194,12 @@ export default function ListingDetailsPage() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onLogin={() => {
+          if (authModalIntent === "chat") {
+			const redirect = hostChatUrl ?? `/listing/${listing?.id ?? ""}`
+			navigate(`/login?redirect=${encodeURIComponent(redirect)}`)
+			return
+		  }
+
           if (!listing || !selectedDay || selectedStartHour === null || selectedEndHour === null) {
             navigate(`/login?redirect=${encodeURIComponent(`/listing/${listing?.id ?? ""}`)}`)
             return
@@ -1173,6 +1216,12 @@ export default function ListingDetailsPage() {
           navigate(`/login?redirect=${encodeURIComponent(`/payment?${params.toString()}`)}`)
         }}
         onSignup={() => {
+          if (authModalIntent === "chat") {
+			const redirect = hostChatUrl ?? `/listing/${listing?.id ?? ""}`
+			navigate(`/signup?redirect=${encodeURIComponent(redirect)}`)
+			return
+		  }
+
           if (!listing || !selectedDay || selectedStartHour === null || selectedEndHour === null) {
             navigate(`/signup?redirect=${encodeURIComponent(`/listing/${listing?.id ?? ""}`)}`)
             return
@@ -1188,8 +1237,8 @@ export default function ListingDetailsPage() {
 
           navigate(`/signup?redirect=${encodeURIComponent(`/payment?${params.toString()}`)}`)
         }}
-        title="Login required to continue"
-        description="Please log in or sign up to continue to checkout."
+        title={authModalIntent === "chat" ? "Login required to message host" : "Login required to continue"}
+        description={authModalIntent === "chat" ? "Please log in or sign up to start chatting with this host." : "Please log in or sign up to continue to checkout."}
       />
     </div>
   )

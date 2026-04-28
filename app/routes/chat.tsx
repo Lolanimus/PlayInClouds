@@ -184,9 +184,10 @@ export default function ChatPage() {
   const [draft, setDraft] = useState("")
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const locationState = (location.state as ChatLocationState | null) ?? null
-  const requestedListingId = locationState?.listingId
-  const requestedTargetUserId = locationState?.targetUserId
-  const requestedReservationIdFromState = locationState?.reservationId
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const requestedListingId = locationState?.listingId ?? searchParams.get("listingId") ?? undefined
+  const requestedTargetUserId = locationState?.targetUserId ?? searchParams.get("targetUserId") ?? undefined
+  const requestedReservationIdFromState = locationState?.reservationId ?? searchParams.get("reservationId") ?? undefined
   const threadBottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -338,8 +339,30 @@ export default function ChatPage() {
       })
     }
 
+    if (
+    requestedListingId
+    && requestedTargetUserId
+    && requestedTargetUserId !== user.id
+  ) {
+    const listing = listingsById.get(requestedListingId)
+    const key = `direct:${requestedListingId}:${requestedTargetUserId}`
+
+    mergeConversation(key, {
+    id: key,
+    peerLabel: listing?.owner_id === requestedTargetUserId
+      ? `Host • ${listing?.title ?? "Listing"}`
+      : shortLabel(requestedTargetUserId),
+    listingTitle: listing?.title ?? "Listing",
+    subtitle: "Direct chat",
+    updatedAt: new Date().toISOString(),
+    listingImageUrl: listing?.images?.[0],
+    listingId: requestedListingId,
+    targetUserId: requestedTargetUserId,
+    })
+  }
+
     return Array.from(map.values()).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-  }, [chatRows, guestReservations, hostReservations, listingsById, user])
+  }, [chatRows, guestReservations, hostReservations, listingsById, requestedListingId, requestedTargetUserId, user])
 
   useEffect(() => {
     if (conversations.length === 0) {

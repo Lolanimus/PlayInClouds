@@ -36,7 +36,10 @@ export async function updateReservationReview(args: {
   }, "Failed to update reservation review");
 }
 
-export async function listReviews(args: { query: ListReviewsQuery }) {
+export async function listReviews(args: {
+  query: ListReviewsQuery;
+  accessToken?: string;
+}) {
   return withClientErrorHandling(async () => {
     const data = await listReviewsRpc(args);
     return data as Review[] | null;

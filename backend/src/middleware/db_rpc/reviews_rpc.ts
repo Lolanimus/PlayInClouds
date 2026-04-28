@@ -38,8 +38,13 @@ export async function updateReservationReviewRpc(args: {
   return data as ReservationReview | null;
 }
 
-export async function listReviewsRpc(args: { query: ListReviewsQuery }) {
-  const supabase = createPublicSupabaseClient();
+export async function listReviewsRpc(args: {
+  query: ListReviewsQuery;
+  accessToken?: string;
+}) {
+  const supabase = args.accessToken
+    ? createAuthedSupabaseClient(args.accessToken)
+    : createPublicSupabaseClient();
   const { data, error } = await supabase.rpc("list_reviews", {
     p_listing_id: args.query.p_listing_id ?? null,
     p_limit: args.query.p_limit ?? 6,

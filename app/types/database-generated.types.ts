@@ -22,16 +22,16 @@ export type Database = {
           id: string
           metadata: Json | null
           sender_id: string
+          status: Database["public"]["Enums"]["record_status"]
         }
-              p_instructions?: string
         Insert: {
           chat_id: string
           contents: string
-              p_rules?: string
           created_at?: string
           id?: string
           metadata?: Json | null
           sender_id: string
+          status?: Database["public"]["Enums"]["record_status"]
         }
         Update: {
           chat_id?: string
@@ -40,6 +40,7 @@ export type Database = {
           id?: string
           metadata?: Json | null
           sender_id?: string
+          status?: Database["public"]["Enums"]["record_status"]
         }
         Relationships: [
           {
@@ -96,16 +97,19 @@ export type Database = {
           chat_type: Database["public"]["Enums"]["chat_type"]
           id: string
           metadata: Json | null
+          status: Database["public"]["Enums"]["record_status"]
         }
         Insert: {
           chat_type: Database["public"]["Enums"]["chat_type"]
           id?: string
           metadata?: Json | null
+          status?: Database["public"]["Enums"]["record_status"]
         }
         Update: {
           chat_type?: Database["public"]["Enums"]["chat_type"]
           id?: string
           metadata?: Json | null
+          status?: Database["public"]["Enums"]["record_status"]
         }
         Relationships: []
       }
@@ -210,6 +214,7 @@ export type Database = {
           rating_sum: number
           review_count: number
           rules: string
+          status: Database["public"]["Enums"]["record_status"]
           subtitle: string
           timezone: string
           title: string
@@ -236,6 +241,7 @@ export type Database = {
           rating_sum?: number
           review_count?: number
           rules?: string
+          status?: Database["public"]["Enums"]["record_status"]
           subtitle: string
           timezone?: string
           title: string
@@ -262,6 +268,7 @@ export type Database = {
           rating_sum?: number
           review_count?: number
           rules?: string
+          status?: Database["public"]["Enums"]["record_status"]
           subtitle?: string
           timezone?: string
           title?: string
@@ -330,6 +337,7 @@ export type Database = {
           id: string
           listing_id: string
           rating: number
+          status: Database["public"]["Enums"]["record_status"]
           text: string
           updated_at: string
           user_id: string
@@ -339,6 +347,7 @@ export type Database = {
           id?: string
           listing_id: string
           rating: number
+          status?: Database["public"]["Enums"]["record_status"]
           text: string
           updated_at?: string
           user_id: string
@@ -348,6 +357,7 @@ export type Database = {
           id?: string
           listing_id?: string
           rating?: number
+          status?: Database["public"]["Enums"]["record_status"]
           text?: string
           updated_at?: string
           user_id?: string
@@ -371,6 +381,7 @@ export type Database = {
       }
       user: {
         Row: {
+          account_status: Database["public"]["Enums"]["account_status"]
           email: string | null
           first_name: string
           id: string
@@ -381,6 +392,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          account_status?: Database["public"]["Enums"]["account_status"]
           email?: string | null
           first_name: string
           id: string
@@ -391,6 +403,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_status?: Database["public"]["Enums"]["account_status"]
           email?: string | null
           first_name?: string
           id?: string
@@ -401,6 +414,32 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          role: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          role: Database["public"]["Enums"]["user_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -614,10 +653,13 @@ export type Database = {
       }
     }
     Enums: {
+      account_status: "ACTIVE" | "SUSPENDED" | "DELETED"
       chat_type: "DIRECT" | "GROUP" | "SELF"
       listing_category: "REHEARSAL_SPACE" | "RECORDING_STUDIO" | "OTHER"
+      record_status: "ACTIVE" | "DELETED"
       realtime_events: "chats_update"
       reservation_status: "PENDING" | "CONFIRMED" | "CANCELLED"
+      user_role: "USER" | "ADMIN" | "MODERATOR" | "SUPPORT"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -745,10 +787,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_status: ["ACTIVE", "SUSPENDED", "DELETED"],
       chat_type: ["DIRECT", "GROUP", "SELF"],
       listing_category: ["REHEARSAL_SPACE", "RECORDING_STUDIO", "OTHER"],
+      record_status: ["ACTIVE", "DELETED"],
       realtime_events: ["chats_update"],
       reservation_status: ["PENDING", "CONFIRMED", "CANCELLED"],
+      user_role: ["USER", "ADMIN", "MODERATOR", "SUPPORT"],
     },
   },
 } as const

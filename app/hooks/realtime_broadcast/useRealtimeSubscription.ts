@@ -30,8 +30,6 @@ export const useBroadcastSubscription = (
         config: { private: true },
       });
 
-      console.info(channel);
-
       channel
         .on("broadcast", { event: event_name }, () => {
           queryClient.invalidateQueries(queryKey);

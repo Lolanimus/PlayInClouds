@@ -3,6 +3,7 @@ import type { ListingHourSlot } from "@/types/custom/api.types";
 import {
   buildQueryString,
   getAccessToken,
+  getOptionalAccessToken,
   requestBackend,
 } from "./shared";
 
@@ -12,8 +13,10 @@ export async function listListingWeekSlots(
   p_listing_id: string,
   p_week: string = getCurrentIsoDate()
 ): Promise<ListingHourSlot[] | null> {
+  const accessToken = await getOptionalAccessToken();
   const payload = await requestBackend<{ slots: ListingHourSlot[] | null }>({
     path: `/api/hours/week${buildQueryString({ p_listing_id, p_week })}`,
+    accessToken,
     fallbackMessage: "Failed to list listing week slots",
   });
 
@@ -24,8 +27,10 @@ export async function listListingMonthSlots(
   p_listing_id: string,
   p_month: string = getCurrentIsoDate()
 ): Promise<ListingHourSlot[] | null> {
+  const accessToken = await getOptionalAccessToken();
   const payload = await requestBackend<{ slots: ListingHourSlot[] | null }>({
     path: `/api/hours/month${buildQueryString({ p_listing_id, p_month })}`,
+    accessToken,
     fallbackMessage: "Failed to list listing month slots",
   });
 

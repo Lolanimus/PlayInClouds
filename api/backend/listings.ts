@@ -1,9 +1,12 @@
-import supabase from "@/utils/supabase";
 import type { Database } from "@/types/database-generated.types";
 import type { Listing, ListingModerationQueueItem } from "@/types/custom/api.types";
 import type { Function } from "@/types/custom/rpc.types";
-
-const backendBaseUrl = (import.meta.env.VITE_BACKEND_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
+import {
+  buildQueryString,
+  getAccessToken,
+  getOptionalAccessToken,
+  requestBackend,
+} from "./shared";
 
 type ListingCategory = Database["public"]["Enums"]["listing_category"];
 type CreateListingArgs = {
@@ -26,65 +29,6 @@ type CreateListingArgs = {
   p_rules?: string;
   p_instructions?: string;
 };
-
-async function getAccessToken(message: string) {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  const accessToken = session?.access_token;
-
-  if (!accessToken) {
-    throw new Error(message);
-  }
-
-  return accessToken;
-}
-
-function buildQueryString(params: Record<string, string | number | null | undefined>) {
-  const searchParams = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(params)) {
-    if (value == null || value === "") continue;
-    searchParams.set(key, String(value));
-  }
-
-  const queryString = searchParams.toString();
-  return queryString ? `?${queryString}` : "";
-}
-
-async function requestBackend<T>(args: {
-  path: string;
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
-  body?: unknown;
-  accessToken?: string;
-  fallbackMessage: string;
-}): Promise<T> {
-  const response = await fetch(`${backendBaseUrl}${args.path}`, {
-    method: args.method ?? "GET",
-    credentials: "include",
-    headers: {
-      ...(args.body ? { "Content-Type": "application/json" } : {}),
-      ...(args.accessToken ? { Authorization: `Bearer ${args.accessToken}` } : {}),
-    },
-    ...(args.body ? { body: JSON.stringify(args.body) } : {}),
-  });
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message =
-      payload && typeof payload === "object" && "error" in payload
-        ? typeof payload.error === "string"
-          ? payload.error
-          : args.fallbackMessage
-        : args.fallbackMessage;
-
-    throw new Error(message);
-  }
-
-  return payload as T;
-}
 
 export async function createListing(
   p_lat: number,
@@ -139,8 +83,10 @@ export async function createListing(
 }
 
 export async function getListing(p_id: string): Promise<Listing> {
+  const accessToken = await getOptionalAccessToken();
   const payload = await requestBackend<{ listing: Listing }>({
     path: `/api/listings/${p_id}`,
+    accessToken,
     fallbackMessage: "Failed to get listing",
   });
 
@@ -155,6 +101,7 @@ export async function listListings(
   p_limit = 50,
   p_offset = 0
 ): Promise<Listing[] | null> {
+  const accessToken = await getOptionalAccessToken();
   const payload = await requestBackend<{ listings: Listing[] | null }>({
     path: `/api/listings${buildQueryString({
       p_address,
@@ -164,6 +111,7 @@ export async function listListings(
       p_limit,
       p_offset,
     })}`,
+    accessToken,
     fallbackMessage: "Failed to list listings",
   });
 
@@ -173,7 +121,7 @@ export async function listListings(
 export async function listOwnListings(): Promise<Listing[] | null> {
   const accessToken = await getAccessToken("You must be logged in to view your listings.");
   const payload = await requestBackend<{ listings: Listing[] | null }>({
-    path: "/api/listings/me/own",
+    path: "/api/listings/me",
     accessToken,
     fallbackMessage: "Failed to list your listings",
   });

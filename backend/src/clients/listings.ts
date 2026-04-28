@@ -31,15 +31,25 @@ export async function createListing(args: {
   }, "Failed to create listing");
 }
 
-export async function getListing(args: { listingId: string }) {
+export async function getListing(args: {
+  listingId: string;
+  accessToken?: string;
+}) {
   return withClientErrorHandling(async () => {
     const data = await getListingRpc(args);
 
-    return requireClientResult(data, "Listing not found", 404) as Listing;
+    if (!data?.id) {
+      return requireClientResult(null, "Listing not found", 404) as Listing;
+    }
+
+    return data as Listing;
   }, "Failed to get listing");
 }
 
-export async function listListings(args: { query: ListListingsQuery }) {
+export async function listListings(args: {
+  query: ListListingsQuery;
+  accessToken?: string;
+}) {
   return withClientErrorHandling(async () => {
     const data = await listListingsRpc(args);
     return data as Listing[] | null;
