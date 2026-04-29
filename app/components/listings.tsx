@@ -7,7 +7,6 @@ import { useListings } from "@/hooks/useListings"
 import { cn, formatListingCategory } from "@/lib/utils"
 import { useSearchStore } from "@/store/search-store"
 import { useHostListings } from "@/store/host_listings_state"
-import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
@@ -30,6 +29,7 @@ export type ListingItem = {
   conveniencesDesc?: string
   areaM2?: number
   advanceNoticeHours?: number | null
+  weeklySlotsByDay?: Record<string, number[]>
 }
 
 export function ListingCard({
@@ -185,6 +185,7 @@ export function Listings() {
       conveniencesDesc: item.conveniences_desc,
       areaM2: item.area_m2,
       advanceNoticeHours: item.advance_notice_hours,
+      weeklySlotsByDay: item.weekly_slots_by_day ?? {},
     }))
   }, [listingsQuery.data])
   const allListings = dbListings.length > 0 ? dbListings : hostListings
@@ -320,27 +321,18 @@ export function Listings() {
   const isAvailableInSelectedSlot = (listing: ListingItem) => {
     if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return false
 
-    const listingNumericId = Number(listing.id)
-    if (!Number.isFinite(listingNumericId)) return true
-
-    const availability = listingAvailability[listingNumericId]
-    if (!availability) return true
+    const slots = listing.weeklySlotsByDay
+    if (!slots || Object.keys(slots).length === 0) return false
 
     const selectedDay = selectedDateParam.getDay()
-    const requestedStart = selectedStartParam
-    const requestedEnd = selectedStartParam + selectedDurationParam
-    const bookedHoursForDay = listingBookedHours[listingNumericId]?.[selectedDay] ?? []
-    const hasBookedHourInRange = Array.from(
-      { length: selectedDurationParam },
-      (_, idx) => requestedStart + idx
-    ).some((hour) => bookedHoursForDay.includes(hour))
+    const hoursForDay = slots[String(selectedDay)]
+    if (!hoursForDay || hoursForDay.length === 0) return false
 
-    return (
-      availability.days.includes(selectedDay) &&
-      requestedStart >= availability.startHour &&
-      requestedEnd <= availability.endHour &&
-      !hasBookedHourInRange
-    )
+    // Every hour in [requestedStart, requestedStart + duration) must be a configured slot
+    for (let h = selectedStartParam; h < selectedStartParam + selectedDurationParam; h++) {
+      if (!hoursForDay.includes(h)) return false
+    }
+    return true
   }
 
   const availableNowListings = hasSelectedSlot
@@ -364,7 +356,7 @@ export function Listings() {
         </div>
       )}
 
-      {hasSelectedSlot && (
+      {hasSelectedSlot && availableNowListings.length > 0 && (
         <div className="rounded-xl border border-[#0f6130] bg-[#eaf8ef] p-3">
           <p className="text-sm font-medium text-[#000000]">Available at your selected day & time</p>
           <p className="text-xs text-[#6a6a6a] mt-1">Listings below are available first. Then we show options available at other times.</p>

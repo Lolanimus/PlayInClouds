@@ -59,6 +59,8 @@ export interface Listing {
 	reviewed_by: string | null;
 	created_at: string;
 	updated_at: string;
+	/** Map of weekday (0=Sun..6=Sat) → sorted array of available hours */
+	weekly_slots_by_day: Record<string, number[]>;
 }
 
 export interface ListingModerationQueueItem extends Listing {

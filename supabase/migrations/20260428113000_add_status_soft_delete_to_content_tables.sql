@@ -266,7 +266,16 @@ begin
       'address', case
         when strpos(l.address, ',') > 0 then ltrim(substr(l.address, strpos(l.address, ',') + 1))
         else l.address
-      end
+      end,
+      'weekly_slots_by_day', coalesce((
+        select jsonb_object_agg(s.weekday::text, s.hours)
+        from (
+          select weekday, jsonb_agg(hour order by hour) as hours
+          from public.listing_weekly_slots
+          where listing_id = l.id
+          group by weekday
+        ) s
+      ), '{}'::jsonb)
     )
   from public.listings l
   cross join lateral (
@@ -384,6 +393,25 @@ begin
     and owner_id = v_uid
     and status <> 'DELETED'::public.record_status
   returning id into v_deleted_id;
+
+  if v_deleted_id is not null then
+    -- Cascade soft-delete: mark all messages in listing chats as deleted first,
+    -- then mark the chats themselves as deleted.
+    update public.chat_messages cm
+    set status = 'DELETED'::public.record_status
+    where cm.status <> 'DELETED'::public.record_status
+      and cm.chat_id in (
+        select c.id
+        from public.chats c
+        where c.listing_id = v_deleted_id
+          and c.status <> 'DELETED'::public.record_status
+      );
+
+    update public.chats
+    set status = 'DELETED'::public.record_status
+    where listing_id = v_deleted_id
+      and status <> 'DELETED'::public.record_status;
+  end if;
 
   return v_deleted_id is not null;
 end;
@@ -785,7 +813,6 @@ as $function$
 declare
   chat_row public.chats%rowtype;
   client_user_id uuid := auth.uid()::uuid;
-  v_can_view_deleted boolean := public.current_user_can_view_deleted_rows();
 begin
   if client_user_id is null then
     raise exception 'Authentication required';
@@ -799,12 +826,13 @@ begin
     raise exception 'Listing id is required';
   end if;
 
+  -- Deleted listings are never chattable — no admin bypass.
   if not exists (
     select 1
     from public.listings l
     where l.id = p_listing_id
+      and l.status = 'ACTIVE'::public.record_status
       and public.current_user_can_view_user(l.owner_id)
-      and (l.status = 'ACTIVE'::public.record_status or v_can_view_deleted)
       and (
         l.moderation_status = 'APPROVED'::public.listing_moderation_status
         or l.owner_id = client_user_id
@@ -1073,6 +1101,15 @@ begin
     where c.id = p_chat_id
       and cp.participant_id = v_uid
       and c.status = 'ACTIVE'::public.record_status
+      -- Block messaging on chats tied to a deleted listing, no admin bypass.
+      and (
+        c.listing_id is null
+        or exists (
+          select 1 from public.listings l
+          where l.id = c.listing_id
+            and l.status = 'ACTIVE'::public.record_status
+        )
+      )
       and not exists (
         select 1
         from public.chat_participants cp_hidden
