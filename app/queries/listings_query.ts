@@ -1,5 +1,5 @@
 import { createQueryKeys } from "@lukemorales/query-key-factory";
-import * as listingEvents from "~/api/backend/listings";
+import * as listingEvents from "@/db_rpc/listings_rpc";
 
 export const listings = createQueryKeys("listings", {
 	// simple list with optional filters

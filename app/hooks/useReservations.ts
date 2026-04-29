@@ -1,4 +1,4 @@
-import * as reservationsEvents from "~/api/backend/reservations";
+import * as reservationsEvents from "@/db_rpc/reservations_rpc";
 import { queries } from "@/queries/queries";
 import { errorStore } from "@/store/error_state";
 import type { Reservation } from "@/types/custom/api.types";

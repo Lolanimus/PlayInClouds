@@ -95,6 +95,10 @@ const rejectListing = async (p_listing_id: string, p_message?: string | null) =>
   });
 };
 
+const updateListing = async (args: Record<string, any>) => {
+  return await processRpcRequest("update_listing", args as any);
+};
+
 export {
   createListing,
   getListing,
@@ -105,5 +109,6 @@ export {
   deleteListing,
   approveListing,
   rejectListing,
+  updateListing,
 };
 

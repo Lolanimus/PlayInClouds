@@ -1,5 +1,5 @@
 import { createQueryKeys } from "@lukemorales/query-key-factory";
-import * as reservationsEvents from "~/api/backend/reservations";
+import * as reservationsEvents from "@/db_rpc/reservations_rpc";
 
 export const reservations = createQueryKeys("reservations", {
   detailById: (p?: { p_reservation_id?: string }) => ({

@@ -1,4 +1,4 @@
-import * as listingEvents from "~/api/backend/listings";
+import * as listingEvents from "@/db_rpc/listings_rpc";
 import { deleteFile, uploadFile, getPublicUrl } from "~/api/supabase/blob";
 import { queries } from "@/queries/queries";
 import type { Listing, ListingModerationQueueItem } from "@/types/custom/api.types";
