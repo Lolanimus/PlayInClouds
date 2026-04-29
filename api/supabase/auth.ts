@@ -30,7 +30,7 @@ const login = async (
 };
 
 const signout = async (): Promise<void> => {
-  processAuthRequest(async () => {
+  await processAuthRequest(async () => {
     const { error } = await supabase.auth.signOut();
 
     if (error) throw error;
@@ -38,6 +38,8 @@ const signout = async (): Promise<void> => {
     console.info("Successfully logged out");
   });
 
+  // Clear user only after signOut completes so the auth state listener
+  // doesn't race and restore a stale session.
   userStore.getState().actions.setUser(null);
 };
 
