@@ -483,10 +483,11 @@ export default function ChatPage() {
       })
 
       setDraft("")
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : null
       toast({
         title: "Message failed",
-        description: "Please try sending again.",
+        description: message ?? "Please try sending again.",
         variant: "destructive",
       })
     }
