@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router"
 import {
   Edit2,
   Eye,
-  Images,
   MapPin,
   Plus,
   Star,
@@ -77,18 +76,19 @@ export default function HostDashboardPage() {
     setDismissedMessages((prev) => ({ ...prev, [listing.id]: true }))
   }
 
-  const totalPhotos = listings.reduce((acc, listing) => acc + listing.images.length, 0)
+
   const approvedListings = listings.filter((listing) => listing.moderation_status === "APPROVED").length
   const pendingListings = listings.filter((listing) => listing.moderation_status === "PENDING_APPROVAL").length
   const rejectedListings = listings.filter((listing) => listing.moderation_status === "REJECTED").length
+  const ratedListings = listings.filter(
+    (listing) => listing.moderation_status === "APPROVED" && listing.review_count > 0
+  )
   const averageRating =
-    approvedListings > 0
+    ratedListings.length > 0
       ? (
-        listings
-          .filter((listing) => listing.moderation_status === "APPROVED")
-          .reduce((acc, listing) => acc + listing.average_rating, 0) / approvedListings
+        ratedListings.reduce((acc, listing) => acc + listing.average_rating, 0) / ratedListings.length
       ).toFixed(1)
-      : "0.0"
+      : "N/A"
 
   return (
     <section className="h-full min-h-0 overflow-y-auto p-4 md:p-6 lg:p-8">
@@ -126,7 +126,7 @@ export default function HostDashboardPage() {
                 </div>
               )}
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
                   <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Approved listings</p>
                   <p className="text-xl font-semibold text-[#000000]">{approvedListings}</p>
@@ -138,13 +138,6 @@ export default function HostDashboardPage() {
                 <div className="rounded-xl border border-[#f4c7c3] bg-[#fff4f2] px-4 py-3">
                   <p className="text-xs uppercase tracking-wide text-[#b42318]">Rejected listings</p>
                   <p className="text-xl font-semibold text-[#b42318]">{rejectedListings}</p>
-                </div>
-                <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
-                  <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Uploaded photos</p>
-                  <p className="flex items-center gap-2 text-xl font-semibold text-[#000000]">
-                    <Images className="h-4 w-4 text-[#6a6a6a]" />
-                    {totalPhotos}
-                  </p>
                 </div>
                 <div className="rounded-xl border border-[#e9e9e9] bg-[#fafafa] px-4 py-3">
                   <p className="text-xs uppercase tracking-wide text-[#6a6a6a]">Average rating</p>
