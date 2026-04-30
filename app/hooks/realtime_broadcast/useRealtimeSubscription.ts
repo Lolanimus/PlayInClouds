@@ -5,7 +5,6 @@ import type { InvalidateQueryFilters } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 export enum RealtimeEvents {
-  contacts_update = "contacts_update",
   chats_update = "chats_update",
   notifications_update = "notifications_update",
 }
