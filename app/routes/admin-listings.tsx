@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { useCurrentActor } from "@/hooks/useCurrentActor"
+
 import { Textarea } from "@/components/ui/textarea"
 import {
   useApproveListing,
@@ -37,12 +37,7 @@ function formatSubmittedAt(value: string) {
 export default function AdminListingsPage() {
   const navigate = useNavigate()
   const user = useUser()
-  const actorQuery = useCurrentActor({ enabled: Boolean(user) })
-  const canModerateListings = Boolean(
-    actorQuery.data?.accountStatus === "ACTIVE"
-    && actorQuery.data.permissions.includes("listings.moderate")
-  )
-  const pendingListingsQuery = usePendingListings({ enabled: canModerateListings })
+  const pendingListingsQuery = usePendingListings({ enabled: Boolean(user) })
   const approveListingMutation = useApproveListing()
   const rejectListingMutation = useRejectListing()
   const [messagesByListingId, setMessagesByListingId] = useState<Record<string, string>>({})
@@ -77,17 +72,17 @@ export default function AdminListingsPage() {
 
   if (!user) return null
 
-  if (actorQuery.isLoading) {
+if (pendingListingsQuery.isLoading) {
     return (
       <main className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5] px-4 py-8 md:px-8">
         <div className="mx-auto max-w-6xl rounded-2xl border border-[#e9e9e9] bg-[#ffffff] px-6 py-10 text-sm text-[#6a6a6a] shadow-sm">
-          Checking access...
+                Loading...
         </div>
       </main>
     )
   }
 
-  if (!canModerateListings) {
+  if (!pendingListingsQuery.data) {
     return (
       <main className="min-h-[calc(100vh-5.5rem)] bg-[#f5f5f5] px-4 py-8 md:px-8">
         <div className="mx-auto max-w-6xl rounded-2xl border border-[#f1c3bd] bg-[#fff3f2] px-6 py-10 text-sm text-[#b42318] shadow-sm">
