@@ -728,16 +728,16 @@ select
   now() - interval '21 days'
 from (
   values
-    ('20000000-0000-4000-8000-000000000001'::uuid, 35::double precision),
-    ('20000000-0000-4000-8000-000000000002'::uuid, 55::double precision),
-    ('20000000-0000-4000-8000-000000000003'::uuid, 22::double precision),
-    ('20000000-0000-4000-8000-000000000004'::uuid, 18::double precision),
-    ('20000000-0000-4000-8000-000000000005'::uuid, 48::double precision),
-    ('20000000-0000-4000-8000-000000000006'::uuid, 42::double precision),
-    ('20000000-0000-4000-8000-000000000007'::uuid, 39::double precision)
-) as listing_data(listing_id, price)
+    ('20000000-0000-4000-8000-000000000001'::uuid, 35::double precision, 10, 22),
+    ('20000000-0000-4000-8000-000000000002'::uuid, 55::double precision, 8, 22),
+    ('20000000-0000-4000-8000-000000000003'::uuid, 22::double precision, 8, 22),
+    ('20000000-0000-4000-8000-000000000004'::uuid, 18::double precision, 8, 22),
+    ('20000000-0000-4000-8000-000000000005'::uuid, 48::double precision, 8, 22),
+    ('20000000-0000-4000-8000-000000000006'::uuid, 42::double precision, 8, 22),
+    ('20000000-0000-4000-8000-000000000007'::uuid, 39::double precision, 8, 22)
+) as listing_data(listing_id, price, hour_start, hour_end)
 cross join generate_series(0, 6) as weekday_series(weekday)
-cross join generate_series(8, 22) as hour_series(hour);
+cross join lateral generate_series(listing_data.hour_start, listing_data.hour_end) as hour_series(hour);
 
 -- ---------------------------------------------------------------------------
 -- Reservations: completed, pending request, future confirmed, cancelled,
