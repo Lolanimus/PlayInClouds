@@ -6,7 +6,6 @@ import { MapPin } from "lucide-react"
 import { useNavigate } from "react-router"
 import { ListingCard, type ListingItem } from "@/components/listings"
 import { useListings } from "@/hooks/useListings"
-import { listingAvailability, listingBookedHours } from "@/lib/listing-availability"
 import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
@@ -43,10 +42,10 @@ function PriceMarker({
           ? hasSelectedSlot
             ? isAvailableInSelectedSlot
               ? "border-[#0f6130] bg-[#0f6130] text-[#ffffff]"
-              : "border-[#000000] bg-[#000000] text-[#ffffff]"
+              : "border-[#6a6a6a] bg-[#6a6a6a] text-[#ffffff]"
             : "border-[#000000] bg-[#000000] text-[#ffffff]"
           : isOtherTime
-            ? "border-[#000000] bg-[#efefef] text-[#4a4a4a] hover:bg-[#e5e5e5]"
+            ? "border-[#9a9a9a] bg-[#f0f0f0] text-[#6a6a6a] hover:bg-[#e5e5e5]"
             : hasSelectedSlot
               ? "border-[#1f8f4a] bg-[#eaf8ef] text-[#0f6130] hover:bg-[#ddf2e5]"
               : "border-[#ffffff] bg-[#f5f5f5] text-[#000000] hover:bg-[#f5f5f5]",
@@ -115,6 +114,7 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
       equipmentDesc: item.equipment_desc,
       conveniencesDesc: item.conveniences_desc,
       areaM2: item.area_m2,
+      weeklySlotsByDay: item.weekly_slots_by_day ?? {},
     }))
   }, [listingsQuery.data])
   const allListings = useMemo(() => {
@@ -212,29 +212,20 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
         })
 
   const isAvailableInSelectedSlot = (listingId: string) => {
-    if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return true
+    if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return false
 
-    const listingNumericId = Number(listingId)
-    if (!Number.isFinite(listingNumericId)) return true
-
-    const availability = listingAvailability[listingNumericId]
-    if (!availability) return true
+    const listing = filteredListings.find((l) => String(l.id) === listingId)
+    const slots = listing?.weeklySlotsByDay
+    if (!slots || Object.keys(slots).length === 0) return false
 
     const selectedDay = selectedDateParam.getDay()
-    const requestedStart = selectedStartParam
-    const requestedEnd = selectedStartParam + selectedDurationParam
-    const bookedHoursForDay = listingBookedHours[listingNumericId]?.[selectedDay] ?? []
-    const hasBookedHourInRange = Array.from(
-      { length: selectedDurationParam },
-      (_, idx) => requestedStart + idx
-    ).some((hour) => bookedHoursForDay.includes(hour))
+    const hoursForDay = slots[String(selectedDay)]
+    if (!hoursForDay || hoursForDay.length === 0) return false
 
-    return (
-      availability.days.includes(selectedDay) &&
-      requestedStart >= availability.startHour &&
-      requestedEnd <= availability.endHour &&
-      !hasBookedHourInRange
-    )
+    for (let h = selectedStartParam; h < selectedStartParam + selectedDurationParam; h++) {
+      if (!hoursForDay.includes(h)) return false
+    }
+    return true
   }
 
   const availableNowListingIds = new Set(
