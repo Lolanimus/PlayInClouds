@@ -122,6 +122,7 @@ export default function HostCalendarPage() {
           listingSubtitle: listing?.subtitle ?? "",
           listingImage: listing?.images?.[0] ?? "",
           listingOwnerId: listing?.owner_id ?? null,
+          listingTimezone: listing?.timezone ?? null,
         }
       })
       .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())

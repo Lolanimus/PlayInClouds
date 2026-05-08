@@ -174,6 +174,9 @@ export interface Reservation {
 	renter_id: string;
 	start_at: string;
 	end_at: string;
+	payment_deadline: string;
+	host_preconfirmed_at: string | null;
+	late_consent_given_at: string | null;
 	status: Database["public"]["Enums"]["reservation_status"];
 	total_price: number;
 	guests: number;

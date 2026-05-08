@@ -36,135 +36,27 @@ begin;
 -- harlem  : 20000000-0000-4000-8000-000000000007
 
 -- ---------------------------------------------------------------------------
--- Cleanup existing demo data so the seed is idempotent.
+-- Cleanup existing branch data so the seed can rebuild a full demo state from
+-- scratch. This is intentionally destructive and is meant for disposable
+-- local/dev environments only.
 -- ---------------------------------------------------------------------------
-delete from public.notifications
-where user_id in (
-  '10000000-0000-4000-8000-000000000001',
-  '10000000-0000-4000-8000-000000000002',
-  '10000000-0000-4000-8000-000000000003',
-  '10000000-0000-4000-8000-000000000004',
-  '10000000-0000-4000-8000-000000000005'
-);
-
-delete from public.reservation_reviews
-where id in (
-  '60000000-0000-4000-8000-000000000001',
-  '60000000-0000-4000-8000-000000000002'
-)
-or reservation_id in (
-  '40000000-0000-4000-8000-000000000001',
-  '40000000-0000-4000-8000-000000000002',
-  '40000000-0000-4000-8000-000000000003',
-  '40000000-0000-4000-8000-000000000004',
-  '40000000-0000-4000-8000-000000000005'
-);
-
-delete from public.chat_messages
-where chat_id in (
-  '50000000-0000-4000-8000-000000000001',
-  '50000000-0000-4000-8000-000000000002',
-  '50000000-0000-4000-8000-000000000003'
-);
-
-delete from public.chat_participants
-where chat_id in (
-  '50000000-0000-4000-8000-000000000001',
-  '50000000-0000-4000-8000-000000000002',
-  '50000000-0000-4000-8000-000000000003'
-)
-or participant_id in (
-  '10000000-0000-4000-8000-000000000001',
-  '10000000-0000-4000-8000-000000000002',
-  '10000000-0000-4000-8000-000000000003',
-  '10000000-0000-4000-8000-000000000004',
-  '10000000-0000-4000-8000-000000000005'
-);
-
-delete from public.chats
-where id in (
-  '50000000-0000-4000-8000-000000000001',
-  '50000000-0000-4000-8000-000000000002',
-  '50000000-0000-4000-8000-000000000003'
-);
-
-delete from public.reservations
-where id in (
-  '40000000-0000-4000-8000-000000000001',
-  '40000000-0000-4000-8000-000000000002',
-  '40000000-0000-4000-8000-000000000003',
-  '40000000-0000-4000-8000-000000000004',
-  '40000000-0000-4000-8000-000000000005'
-);
-
-delete from public.listing_weekly_slots
-where listing_id in (
-  '20000000-0000-4000-8000-000000000001',
-  '20000000-0000-4000-8000-000000000002',
-  '20000000-0000-4000-8000-000000000003',
-  '20000000-0000-4000-8000-000000000004',
-  '20000000-0000-4000-8000-000000000005',
-  '20000000-0000-4000-8000-000000000006',
-  '20000000-0000-4000-8000-000000000007'
-);
-
-delete from public.listing_booking_policies
-where listing_id in (
-  '20000000-0000-4000-8000-000000000001',
-  '20000000-0000-4000-8000-000000000002',
-  '20000000-0000-4000-8000-000000000003',
-  '20000000-0000-4000-8000-000000000004',
-  '20000000-0000-4000-8000-000000000005',
-  '20000000-0000-4000-8000-000000000006',
-  '20000000-0000-4000-8000-000000000007'
-);
-
-delete from public.listings
-where id in (
-  '20000000-0000-4000-8000-000000000001',
-  '20000000-0000-4000-8000-000000000002',
-  '20000000-0000-4000-8000-000000000003',
-  '20000000-0000-4000-8000-000000000004',
-  '20000000-0000-4000-8000-000000000005',
-  '20000000-0000-4000-8000-000000000006',
-  '20000000-0000-4000-8000-000000000007'
-);
-
-delete from auth.identities
-where user_id in (
-  '10000000-0000-4000-8000-000000000001',
-  '10000000-0000-4000-8000-000000000002',
-  '10000000-0000-4000-8000-000000000003',
-  '10000000-0000-4000-8000-000000000004',
-  '10000000-0000-4000-8000-000000000005',
-  '10000000-0000-4000-8000-000000000006'
-)
-or provider_id in (
-  'admin@airdrums.demo',
-  'mona@airdrums.demo',
-  'leo@airdrums.demo',
-  'gina@airdrums.demo',
-  'sam@airdrums.demo',
-  'antox.qscwdv@gmail.com'
-);
-
-delete from auth.users
-where id in (
-  '10000000-0000-4000-8000-000000000001',
-  '10000000-0000-4000-8000-000000000002',
-  '10000000-0000-4000-8000-000000000003',
-  '10000000-0000-4000-8000-000000000004',
-  '10000000-0000-4000-8000-000000000005',
-  '10000000-0000-4000-8000-000000000006'
-)
-or email in (
-  'admin@airdrums.demo',
-  'mona@airdrums.demo',
-  'leo@airdrums.demo',
-  'gina@airdrums.demo',
-  'sam@airdrums.demo',
-  'antox.qscwdv@gmail.com'
-);
+truncate table
+  public.notifications,
+  public.reservation_reviews,
+  public.chat_messages,
+  public.chat_participants,
+  public.chats,
+  public.reservation_payments,
+  public.checkout_holds,
+  public.reservations,
+  public.listing_weekly_slots,
+  public.listing_booking_policies,
+  public.listings,
+  public.user_roles,
+  public."user",
+  auth.identities,
+  auth.users
+cascade;
 
 -- ---------------------------------------------------------------------------
 -- Auth users + identities. signup_user() trigger creates matching public.user rows.
@@ -740,14 +632,18 @@ cross join generate_series(0, 6) as weekday_series(weekday)
 cross join lateral generate_series(listing_data.hour_start, listing_data.hour_end) as hour_series(hour);
 
 -- ---------------------------------------------------------------------------
--- Reservations: completed, pending request, future confirmed, cancelled,
+-- Reservations: completed, normal pending, awaiting late consent,
+-- late terms accepted (still waiting on host), cancelled,
 -- and completed-no-review to demonstrate review reminders.
 -- ---------------------------------------------------------------------------
 alter table public.reservations disable trigger validate_and_price_reservation;
 
 with reservation_times as (
   select
-    date_trunc('day', now()) as today_start
+    date_trunc('day', now()) as today_start,
+    now() as current_ts,
+    date_trunc('hour', now()) as current_hour,
+    date_trunc('day', now() at time zone 'America/Los_Angeles') as la_today_start
 )
 insert into public.reservations (
   id,
@@ -755,10 +651,12 @@ insert into public.reservations (
   renter_id,
   start_at,
   end_at,
+  payment_deadline,
+  host_preconfirmed_at,
+  late_consent_given_at,
   status,
   total_price,
   guests,
-  confirm_by_at,
   created_at,
   updated_at
 )
@@ -769,10 +667,12 @@ select * from (
     '10000000-0000-4000-8000-000000000004'::uuid as renter_id,
     rt.today_start - interval '5 days' + interval '18 hours' as start_at,
     rt.today_start - interval '5 days' + interval '21 hours' as end_at,
+    rt.today_start - interval '6 days' + interval '18 hours' as payment_deadline,
+    null::timestamptz as host_preconfirmed_at,
+    null::timestamptz as late_consent_given_at,
     'CONFIRMED'::public.reservation_status as status,
     105::double precision as total_price,
     4 as guests,
-    null::timestamptz as confirm_by_at,
     rt.today_start - interval '8 days' as created_at,
     rt.today_start - interval '5 days' as updated_at
   from reservation_times rt
@@ -785,10 +685,12 @@ select * from (
     '10000000-0000-4000-8000-000000000005'::uuid,
     rt.today_start + interval '3 days' + interval '18 hours',
     rt.today_start + interval '3 days' + interval '21 hours',
+    rt.today_start + interval '2 days' + interval '18 hours',
+    null::timestamptz,
+    null::timestamptz,
     'PENDING'::public.reservation_status,
     105::double precision,
     3,
-    rt.today_start + interval '3 days' + interval '16 hours',
     rt.today_start - interval '1 day',
     rt.today_start - interval '1 day'
   from reservation_times rt
@@ -801,10 +703,12 @@ select * from (
     '10000000-0000-4000-8000-000000000004'::uuid,
     rt.today_start + interval '4 days' + interval '19 hours',
     rt.today_start + interval '4 days' + interval '22 hours',
+    rt.today_start + interval '3 days' + interval '19 hours',
+    null::timestamptz,
+    null::timestamptz,
     'CONFIRMED'::public.reservation_status,
     165::double precision,
     2,
-    null::timestamptz,
     rt.today_start - interval '2 days',
     rt.today_start - interval '2 days'
   from reservation_times rt
@@ -815,14 +719,40 @@ select * from (
     '40000000-0000-4000-8000-000000000004'::uuid,
     '20000000-0000-4000-8000-000000000002'::uuid,
     '10000000-0000-4000-8000-000000000005'::uuid,
-    rt.today_start + interval '6 days' + interval '16 hours',
-    rt.today_start + interval '6 days' + interval '18 hours',
-    'CANCELLED'::public.reservation_status,
-    110::double precision,
-    2,
+    make_timestamptz(
+      extract(year from (rt.la_today_start + interval '1 day'))::int,
+      extract(month from (rt.la_today_start + interval '1 day'))::int,
+      extract(day from (rt.la_today_start + interval '1 day'))::int,
+      10,
+      0,
+      0,
+      'America/Los_Angeles'
+    ),
+    make_timestamptz(
+      extract(year from (rt.la_today_start + interval '1 day'))::int,
+      extract(month from (rt.la_today_start + interval '1 day'))::int,
+      extract(day from (rt.la_today_start + interval '1 day'))::int,
+      13,
+      0,
+      0,
+      'America/Los_Angeles'
+    ),
+    make_timestamptz(
+      extract(year from (rt.la_today_start + interval '1 day'))::int,
+      extract(month from (rt.la_today_start + interval '1 day'))::int,
+      extract(day from (rt.la_today_start + interval '1 day'))::int,
+      9,
+      0,
+      0,
+      'America/Los_Angeles'
+    ),
     null::timestamptz,
-    rt.today_start - interval '4 days',
-    rt.today_start - interval '3 days'
+    null::timestamptz,
+    'PENDING_AWAITING_LATE_CONSENT'::public.reservation_status,
+    165::double precision,
+    1,
+    rt.current_ts - interval '28 hours',
+    rt.current_ts - interval '30 minutes'
   from reservation_times rt
 
   union all
@@ -831,18 +761,236 @@ select * from (
     '40000000-0000-4000-8000-000000000005'::uuid,
     '20000000-0000-4000-8000-000000000002'::uuid,
     '10000000-0000-4000-8000-000000000005'::uuid,
+    make_timestamptz(
+      extract(year from (rt.la_today_start + interval '1 day'))::int,
+      extract(month from (rt.la_today_start + interval '1 day'))::int,
+      extract(day from (rt.la_today_start + interval '1 day'))::int,
+      14,
+      0,
+      0,
+      'America/Los_Angeles'
+    ),
+    make_timestamptz(
+      extract(year from (rt.la_today_start + interval '1 day'))::int,
+      extract(month from (rt.la_today_start + interval '1 day'))::int,
+      extract(day from (rt.la_today_start + interval '1 day'))::int,
+      16,
+      0,
+      0,
+      'America/Los_Angeles'
+    ),
+    make_timestamptz(
+      extract(year from (rt.la_today_start + interval '1 day'))::int,
+      extract(month from (rt.la_today_start + interval '1 day'))::int,
+      extract(day from (rt.la_today_start + interval '1 day'))::int,
+      13,
+      0,
+      0,
+      'America/Los_Angeles'
+    ),
+    rt.current_ts - interval '20 minutes',
+    rt.current_ts - interval '40 minutes',
+    'PENDING'::public.reservation_status,
+    110::double precision,
+    1,
+    rt.current_ts - interval '26 hours',
+    rt.current_ts - interval '20 minutes'
+  from reservation_times rt
+
+  union all
+
+  select
+    '40000000-0000-4000-8000-000000000006'::uuid,
+    '20000000-0000-4000-8000-000000000002'::uuid,
+    '10000000-0000-4000-8000-000000000005'::uuid,
+    rt.today_start + interval '6 days' + interval '16 hours',
+    rt.today_start + interval '6 days' + interval '18 hours',
+    rt.today_start + interval '5 days' + interval '16 hours',
+    null::timestamptz,
+    null::timestamptz,
+    'CANCELLED'::public.reservation_status,
+    110::double precision,
+    2,
+    rt.today_start - interval '4 days',
+    rt.today_start - interval '3 days'
+  from reservation_times rt
+
+  union all
+
+  select
+    '40000000-0000-4000-8000-000000000007'::uuid,
+    '20000000-0000-4000-8000-000000000002'::uuid,
+    '10000000-0000-4000-8000-000000000005'::uuid,
     rt.today_start - interval '2 days' + interval '16 hours',
     rt.today_start - interval '2 days' + interval '18 hours',
+    rt.today_start - interval '3 days' + interval '16 hours',
+    null::timestamptz,
+    null::timestamptz,
     'CONFIRMED'::public.reservation_status,
     110::double precision,
     1,
-    null::timestamptz,
     rt.today_start - interval '4 days',
     rt.today_start - interval '2 days'
   from reservation_times rt
 ) seeded_reservations;
 
 alter table public.reservations enable trigger validate_and_price_reservation;
+
+insert into public.reservation_payments (
+  id,
+  reservation_id,
+  renter_id,
+  host_user_id,
+  listing_id,
+  stripe_checkout_session_id,
+  stripe_payment_intent_id,
+  stripe_charge_id,
+  amount_subtotal,
+  amount_platform_fee,
+  amount_total,
+  currency,
+  status,
+  authorized_at,
+  authorization_expires_at,
+  paid_at,
+  captured_at,
+  canceled_at,
+  created_at,
+  updated_at
+)
+values
+  (
+    '41000000-0000-4000-8000-000000000001',
+    '40000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000004',
+    '10000000-0000-4000-8000-000000000002',
+    '20000000-0000-4000-8000-000000000001',
+    'cs_test_seed_1',
+    'pi_test_seed_1',
+    'ch_test_seed_1',
+    10500,
+    788,
+    11288,
+    'cad',
+    'PAID'::public.payment_status,
+    now() - interval '8 days',
+    null,
+    now() - interval '8 days',
+    now() - interval '8 days',
+    null,
+    now() - interval '8 days',
+    now() - interval '8 days'
+  ),
+  (
+    '41000000-0000-4000-8000-000000000002',
+    '40000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000002',
+    '20000000-0000-4000-8000-000000000001',
+    'cs_test_seed_2',
+    'pi_test_seed_2',
+    null,
+    10500,
+    788,
+    11288,
+    'cad',
+    'AUTH'::public.payment_status,
+    now() - interval '1 day',
+    now() + interval '5 days',
+    null,
+    null,
+    null,
+    now() - interval '1 day',
+    now() - interval '1 day'
+  ),
+  (
+    '41000000-0000-4000-8000-000000000003',
+    '40000000-0000-4000-8000-000000000004',
+    '10000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000003',
+    '20000000-0000-4000-8000-000000000002',
+    'cs_test_seed_3',
+    'pi_test_seed_3',
+    null,
+    16500,
+    1238,
+    17738,
+    'cad',
+    'AUTH'::public.payment_status,
+    now() - interval '30 hours',
+    now() + interval '4 days',
+    null,
+    null,
+    null,
+    now() - interval '30 hours',
+    now() - interval '30 minutes'
+  ),
+  (
+    '41000000-0000-4000-8000-000000000004',
+    '40000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000003',
+    '20000000-0000-4000-8000-000000000002',
+    'cs_test_seed_4',
+    'pi_test_seed_4',
+    null,
+    11000,
+    825,
+    11825,
+    'cad',
+    'AUTH'::public.payment_status,
+    now() - interval '26 hours',
+    now() + interval '4 days',
+    null,
+    null,
+    null,
+    now() - interval '26 hours',
+    now() - interval '20 minutes'
+  ),
+  (
+    '41000000-0000-4000-8000-000000000005',
+    '40000000-0000-4000-8000-000000000006',
+    '10000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000003',
+    '20000000-0000-4000-8000-000000000002',
+    'cs_test_seed_5',
+    'pi_test_seed_5',
+    null,
+    11000,
+    825,
+    11825,
+    'cad',
+    'AUTH_CANCELED'::public.payment_status,
+    now() - interval '4 days',
+    null,
+    null,
+    null,
+    now() - interval '3 days',
+    now() - interval '4 days',
+    now() - interval '3 days'
+  ),
+  (
+    '41000000-0000-4000-8000-000000000006',
+    '40000000-0000-4000-8000-000000000007',
+    '10000000-0000-4000-8000-000000000005',
+    '10000000-0000-4000-8000-000000000003',
+    '20000000-0000-4000-8000-000000000002',
+    'cs_test_seed_6',
+    'pi_test_seed_6',
+    'ch_test_seed_6',
+    11000,
+    825,
+    11825,
+    'cad',
+    'PAID'::public.payment_status,
+    now() - interval '4 days',
+    null,
+    now() - interval '4 days',
+    now() - interval '4 days',
+    null,
+    now() - interval '4 days',
+    now() - interval '2 days'
+  );
 
 -- ---------------------------------------------------------------------------
 -- Chats and messages tied to reservations/listings.

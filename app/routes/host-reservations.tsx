@@ -83,6 +83,7 @@ export default function HostReservationsPage() {
       listingSubtitle: listing?.subtitle ?? "",
       listingImage: listing?.images?.[0] ?? "",
       listingOwnerId: listing?.owner_id ?? null,
+      listingTimezone: listing?.timezone ?? null,
     }
   })
 

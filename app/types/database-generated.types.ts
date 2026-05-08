@@ -289,8 +289,11 @@ export type Database = {
           created_at: string
           end_at: string
           guests: number
+          host_preconfirmed_at: string | null
           id: string
+          late_consent_given_at: string | null
           listing_id: string
+          payment_deadline: string
           renter_id: string
           start_at: string
           status: Database["public"]["Enums"]["reservation_status"]
@@ -301,8 +304,11 @@ export type Database = {
           created_at?: string
           end_at: string
           guests?: number
+          host_preconfirmed_at?: string | null
           id?: string
+          late_consent_given_at?: string | null
           listing_id: string
+          payment_deadline: string
           renter_id: string
           start_at: string
           status?: Database["public"]["Enums"]["reservation_status"]
@@ -313,8 +319,11 @@ export type Database = {
           created_at?: string
           end_at?: string
           guests?: number
+          host_preconfirmed_at?: string | null
           id?: string
+          late_consent_given_at?: string | null
           listing_id?: string
+          payment_deadline?: string
           renter_id?: string
           start_at?: string
           status?: Database["public"]["Enums"]["reservation_status"]
@@ -658,7 +667,7 @@ export type Database = {
       listing_category: "REHEARSAL_SPACE" | "RECORDING_STUDIO" | "OTHER"
       record_status: "ACTIVE" | "DELETED"
       realtime_events: "chats_update"
-      reservation_status: "PENDING" | "CONFIRMED" | "CANCELLED"
+      reservation_status: "PENDING" | "PENDING_AWAITING_LATE_CONSENT" | "CONFIRMED" | "CANCELLED" | "PENDING_LATE"
       user_role: "USER" | "ADMIN" | "MODERATOR" | "SUPPORT"
     }
     CompositeTypes: {
@@ -792,7 +801,7 @@ export const Constants = {
       listing_category: ["REHEARSAL_SPACE", "RECORDING_STUDIO", "OTHER"],
       record_status: ["ACTIVE", "DELETED"],
       realtime_events: ["chats_update"],
-      reservation_status: ["PENDING", "CONFIRMED", "CANCELLED"],
+      reservation_status: ["PENDING", "PENDING_AWAITING_LATE_CONSENT", "CONFIRMED", "CANCELLED", "PENDING_LATE"],
       user_role: ["USER", "ADMIN", "MODERATOR", "SUPPORT"],
     },
   },

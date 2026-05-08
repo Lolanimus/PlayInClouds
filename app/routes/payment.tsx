@@ -1,34 +1,29 @@
 import { useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { ChevronLeft, Star } from "lucide-react"
+import { createCheckoutSession } from "~/api/supabase/payments"
+import { TimeWithLocalHint } from "@/components/time-with-local-hint"
+import {
+  formatDateRangeInTimeZone,
+  formatDateTimeInTimeZone,
+  formatDateRangeInViewerTimeZone,
+  formatDateTimeInViewerTimeZone,
+  getTimeZoneLabel,
+} from "@/lib/date-time"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
 import { useGetListing } from "@/hooks/useListings"
-import { useCreateReservation } from "@/hooks/useReservations"
+import { useToast } from "@/hooks/use-toast"
 import { useErrorActions } from "@/store/error_state"
 import { useHostListings } from "@/store/host_listings_state"
 import { useUser } from "@/store/user_state"
-import { useReservationsActions } from "@/store/reservations_state"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 function parseHourlyPrice(price: string) {
   const match = price.match(/\$\s*(\d+(?:\.\d+)?)/)
   if (!match) return 30
   return Number(match[1])
-}
-
-function formatHourLabel(hour: number) {
-  return `${hour.toString().padStart(2, "0")}:00`
-}
-
-function formatDateRange(dateKey: string, start: number, end: number) {
-  const date = new Date(`${dateKey}T00:00:00`)
-  const dayLabel = Number.isNaN(date.getTime())
-    ? dateKey
-    : date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-
-  return `${dayLabel}, ${formatHourLabel(start)}–${formatHourLabel(end)}`
 }
 
 function getFormatterForTimeZone(timeZone: string) {
@@ -93,9 +88,9 @@ export default function PaymentPage() {
   const user = useUser()
   const hostListings = useHostListings()
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const { addReservation } = useReservationsActions()
-  const createReservationMutation = useCreateReservation()
+  const [isStartingCheckout, setIsStartingCheckout] = useState(false)
   const { setError, setSuccess } = useErrorActions()
+  const { toast } = useToast()
   const [params] = useSearchParams()
   const listingIdParam = params.get("listingId") ?? ""
   const isUuidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(listingIdParam)
@@ -173,14 +168,30 @@ export default function PaymentPage() {
 
   const hours = endHour - startHour
   const hourlyRate = listing.priceNumber
+  const listingTimeZoneLabel = getTimeZoneLabel(listing.timezone)
   const subtotal = Number((hourlyRate * hours).toFixed(2))
   const processingFee = Number((subtotal * 0.075).toFixed(2))
   const total = Number((subtotal + processingFee).toFixed(2))
   const reservationStartAt = listingLocalDateHourToUtc(dateKey, startHour, listing.timezone)
+  const reservationEndAt = listingLocalDateHourToUtc(dateKey, endHour, listing.timezone)
+  const listingRangeLabel = formatDateRangeInTimeZone(reservationStartAt.toISOString(), reservationEndAt.toISOString(), listing.timezone)
+  const localRangeLabel = formatDateRangeInViewerTimeZone(reservationStartAt.toISOString(), reservationEndAt.toISOString())
+  const normalBookingDeadlineAt =
+    typeof listing.cancellationPolicyHours === "number"
+      ? new Date(reservationStartAt.getTime() - listing.cancellationPolicyHours * 60 * 60 * 1000)
+      : reservationStartAt
+  const lateResponseDeadlineAt =
+    typeof listing.advanceNoticeHours === "number"
+      ? new Date(reservationStartAt.getTime() - listing.advanceNoticeHours * 60 * 60 * 1000)
+      : reservationStartAt
   const hoursUntilStart = (reservationStartAt.getTime() - Date.now()) / (1000 * 60 * 60)
+  const hasLateRequestWindow =
+    typeof listing.cancellationPolicyHours === "number"
+    && normalBookingDeadlineAt.getTime() < lateResponseDeadlineAt.getTime()
+  const isLateRequest = hasLateRequestWindow && Date.now() > normalBookingDeadlineAt.getTime()
   const advanceNoticeWarning =
     typeof listing.advanceNoticeHours === "number" && hoursUntilStart < listing.advanceNoticeHours
-      ? `This listing requires ${listing.advanceNoticeHours} hour(s) of advance notice.`
+      ? `This listing requires ${listing.advanceNoticeHours} hour(s) of advance notice before the start time shown in ${listingTimeZoneLabel}.`
       : null
   const cancellationWarning =
     listing.cancellationPolicyHours === null
@@ -188,8 +199,23 @@ export default function PaymentPage() {
       : typeof listing.cancellationPolicyHours === "number" && hoursUntilStart < listing.cancellationPolicyHours
         ? `Cancellation will not be possible for this booking. This listing requires cancellations at least ${listing.cancellationPolicyHours} hour(s) before the start time.`
         : null
+  const isPastPaymentDeadline = lateResponseDeadlineAt.getTime() <= Date.now()
+  const paymentDeadlineNotice = Number.isNaN(lateResponseDeadlineAt.getTime())
+    ? null
+    : isLateRequest
+      ? `The host must confirm this late request by ${formatDateTimeInTimeZone(lateResponseDeadlineAt, listing.timezone)}. If they do not confirm by then, the reservation will be cancelled and you will not be charged.`
+      : hasLateRequestWindow
+        ? `The host should confirm this reservation by ${formatDateTimeInTimeZone(normalBookingDeadlineAt, listing.timezone)}. If it is still unresolved after that, it can continue as a late request until ${formatDateTimeInTimeZone(lateResponseDeadlineAt, listing.timezone)}.`
+        : `The host should confirm this reservation by ${formatDateTimeInTimeZone(lateResponseDeadlineAt, listing.timezone)}. If it is still unresolved after that, it will be cancelled and you will not be charged.`
+  const localDeadlineNotice = isLateRequest
+    ? formatDateTimeInViewerTimeZone(lateResponseDeadlineAt)
+    : hasLateRequestWindow
+      ? `Confirm by ${formatDateTimeInViewerTimeZone(normalBookingDeadlineAt)}; late-request window until ${formatDateTimeInViewerTimeZone(lateResponseDeadlineAt)}`
+      : formatDateTimeInViewerTimeZone(lateResponseDeadlineAt)
 
   const handleBuy = async () => {
+    if (isStartingCheckout) return
+
     if (!user) {
       setIsAuthModalOpen(true)
       return
@@ -197,41 +223,39 @@ export default function PaymentPage() {
 
     setError(null)
     setSuccess(null)
+    setIsStartingCheckout(true)
 
     const reservationStart = listingLocalDateHourToUtc(dateKey, startHour, listing.timezone)
     const reservationEnd = listingLocalDateHourToUtc(dateKey, endHour, listing.timezone)
 
     try {
-      await createReservationMutation.mutateAsync({
-        p_listing_id: String(listing.id),
-        p_start_at: reservationStart.toISOString(),
-        p_end_at: reservationEnd.toISOString(),
-        p_guests: guests,
+      const session = await createCheckoutSession({
+        listingId: String(listing.id),
+        startAt: reservationStart.toISOString(),
+        endAt: reservationEnd.toISOString(),
+        guests,
+        successPath: `/dashboard?checkout=success`,
+        cancelPath: `/payment?${params.toString()}`,
       })
-    } catch (error) {
-      console.error("Failed to create reservation", error)
-      setError(error instanceof Error ? error.message : "This time slot is no longer available. Please choose another time.")
+
+      if (!session.checkoutUrl) {
+        throw new Error("Stripe Checkout URL was not returned.")
+      }
+
+      window.location.href = session.checkoutUrl
       return
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not start checkout. Please try again."
+      console.error("Failed to start Stripe Checkout", error)
+      setError(message)
+      toast({
+        variant: "destructive",
+        title: "Checkout failed",
+        description: message,
+      })
+    } finally {
+      setIsStartingCheckout(false)
     }
-
-    addReservation({
-      id: `${user.id}-${listing.id}-${Date.now()}`,
-      userId: user.id,
-      listingId: listing.id,
-      listingTitle: listing.title,
-      listingSubtitle: listing.subtitle,
-      listingImage: listing.images[0] ?? "",
-      dateKey,
-      startHour,
-      endHour,
-      guests,
-      subtotal,
-      processingFee,
-      total,
-      createdAt: new Date().toISOString(),
-    })
-
-    navigate("/dashboard")
   }
 
   return (
@@ -261,6 +285,7 @@ export default function PaymentPage() {
                 <div className="min-w-0">
                   <p className="truncate text-2xl font-semibold text-[#000000]">{listing.title}</p>
                   <p className="truncate text-sm text-[#6a6a6a]">{listing.subtitle}</p>
+                  <p className="mt-1 text-xs text-[#6a6a6a]">Booking times shown in {listingTimeZoneLabel}</p>
                   {listing.reviews > 0 ? (
                     <div className="mt-1 flex items-center gap-1 text-sm text-[#000000]">
                       <Star className="h-4 w-4 fill-[#000000] text-[#000000]" />
@@ -273,13 +298,55 @@ export default function PaymentPage() {
 
               <div className="mt-5 border-t border-[#e9e9e9] pt-4">
                 <p className="text-lg font-semibold text-[#000000]">Date & time</p>
-                <p className="mt-1 text-sm text-[#4a4a4a]">{formatDateRange(dateKey, startHour, endHour)}</p>
+                <p className="mt-1 text-sm text-[#4a4a4a]">
+                  <TimeWithLocalHint
+                    primaryText={listingRangeLabel}
+                    localTime={localRangeLabel}
+                  >
+                    {listingRangeLabel}
+                  </TimeWithLocalHint>
+                </p>
               </div>
 
               <div className="mt-5 border-t border-[#e9e9e9] pt-4">
                 <p className="text-lg font-semibold text-[#000000]">Guests</p>
                 <p className="mt-1 text-sm text-[#4a4a4a]">{guests} {guests === 1 ? "guest" : "guests"}</p>
               </div>
+
+              {paymentDeadlineNotice ? (
+                <div className="mt-5 rounded-2xl border border-[#d8e3f0] bg-[#f6f9fc] px-4 py-4">
+                  <p className="text-sm font-semibold text-[#16324f]">Confirmation deadline</p>
+                  <p className="mt-1 text-sm text-[#35516d]">
+                    <TimeWithLocalHint
+                      primaryText={paymentDeadlineNotice}
+                      localTime={localDeadlineNotice}
+                    >
+                      {paymentDeadlineNotice}
+                    </TimeWithLocalHint>
+                  </p>
+                </div>
+              ) : null}
+
+              {isLateRequest && !isPastPaymentDeadline ? (
+                <div className="mt-4 rounded-lg border border-[#f3d49b] bg-[#fff8eb] px-3 py-2">
+                  <p className="text-xs font-semibold text-[#9a6700]">Late request</p>
+                  <p className="mt-1 text-sm text-[#9a6700]">
+                    This booking is inside the cancellation-policy window, so it will be sent to the host as a late request and must be confirmed quickly.
+                  </p>
+                  <p className="mt-2 text-sm text-[#9a6700]">
+                    After you submit this late request, only the host can cancel it before the deadline.
+                  </p>
+                </div>
+              ) : null}
+
+              {isPastPaymentDeadline ? (
+                <div className="mt-4 rounded-lg border border-[#f1c3bd] bg-[#fff3f2] px-3 py-2">
+                  <p className="text-xs font-semibold text-[#b42318]">Booking unavailable</p>
+                  <p className="mt-1 text-sm text-[#b42318]">
+                    The confirmation deadline for this reservation has already passed, so the host would no longer be able to confirm it.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="mt-5 border-t border-[#e9e9e9] pt-4">
                 <p className="text-lg font-semibold text-[#000000]">Price details</p>
@@ -313,10 +380,10 @@ export default function PaymentPage() {
                 </Button>
                 <Button
                   onClick={handleBuy}
-                  disabled={createReservationMutation.isPending || Boolean(advanceNoticeWarning)}
+                  disabled={isStartingCheckout || Boolean(advanceNoticeWarning) || isPastPaymentDeadline}
                   className="h-11 rounded-xl bg-[#000000] px-8 text-[#ffffff] hover:bg-[#2a2a2a]"
                 >
-                  {createReservationMutation.isPending ? "Processing..." : `Buy now · $${total.toFixed(2)} CAD`}
+                  {isStartingCheckout ? "Redirecting..." : isPastPaymentDeadline ? "Booking unavailable" : `Buy now · $${total.toFixed(2)} CAD`}
                 </Button>
               </div>
               {!user && <p className="mt-3 text-sm text-[#6a6a6a]">You’ll need to log in before purchase.</p>}

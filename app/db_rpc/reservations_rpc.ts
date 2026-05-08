@@ -1,4 +1,9 @@
 import { processRpcRequest } from "~/api/supabase/helpers";
+import {
+  acceptLateReservationTermsWithPayment,
+  cancelReservationWithPayment,
+  confirmReservationWithPayment,
+} from "~/api/supabase/reservations";
 
 const getReservation = async (p_reservation_id: string) => {
   return await processRpcRequest("get_reservation", {
@@ -7,15 +12,15 @@ const getReservation = async (p_reservation_id: string) => {
 };
 
 const cancelReservation = async (p_reservation_id: string) => {
-  return await processRpcRequest("cancel_reservation", {
-    p_reservation_id,
-  });
+  return await cancelReservationWithPayment(p_reservation_id);
 };
 
 const confirmReservation = async (p_reservation_id: string) => {
-  return await processRpcRequest("confirm_reservation", {
-    p_reservation_id,
-  });
+  return await confirmReservationWithPayment(p_reservation_id);
+};
+
+const acceptLateReservationTerms = async (p_reservation_id: string) => {
+  return await acceptLateReservationTermsWithPayment(p_reservation_id);
 };
 
 const createReservation = async (
@@ -70,6 +75,7 @@ export {
   getReservation,
   cancelReservation,
   confirmReservation,
+  acceptLateReservationTerms,
   createReservation,
   listUserActiveReservations,
   countUserPastReservations,

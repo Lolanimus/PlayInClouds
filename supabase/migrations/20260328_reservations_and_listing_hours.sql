@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS public.reservations (
   renter_id UUID NOT NULL REFERENCES public.user(id) ON DELETE CASCADE,
   start_at TIMESTAMPTZ NOT NULL,
   end_at TIMESTAMPTZ NOT NULL,
+  confirm_by_at TIMESTAMPTZ NOT NULL,
   status public.reservation_status NOT NULL DEFAULT 'PENDING',
   total_price DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (total_price >= 0),
   guests INTEGER NOT NULL DEFAULT 1 CHECK (guests >= 1),
@@ -126,6 +127,17 @@ CREATE INDEX IF NOT EXISTS idx_reservations_pending_start_at
 -- =========================
 -- Reuse your existing public.update_updated_at_column()
 
+CREATE OR REPLACE FUNCTION public.set_reservation_confirm_by_at_default_fn()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.confirm_by_at IS NULL THEN
+    NEW.confirm_by_at := NEW.start_at;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = '';
+
 DROP TRIGGER IF EXISTS set_updated_at_listing_weekly_slots ON public.listing_weekly_slots;
 CREATE TRIGGER set_updated_at_listing_weekly_slots
 BEFORE UPDATE ON public.listing_weekly_slots
@@ -135,6 +147,11 @@ DROP TRIGGER IF EXISTS set_updated_at_reservations ON public.reservations;
 CREATE TRIGGER set_updated_at_reservations
 BEFORE UPDATE ON public.reservations
 FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS set_reservation_confirm_by_at_default ON public.reservations;
+CREATE TRIGGER set_reservation_confirm_by_at_default
+BEFORE INSERT OR UPDATE OF start_at, confirm_by_at ON public.reservations
+FOR EACH ROW EXECUTE FUNCTION public.set_reservation_confirm_by_at_default_fn();
 
 -- =========================
 -- VALIDATION FUNCTION
@@ -603,8 +620,8 @@ CREATE OR REPLACE FUNCTION public.create_reservation(
 DECLARE
   result public.reservations%ROWTYPE;
 BEGIN
-  INSERT INTO public.reservations (listing_id, renter_id, start_at, end_at, guests, status)
-  VALUES (p_listing_id, auth.uid(), p_start_at, p_end_at, p_guests, 'PENDING')
+  INSERT INTO public.reservations (listing_id, renter_id, start_at, end_at, confirm_by_at, guests, status)
+  VALUES (p_listing_id, auth.uid(), p_start_at, p_end_at, p_start_at, p_guests, 'PENDING')
   RETURNING * INTO result;
 
   RETURN to_jsonb(result);

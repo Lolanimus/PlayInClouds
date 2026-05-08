@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate } from "react-router"
+import { Link, useNavigate, useSearchParams } from "react-router"
 import { ChevronLeft, ChevronRight, PlusCircle, Settings } from "lucide-react"
+import { finalizeCheckoutSession } from "~/api/supabase/payments"
 
 import { ReservationCard } from "@/components/reservation-card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
 import {
   Card,
   CardContent,
@@ -27,9 +29,13 @@ const PAST_RESERVATIONS_PAGE_SIZE = 6
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const user = useUser()
   const isAuthLoading = useLoading()
   const [pastReservationsPage, setPastReservationsPage] = useState(1)
+  const { toast } = useToast()
+  const checkoutSuccess = searchParams.get("checkout") === "success"
+  const checkoutSessionId = searchParams.get("session_id")
   const activeReservationsQuery = useListUserActiveReservations(
     { p_renter_id: user?.id ?? null },
     { enabled: Boolean(user?.id) && !isAuthLoading }
@@ -48,6 +54,10 @@ export default function DashboardPage() {
   )
   const listingsQuery = useListings()
   const hostListings = useHostListings()
+  const refetchActiveReservations = activeReservationsQuery.refetch
+  const refetchPastReservations = pastReservationsQuery.refetch
+  const refetchPastReservationCount = pastReservationsCountQuery.refetch
+  const refetchListings = listingsQuery.refetch
 
   const listingsById = new Map((listingsQuery.data ?? []).map((listing) => [listing.id, listing]))
   const userReservations = (activeReservationsQuery.data ?? []).map((reservation) => {
@@ -59,6 +69,7 @@ export default function DashboardPage() {
       listingSubtitle: listing?.subtitle ?? "",
       listingImage: listing?.images?.[0] ?? "",
       listingOwnerId: listing?.owner_id ?? null,
+      listingTimezone: listing?.timezone ?? null,
     }
   })
   const pastReservations = (pastReservationsQuery.data ?? []).map((reservation) => {
@@ -70,6 +81,7 @@ export default function DashboardPage() {
       listingSubtitle: listing?.subtitle ?? "",
       listingImage: listing?.images?.[0] ?? "",
       listingOwnerId: listing?.owner_id ?? null,
+      listingTimezone: listing?.timezone ?? null,
     }
   })
   const totalPastReservations = pastReservationsCountQuery.data ?? 0
@@ -88,6 +100,75 @@ export default function DashboardPage() {
       navigate("/login?redirect=%2Fdashboard", { replace: true })
     }
   }, [isAuthLoading, user, navigate])
+
+  useEffect(() => {
+    if (!checkoutSuccess || !user?.id || isAuthLoading) return
+
+    let cancelled = false
+    let attempts = 0
+    const maxAttempts = 8
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const pollForNewReservation = async () => {
+      if (cancelled) return
+      attempts += 1
+
+      await Promise.all([
+        refetchActiveReservations(),
+        refetchPastReservations(),
+        refetchPastReservationCount(),
+        refetchListings(),
+      ])
+
+      if (attempts >= maxAttempts) {
+        navigate("/dashboard", { replace: true })
+        return
+      }
+
+      timeoutId = setTimeout(pollForNewReservation, 1500)
+    }
+
+    const syncCheckoutAndPoll = async () => {
+      if (checkoutSessionId) {
+        try {
+          if (checkoutSessionId === "{CHECKOUT_SESSION_ID}") {
+            throw new Error("Checkout returned an invalid session id. Please try the payment flow again.")
+          }
+
+          await finalizeCheckoutSession(checkoutSessionId)
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "We couldn't finalize your booking yet. Please refresh and try again."
+          console.error("Failed to finalize checkout session", error)
+          toast({
+            variant: "destructive",
+            title: "Booking finalization failed",
+            description: message,
+          })
+        }
+      }
+
+      if (cancelled) return
+      timeoutId = setTimeout(pollForNewReservation, 300)
+    }
+
+    void syncCheckoutAndPoll()
+
+    return () => {
+      cancelled = true
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [
+    checkoutSuccess,
+    checkoutSessionId,
+    user?.id,
+    isAuthLoading,
+    refetchActiveReservations,
+    refetchPastReservations,
+    refetchPastReservationCount,
+    refetchListings,
+    navigate,
+  ])
 
   if (isAuthLoading) {
     return (

@@ -150,4 +150,28 @@ export const useConfirmReservation = () => {
   });
 };
 
+export const useAcceptLateReservationTerms = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { p_reservation_id: string }) => {
+      console.info("Accepting late reservation terms", payload);
+      const result = await reservationsEvents.acceptLateReservationTerms(payload.p_reservation_id);
+
+      if (!result) {
+        throw new Error(getMutationErrorMessage("Failed to continue this late request."))
+      }
+
+      return result
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queries.reservations._def });
+      queryClient.invalidateQueries({ queryKey: queries.hours._def });
+    },
+    onError: (err: any) => {
+      console.error("Error accepting late reservation terms", err);
+    },
+  });
+};
+
 export default {};

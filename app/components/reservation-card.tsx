@@ -1,10 +1,16 @@
 import { ArrowRight, CalendarClock, Clock3, Star, Users } from "lucide-react"
 import { useNavigate } from "react-router"
 
+import { TimeWithLocalHint } from "@/components/time-with-local-hint"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { formatDateRangeInTimeZone, formatDateRangeInViewerTimeZone } from "@/lib/date-time"
 import { usePendingReservationReviews } from "@/hooks/useReviews"
-import { useCancelReservation, useConfirmReservation } from "@/hooks/useReservations"
+import {
+  useAcceptLateReservationTerms,
+  useCancelReservation,
+  useConfirmReservation,
+} from "@/hooks/useReservations"
 import { useUser } from "@/store/user_state"
 import type { PendingReservationReview, Reservation } from "@/types/custom/api.types"
 
@@ -13,32 +19,7 @@ type ReservationCardReservation = Reservation & {
   listingSubtitle?: string
   listingImage?: string
   listingOwnerId?: string | null
-}
-
-function formatDateRange(startAtIso: string, endAtIso: string) {
-  const start = new Date(startAtIso)
-  const end = new Date(endAtIso)
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return "Unknown date"
-  }
-
-  const dayLabel = start.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  })
-  const timeLabel = `${start.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })}–${end.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })}`
-
-  return `${dayLabel}, ${timeLabel}`
+  listingTimezone?: string | null
 }
 
 function formatCurrency(value: number) {
@@ -91,9 +72,17 @@ export function ReservationCard({
   const pendingReviewsQuery = usePendingReservationReviews({ enabled: Boolean(user?.id) })
   const confirmMutation = useConfirmReservation()
   const cancelMutation = useCancelReservation()
+  const acceptLateMutation = useAcceptLateReservationTerms()
   const timeStatus = getReservationTimeStatus(reservation.start_at, reservation.end_at)
   const isPast = timeStatus === "past"
+  const hasStarted = timeStatus === "ongoing" || timeStatus === "past"
   const isHost = Boolean(user?.id && reservation.listingOwnerId && reservation.listingOwnerId === user.id)
+  const isRenter = Boolean(user?.id && reservation.renter_id === user.id)
+  const isAwaitingLateConsent = reservation.status === "PENDING_AWAITING_LATE_CONSENT"
+  const hostHasPreconfirmedLateRequest = Boolean(reservation.host_preconfirmed_at)
+  const listingTimeZone = reservation.listingTimezone ?? "UTC"
+  const listingRangeLabel = formatDateRangeInTimeZone(reservation.start_at, reservation.end_at, listingTimeZone)
+  const localRangeLabel = formatDateRangeInViewerTimeZone(reservation.start_at, reservation.end_at)
   const pendingReviewPrompt =
     (((pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []).find(
       (review) => review.reservation_id === reservation.id
@@ -101,10 +90,10 @@ export function ReservationCard({
   const reviewLabel = pendingReviewPrompt?.reviewer_role === "HOST_TO_BOOKER"
     ? "Review guest"
     : "Leave a review"
-  const actionsDisabled = confirmMutation.isPending || cancelMutation.isPending
+  const actionsDisabled = confirmMutation.isPending || cancelMutation.isPending || acceptLateMutation.isPending
 
   const handleConfirm = async () => {
-    if (!isHost || reservation.status !== "PENDING" || isPast) return
+    if (!isHost || (reservation.status !== "PENDING" && reservation.status !== "PENDING_AWAITING_LATE_CONSENT") || hasStarted) return
 
     try {
       await confirmMutation.mutateAsync({ p_reservation_id: reservation.id })
@@ -114,11 +103,22 @@ export function ReservationCard({
   }
 
   const handleCancel = async () => {
-    if (!isHost || reservation.status === "CANCELLED" || isPast) return
+    if (!isHost || reservation.status === "CANCELLED" || hasStarted) return
     if (!confirm("Cancel this reservation?")) return
 
     try {
       await cancelMutation.mutateAsync({ p_reservation_id: reservation.id })
+    } catch {
+      // handled by error store
+    }
+  }
+
+  const handleAcceptLate = async () => {
+    if (!isRenter || !isAwaitingLateConsent || hasStarted) return
+    if (!confirm("Continue this late request? After you accept, you won't be able to cancel it.")) return
+
+    try {
+      await acceptLateMutation.mutateAsync({ p_reservation_id: reservation.id })
     } catch {
       // handled by error store
     }
@@ -171,6 +171,10 @@ export function ReservationCard({
               <Badge variant="outline" className="border-[#ffe58f] bg-[#fffbe6] text-[#ad6800]">
                 Pending
               </Badge>
+            ) : reservation.status === "PENDING_AWAITING_LATE_CONSENT" ? (
+              <Badge variant="outline" className="border-[#ffd591] bg-[#fff7e6] text-[#ad4e00]">
+                Pending
+              </Badge>
             ) : null}
           </div>
 
@@ -179,7 +183,12 @@ export function ReservationCard({
           <div className="grid gap-2 text-sm text-[#000000] md:grid-cols-2">
             <div className="flex items-center gap-2 rounded-lg bg-[#f8f8f8] px-3 py-2">
               <CalendarClock className="h-4 w-4 text-[#6a6a6a]" />
-              <span>{formatDateRange(reservation.start_at, reservation.end_at)}</span>
+              <TimeWithLocalHint
+                primaryText={listingRangeLabel}
+                localTime={localRangeLabel}
+              >
+                {listingRangeLabel}
+              </TimeWithLocalHint>
             </div>
 
             <div className="flex items-center gap-2 rounded-lg bg-[#f8f8f8] px-3 py-2">
@@ -197,6 +206,12 @@ export function ReservationCard({
               <span>{formatCurrency(reservation.total_price)}</span>
             </div>
           </div>
+
+          {isRenter && isAwaitingLateConsent ? (
+            <p className="mt-3 rounded-lg border border-[#ffd591] bg-[#fff7e6] px-3 py-2 text-sm text-[#ad4e00]">
+              This request has passed the standard cancellation window and now requires your approval to continue as a late request. The host still has to confirm it. If you continue, you won&apos;t be able to cancel it.
+            </p>
+          ) : null}
 
           <div className="mt-3 flex justify-end">
             <div className="flex gap-2">
@@ -227,13 +242,23 @@ export function ReservationCard({
                 </Button>
               ) : null}
 
-              {isHost && reservation.status === "PENDING" && !isPast ? (
+              {isRenter && isAwaitingLateConsent && !isPast ? (
+                <Button
+                  className="bg-[#ad6800] text-[#ffffff] hover:bg-[#8f5800]"
+                  onClick={handleAcceptLate}
+                  disabled={actionsDisabled}
+                >
+                  {acceptLateMutation.isPending ? "Continuing..." : "Continue late request"}
+                </Button>
+              ) : null}
+
+              {isHost && (reservation.status === "PENDING" || reservation.status === "PENDING_AWAITING_LATE_CONSENT") && !isPast && !(isAwaitingLateConsent && hostHasPreconfirmedLateRequest) ? (
                 <Button
                   className="bg-[#237804] text-[#ffffff] hover:bg-[#1f6a03]"
                   onClick={handleConfirm}
                   disabled={actionsDisabled}
                 >
-                  Confirm
+                  {isAwaitingLateConsent ? "Confirm late request" : "Confirm"}
                 </Button>
               ) : null}
 
@@ -248,6 +273,12 @@ export function ReservationCard({
               ) : null}
             </div>
           </div>
+
+          {isHost && isAwaitingLateConsent && hostHasPreconfirmedLateRequest && !isPast ? (
+            <p className="mt-3 rounded-lg border border-[#d8e3f0] bg-[#f6f9fc] px-3 py-2 text-sm text-[#35516d]">
+              You already confirmed this late request. It is now waiting for the guest to accept the late-request terms.
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

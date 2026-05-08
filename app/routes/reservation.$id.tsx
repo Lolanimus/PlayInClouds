@@ -6,7 +6,14 @@ import { MapView } from "@/components/map-view"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ListingCard, type ListingItem } from "@/components/listings"
+import { TimeWithLocalHint } from "@/components/time-with-local-hint"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  formatDateInTimeZone,
+  formatDateTimeInTimeZone,
+  formatDateTimeInViewerTimeZone,
+  getTimeZoneLabel,
+} from "@/lib/date-time"
 import {
   Card,
   CardContent,
@@ -15,7 +22,12 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { usePendingReservationReviews, useCreateReservationReview } from "@/hooks/useReviews"
-import { useCancelReservation, useConfirmReservation, useGetReservation } from "@/hooks/useReservations"
+import {
+  useAcceptLateReservationTerms,
+  useCancelReservation,
+  useConfirmReservation,
+  useGetReservation,
+} from "@/hooks/useReservations"
 import { useToast } from "@/hooks/use-toast"
 import { useUser } from "@/store/user_state"
 import type { Listing, PendingReservationReview, Reservation } from "@/types/custom/api.types"
@@ -44,21 +56,6 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function formatDateTime(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Unknown"
-
-  return date.toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  })
-}
-
 function getDurationHours(startAt: string, endAt: string) {
   const start = new Date(startAt)
   const end = new Date(endAt)
@@ -73,19 +70,22 @@ function isPastReservation(endAtIso: string) {
   return end.getTime() <= Date.now()
 }
 
-function canRenterCancel(startAtIso: string, endAtIso: string, cancellationPolicyHours: number | null | undefined) {
+function hasReservationStarted(startAtIso: string) {
+  const start = new Date(startAtIso)
+  if (Number.isNaN(start.getTime())) return false
+  return start.getTime() <= Date.now()
+}
+
+function canCancelBeforePaymentDeadline(startAtIso: string, endAtIso: string, paymentDeadlineIso: string) {
   const now = Date.now()
   const start = new Date(startAtIso)
   const end = new Date(endAtIso)
+  const paymentDeadline = new Date(paymentDeadlineIso)
 
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || Number.isNaN(paymentDeadline.getTime())) return false
   if (end.getTime() <= now) return false
   if (start.getTime() <= now) return false
-
-  if (typeof cancellationPolicyHours !== "number") return true
-
-  const deadline = start.getTime() - cancellationPolicyHours * 60 * 60 * 1000
-  return now <= deadline
+  return now < paymentDeadline.getTime()
 }
 
 function getProfileDisplayName(profile: ReservationProfile | null, fallback: string) {
@@ -101,11 +101,21 @@ function formatCancellationPolicy(hours: number | null | undefined) {
   return `Cancel up to ${hours} hour${hours === 1 ? "" : "s"} before the reservation start`
 }
 
+function getNormalConfirmationDeadline(startAtIso: string, cancellationPolicyHours: number | null | undefined) {
+  const start = new Date(startAtIso)
+  if (Number.isNaN(start.getTime())) return null
+
+  if (typeof cancellationPolicyHours !== "number") return start
+
+  return new Date(start.getTime() - cancellationPolicyHours * 60 * 60 * 1000)
+}
+
 function getStatusBadgeClass(status: string) {
   switch (status) {
     case "CONFIRMED":
       return "border-[#cfe7d6] bg-[#effaf2] text-[#166534]"
     case "PENDING":
+    case "PENDING_AWAITING_LATE_CONSENT":
       return "border-[#f4dfb0] bg-[#fff8e8] text-[#9a6700]"
     case "CANCELLED":
       return "border-[#ebd0d5] bg-[#fff1f3] text-[#b42318]"
@@ -119,6 +129,7 @@ function getStatusTextClass(status: string) {
     case "CONFIRMED":
       return "text-[#166534]"
     case "PENDING":
+    case "PENDING_AWAITING_LATE_CONSENT":
       return "text-[#9a6700]"
     case "CANCELLED":
       return "text-[#b42318]"
@@ -127,12 +138,9 @@ function getStatusTextClass(status: string) {
   }
 }
 
-function formatReviewDeadline(value?: string) {
+function formatReviewDeadline(value: string | undefined, timeZone: string) {
   if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-
-  return date.toLocaleDateString("en-US", {
+  return formatDateInTimeZone(value, timeZone, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -164,6 +172,7 @@ export default function ReservationDetailsPage() {
   const [hiddenHostRevieweeId, setHiddenHostRevieweeId] = useState<string | null>(null)
   const cancelReservationMutation = useCancelReservation()
   const confirmReservationMutation = useConfirmReservation()
+  const acceptLateReservationMutation = useAcceptLateReservationTerms()
   const createReservationReviewMutation = useCreateReservationReview()
   const pendingReviewsQuery = usePendingReservationReviews({ enabled: Boolean(user?.id) })
 
@@ -185,6 +194,8 @@ export default function ReservationDetailsPage() {
   const listing = reservationPayload?.listing ?? null
   const owner = reservationPayload?.owner ?? null
   const booker = reservationPayload?.booker ?? null
+  const listingTimeZone = listing?.timezone ?? "UTC"
+  const listingTimeZoneLabel = getTimeZoneLabel(listingTimeZone)
   const listingCardItem = useMemo<ListingItem | null>(() => {
     if (!listing) return null
 
@@ -215,15 +226,53 @@ export default function ReservationDetailsPage() {
     reservationQuery.isError
 
   const isPast = reservation ? isPastReservation(reservation.end_at) : false
+  const hasStarted = reservation ? hasReservationStarted(reservation.start_at) : false
   const isRenter = Boolean(user?.id && reservation?.renter_id === user.id)
   const isHost = Boolean(user?.id && owner?.id === user.id)
-  const renterCanCancel = reservation && listing
-    ? canRenterCancel(reservation.start_at, reservation.end_at, listing.cancellation_policy_hours)
+  const isAwaitingLateConsent = reservation?.status === "PENDING_AWAITING_LATE_CONSENT"
+  const hasAcceptedLateTerms = Boolean(reservation?.late_consent_given_at)
+  const hostHasPreconfirmedLateRequest = Boolean(reservation?.host_preconfirmed_at)
+  const normalConfirmationDeadline = reservation && listing
+    ? getNormalConfirmationDeadline(reservation.start_at, listing.cancellation_policy_hours)
+    : null
+  const hasLateRequestWindow = Boolean(
+    reservation
+    && listing
+    && typeof listing.cancellation_policy_hours === "number"
+    && normalConfirmationDeadline
+    && normalConfirmationDeadline.getTime() < new Date(reservation.payment_deadline).getTime()
+  )
+  const cancelAllowedByDeadline = reservation
+    ? canCancelBeforePaymentDeadline(reservation.start_at, reservation.end_at, reservation.payment_deadline)
     : false
+  const renterCanCancel = Boolean(
+    reservation
+    && isRenter
+    && !hasAcceptedLateTerms
+    && cancelAllowedByDeadline
+  )
   const canCancel = reservation
-    ? (isHost ? !isPast : isRenter ? renterCanCancel : false)
+    ? (
+      isHost
+        ? cancelAllowedByDeadline
+        : renterCanCancel
+    )
     : false
-  const canConfirm = Boolean(reservation && isHost && reservation.status === "PENDING" && !isPast)
+  const canConfirm = Boolean(
+    reservation
+    && isHost
+    && (reservation.status === "PENDING" || reservation.status === "PENDING_AWAITING_LATE_CONSENT")
+    && !(isAwaitingLateConsent && hostHasPreconfirmedLateRequest)
+    && !hasStarted
+    && new Date(reservation.payment_deadline).getTime() > Date.now()
+  )
+  const canAcceptLateTerms = Boolean(
+    reservation
+    && isRenter
+    && reservation.status === "PENDING_AWAITING_LATE_CONSENT"
+    && !hasStarted
+    && new Date(reservation.payment_deadline).getTime() > Date.now()
+  )
   const pendingReviewPrompts = (pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []
   const reviewPrompt = pendingReviewPrompts.find((prompt) => {
     if (prompt.reservation_id !== reservation?.id) return false
@@ -284,6 +333,19 @@ export default function ReservationDetailsPage() {
 
     try {
       await confirmReservationMutation.mutateAsync({ p_reservation_id: reservation.id })
+      await reservationQuery.refetch()
+    } catch {
+      // handled by global error state
+    }
+  }
+
+  const handleAcceptLateTerms = async () => {
+    if (!reservation || !canAcceptLateTerms) return
+
+    if (!confirm("Continue this late request? After you accept, you won't be able to cancel it.")) return
+
+    try {
+      await acceptLateReservationMutation.mutateAsync({ p_reservation_id: reservation.id })
       await reservationQuery.refetch()
     } catch {
       // handled by global error state
@@ -354,9 +416,9 @@ export default function ReservationDetailsPage() {
                     </Link>
                   </Button>
                   {reservation ? (
-                    <Badge variant="outline" className={getStatusBadgeClass(reservation.status)}>
-                      Reservation #{reservation.id.slice(0, 8)}
-                    </Badge>
+                      <Badge variant="outline" className={getStatusBadgeClass(reservation.status)}>
+                        Reservation #{reservation.id.slice(0, 8)}
+                      </Badge>
                   ) : null}
                 </div>
                 <CardTitle className="text-3xl tracking-tight text-[#000000]">Reservation details</CardTitle>
@@ -368,7 +430,7 @@ export default function ReservationDetailsPage() {
                     <div className="grid gap-3 md:grid-cols-3">
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Status</p>
-                        <p className={`mt-1 text-sm font-semibold ${getStatusTextClass(reservation.status)}`}>{reservation.status}</p>
+                        <p className={`mt-1 text-sm font-semibold ${getStatusTextClass(reservation.status)}`}>{getStatusLabel(reservation.status)}</p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Total paid</p>
@@ -386,14 +448,28 @@ export default function ReservationDetailsPage() {
                           <CalendarClock className="h-3.5 w-3.5" />
                           Start
                         </p>
-                        <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{formatDateTime(reservation.start_at)}</p>
+                        <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">
+                          <TimeWithLocalHint
+                            primaryText={formatDateTimeInTimeZone(reservation.start_at, listingTimeZone)}
+                            localTime={formatDateTimeInViewerTimeZone(reservation.start_at)}
+                          >
+                            {formatDateTimeInTimeZone(reservation.start_at, listingTimeZone)}
+                          </TimeWithLocalHint>
+                        </p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">
                           <CalendarClock className="h-3.5 w-3.5" />
                           End
                         </p>
-                        <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">{formatDateTime(reservation.end_at)}</p>
+                        <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">
+                          <TimeWithLocalHint
+                            primaryText={formatDateTimeInTimeZone(reservation.end_at, listingTimeZone)}
+                            localTime={formatDateTimeInViewerTimeZone(reservation.end_at)}
+                          >
+                            {formatDateTimeInTimeZone(reservation.end_at, listingTimeZone)}
+                          </TimeWithLocalHint>
+                        </p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] md:col-span-2">
                         <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">
@@ -404,17 +480,95 @@ export default function ReservationDetailsPage() {
                       </div>
                     </div>
 
+                    {reservation.status === "PENDING" || reservation.status === "PENDING_AWAITING_LATE_CONSENT" ? (
+                      <div className="rounded-2xl border border-[#d8e3f0] bg-[#f6f9fc] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#5e738a]">Confirmation deadline</p>
+                        <p className="mt-2 text-sm font-medium leading-6 text-[#16324f]">
+                          <TimeWithLocalHint
+                            primaryText={
+                              isHost
+                                ? isAwaitingLateConsent
+                                  ? hostHasPreconfirmedLateRequest
+                                    ? `You already confirmed this late request. It will finalize only if the guest accepts the late-request terms before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+                                    : `You can confirm this late request before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. It will only finalize after the guest accepts the late-request terms.`
+                                  : hasLateRequestWindow
+                                    ? `Confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can continue as a late request until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+                                    : `Confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled.`
+                                : isAwaitingLateConsent
+                                  ? reservation.host_preconfirmed_at
+                                    ? `The host already confirmed this late request. Accept it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} to finalize it.`
+                                    : `This reservation has entered the late-request window. Continue it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if you still want the booking.`
+                                  : hasAcceptedLateTerms
+                                    ? `This reservation is now in the late-request window. The host still needs to confirm it by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+                                    : hasLateRequestWindow
+                                      ? `The host should confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can move into the late-request flow until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if the booking is still eligible.`
+                                      : `The host should confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled and you will not be charged.`
+                            }
+                            localTime={isAwaitingLateConsent
+                              ? formatDateTimeInViewerTimeZone(reservation.payment_deadline)
+                              : hasLateRequestWindow
+                                ? `Confirm by ${formatDateTimeInViewerTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline)}; late-request window until ${formatDateTimeInViewerTimeZone(reservation.payment_deadline)}`
+                                : formatDateTimeInViewerTimeZone(reservation.payment_deadline)}
+                            align="right"
+                          >
+                            {isHost
+                              ? isAwaitingLateConsent
+                                ? hostHasPreconfirmedLateRequest
+                                  ? `You already confirmed this late request. It will finalize only if the guest accepts the late-request terms before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+                                  : `You can confirm this late request before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. It will only finalize after the guest accepts the late-request terms.`
+                                : hasLateRequestWindow
+                                  ? `Confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can continue as a late request until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+                                  : `Confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled.`
+                              : isAwaitingLateConsent
+                                ? reservation.host_preconfirmed_at
+                                  ? `The host already confirmed this late request. Accept it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} to finalize it.`
+                                  : `This reservation has entered the late-request window. Continue it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if you still want the booking.`
+                                : hasAcceptedLateTerms
+                                  ? `This reservation is now in the late-request window. The host still needs to confirm it by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+                                  : hasLateRequestWindow
+                                    ? `The host should confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can move into the late-request flow until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if the booking is still eligible.`
+                                    : `The host should confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled and you will not be charged.`}
+                          </TimeWithLocalHint>
+                        </p>
+                        <p className="mt-2 text-xs text-[#5e738a]">Times shown in {listingTimeZoneLabel}</p>
+                        {!isHost && isRenter && isAwaitingLateConsent ? (
+                          <p className="mt-2 text-sm leading-6 text-[#5e738a]">
+                            This request has passed the standard cancellation window and now requires your approval to continue as a late request. The host still has to confirm it. If you continue, you will no longer be able to cancel it.
+                          </p>
+                        ) : null}
+                        {!isHost && isRenter && !isAwaitingLateConsent && hasAcceptedLateTerms ? (
+                          <p className="mt-2 text-sm leading-6 text-[#5e738a]">
+                            You already accepted the late-request terms, so you can no longer cancel this reservation.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {canAcceptLateTerms ? (
+                      <Button
+                        className="h-11 w-full rounded-full border border-[#ad6800] bg-[#fff8eb] px-3 py-1 text-sm font-semibold text-[#9a6700] shadow-sm transition-colors hover:bg-[#fff2d6]"
+                        onClick={handleAcceptLateTerms}
+                        disabled={acceptLateReservationMutation.isPending}
+                      >
+                        {acceptLateReservationMutation.isPending ? "Continuing..." : "Continue late request"}
+                      </Button>
+                    ) : null}
+
                     {canConfirm ? (
                       <Button
                         className="h-11 w-full rounded-full border border-[#1f8f4a] bg-[#eaf8ef] px-3 py-1 text-sm font-semibold text-[#0f6130] shadow-sm transition-colors hover:bg-[#ddf2e5]"
                         onClick={handleConfirmReservation}
                         disabled={confirmReservationMutation.isPending}
                       >
-                        {confirmReservationMutation.isPending ? "Confirming..." : "Confirm reservation"}
+                        {confirmReservationMutation.isPending
+                          ? "Confirming..."
+                          : isAwaitingLateConsent
+                            ? "Confirm late request"
+                            : "Confirm reservation"}
                       </Button>
                     ) : isRenter && !isHost && !isPast ? (
                       <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
-                        Cancellation window ended
+                        Confirmation deadline passed
                       </Badge>
                     ) : isPast ? (
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
@@ -598,7 +752,16 @@ export default function ReservationDetailsPage() {
                     </div>
                     <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
                       <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><ReceiptText className="h-3.5 w-3.5" /> Receipt</p>
-                      <p className="mt-1 text-sm text-[#000000]">Booked on {formatDateTime(reservation.created_at)}</p>
+                      <p className="mt-1 text-sm text-[#000000]">
+                        Booked on{" "}
+                        <TimeWithLocalHint
+                          primaryText={formatDateTimeInTimeZone(reservation.created_at, listingTimeZone)}
+                          localTime={formatDateTimeInViewerTimeZone(reservation.created_at)}
+                          align="right"
+                        >
+                          {formatDateTimeInTimeZone(reservation.created_at, listingTimeZone)}
+                        </TimeWithLocalHint>
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -651,8 +814,8 @@ export default function ReservationDetailsPage() {
                 </p>
                 <h2 className="mt-2 text-2xl font-semibold text-[#000000]">{getReviewTitle(reviewPrompt)}</h2>
                 <p className="mt-2 text-sm text-[#6a6a6a]">{getReviewContext(reviewPrompt)}</p>
-                {formatReviewDeadline(reviewPrompt.expires_at) ? (
-                  <p className="mt-2 text-xs text-[#8a8a8a]">Submit by {formatReviewDeadline(reviewPrompt.expires_at)}</p>
+                {formatReviewDeadline(reviewPrompt.expires_at, listingTimeZone) ? (
+                  <p className="mt-2 text-xs text-[#8a8a8a]">Submit by {formatReviewDeadline(reviewPrompt.expires_at, listingTimeZone)}</p>
                 ) : null}
               </div>
               <Button type="button" variant="outline" className="rounded-full" onClick={closeReviewModal}>
@@ -712,4 +875,8 @@ export default function ReservationDetailsPage() {
       ) : null}
     </div>
   )
+}
+function getStatusLabel(status: string) {
+  if (status === "PENDING_AWAITING_LATE_CONSENT") return "PENDING"
+  return status
 }

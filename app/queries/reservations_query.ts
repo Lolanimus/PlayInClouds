@@ -51,4 +51,9 @@ export const reservations = createQueryKeys("reservations", {
         p.p_guests
       ),
   }),
+
+  acceptLate: (p: { p_reservation_id: string }) => ({
+    queryKey: ["accept-late", p],
+    queryFn: () => reservationsEvents.acceptLateReservationTerms(p.p_reservation_id),
+  }),
 });
