@@ -2,11 +2,17 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Heart, MessageCircle, Plus, Share, Star, X, Minus } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
+import { TimeWithLocalHint } from "@/components/time-with-local-hint"
 import { UserProfileCard } from "@/components/user-profile-card"
 import { useGetListing } from "@/hooks/useListings"
 import { usePublicProfile } from "@/hooks/useProfile"
 import { useReviews } from "@/hooks/useReviews"
 import { queries } from "@/queries/queries"
+import {
+  formatDateRangeInTimeZone,
+  formatDateRangeInViewerTimeZone,
+  getTimeZoneLabel,
+} from "@/lib/date-time"
 import { formatListingCategory } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useHostListings } from "@/store/host_listings_state"
@@ -366,6 +372,7 @@ export default function ListingDetailsPage() {
       listingLocalDateHourToUtc(lastDay.dateKey, 12, listingTimeZone)
     )
   }, [listingTimeZone, upcomingDays])
+  const listingTimeZoneLabel = useMemo(() => getTimeZoneLabel(listingTimeZone), [listingTimeZone])
 
   useEffect(() => {
     if (!Number.isFinite(participantsParam)) return
@@ -518,7 +525,11 @@ export default function ListingDetailsPage() {
   const selectedDay = selectedDayIndex !== null ? upcomingDays[selectedDayIndex] : null
   const selectedSlotLabel =
     selectedDay && selectedStartHour !== null && selectedEndHour !== null
-      ? `${selectedDay.dayLabel}, ${selectedDay.monthDayLabel} · ${formatHourLabel(selectedStartHour)}–${formatHourLabel(selectedEndHour)}`
+      ? formatDateRangeInTimeZone(
+          listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing.timezone).toISOString(),
+          listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing.timezone).toISOString(),
+          listing.timezone,
+        )
       : null
 
   const cancellationWarning = useMemo(() => {
@@ -939,6 +950,7 @@ export default function ListingDetailsPage() {
               <div className="border-b border-[#e9e9e9] px-5 py-4">
                 <h2 className="text-lg font-semibold text-[#000000]">Select date and time</h2>
                 <p className="mt-1 text-sm text-[#6a6a6a]">Choose from available hours for {listing.title}</p>
+                <p className="mt-1 text-xs text-[#6a6a6a]">Selected booking times are shown in {listingTimeZoneLabel}.</p>
                 <p className="mt-1 text-xs text-[#6a6a6a]">Scroll right for later dates (booking window up to {bookingWindowEndLabel}).</p>
               </div>
 
@@ -1007,15 +1019,27 @@ export default function ListingDetailsPage() {
                 <div className="mb-4 rounded-lg border border-[#dadada] bg-[#fafafa] px-3 py-2">
                   <p className="text-xs font-medium text-[#000000]">Selected time</p>
                   <p className="mt-1 text-sm text-[#4a4a4a]">
-                    {selectedSlotLabel ?? "Click one available slot for start, then another for end"}
+                    {selectedDay && selectedStartHour !== null && selectedEndHour !== null ? (
+                      <TimeWithLocalHint
+                        primaryText={selectedSlotLabel}
+                        localTime={formatDateRangeInViewerTimeZone(
+                          listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing.timezone).toISOString(),
+                          listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing.timezone).toISOString(),
+                        )}
+                      >
+                        {selectedSlotLabel}
+                      </TimeWithLocalHint>
+                    ) : (
+                      "Click one available slot for start, then another for end"
+                    )}
                   </p>
-                  <p className="mt-1 text-xs text-[#6a6a6a]">Gray cells are unavailable. Yellow cells require more advance notice.</p>
+                  <p className="mt-1 text-xs text-[#6a6a6a]">Gray cells are unavailable. Yellow cells require more advance notice based on the listing&apos;s schedule.</p>
                 </div>
 
                 {typeof listing.advanceNoticeHours === "number" && listing.advanceNoticeHours > 0 ? (
                   <div className="mb-4 rounded-lg border border-[#f3d49b] bg-[#fff8eb] px-3 py-2">
                     <p className="text-xs font-semibold text-[#9a6700]">Advance notice</p>
-                    <p className="mt-1 text-sm text-[#9a6700]">This host requires {listing.advanceNoticeHours} hour(s) of advance notice.</p>
+                    <p className="mt-1 text-sm text-[#9a6700]">This host requires {listing.advanceNoticeHours} hour(s) of advance notice before the start time shown in {listingTimeZoneLabel}.</p>
                   </div>
                 ) : null}
 
