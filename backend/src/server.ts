@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerHourRoutes } from "./routes/hours";
 import { registerListingRoutes } from "./routes/listings";
+import { registerConnectRoutes } from "./routes/connect";
 import { registerProfileRoutes } from "./routes/profile";
 import { registerReservationRoutes } from "./routes/reservations";
 import { registerReviewRoutes } from "./routes/reviews";
@@ -37,6 +38,7 @@ app.get("/health", async () => {
 });
 
 await registerAuthRoutes(app);
+await registerConnectRoutes(app);
 await registerListingRoutes(app);
 await registerReviewRoutes(app);
 await registerReservationRoutes(app);

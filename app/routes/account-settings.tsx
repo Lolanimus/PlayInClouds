@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router"
 
+import { createConnectOnboardingLink, getConnectAccountStatus, type ConnectAccountStatus } from "~/api/supabase/connect"
 import { updateAccountSettings } from "~/api/supabase/auth"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +20,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useToast } from "@/hooks/use-toast"
 import { errorStore, useError, useErrorActions } from "@/store/error_state"
 import { useUser } from "@/store/user_state"
 
@@ -35,8 +37,12 @@ export default function AccountSettingsPage() {
   const user = useUser()
   const error = useError()
   const { setError, setSuccess } = useErrorActions()
+  const { toast } = useToast()
 
   const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingConnect, setIsLoadingConnect] = useState(false)
+  const [isOpeningConnect, setIsOpeningConnect] = useState(false)
+  const [connectStatus, setConnectStatus] = useState<ConnectAccountStatus | null>(null)
   const [form, setForm] = useState<FormState>({
     firstName: "",
     lastName: "",
@@ -58,6 +64,36 @@ export default function AccountSettingsPage() {
       email: user.email ?? "",
     }))
   }, [user, navigate])
+
+  useEffect(() => {
+    if (!user) return
+
+    let isActive = true
+
+    const loadConnectStatus = async () => {
+      setIsLoadingConnect(true)
+
+      try {
+        const account = await getConnectAccountStatus()
+
+        if (!isActive) return
+        setConnectStatus(account)
+      } catch (error) {
+        if (!isActive) return
+        console.error("Failed to load Stripe Connect status", error)
+      } finally {
+        if (isActive) {
+          setIsLoadingConnect(false)
+        }
+      }
+    }
+
+    void loadConnectStatus()
+
+    return () => {
+      isActive = false
+    }
+  }, [user])
 
   useEffect(() => {
     setError(null)
@@ -124,6 +160,47 @@ export default function AccountSettingsPage() {
     setIsSaving(false)
   }
 
+  const handleConnectStripe = async () => {
+    if (isOpeningConnect) return
+
+    setIsOpeningConnect(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const account = await createConnectOnboardingLink({
+        returnPath: "/account-settings",
+        refreshPath: "/account-settings",
+      })
+
+      setConnectStatus(account)
+
+      if (!account.onboardingUrl) {
+        throw new Error("Stripe onboarding link was not returned.")
+      }
+
+      window.location.href = account.onboardingUrl
+      return
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to start Stripe onboarding."
+      setError(message)
+      toast({
+        variant: "destructive",
+        title: "Stripe onboarding failed",
+        description: message,
+      })
+    } finally {
+      setIsOpeningConnect(false)
+    }
+  }
+
+  const isStripeConnected = Boolean(connectStatus?.onboardingComplete && connectStatus?.payoutsEnabled)
+  const connectButtonLabel = isStripeConnected
+    ? "Review payout details"
+    : connectStatus?.stripeAccountId
+      ? "Continue Stripe onboarding"
+      : "Connect Stripe payouts"
+
   return (
     <main className="min-h-[calc(100vh-5.5rem)] bg-muted/40 px-4 py-10">
       <Card className="mx-auto w-full max-w-2xl overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
@@ -133,6 +210,7 @@ export default function AccountSettingsPage() {
         </CardHeader>
 
         <CardContent className="p-6">
+          <div className="space-y-8">
           <FieldGroup>
             <div className="grid gap-4 md:grid-cols-2">
               <Field>
@@ -202,6 +280,52 @@ export default function AccountSettingsPage() {
               {isSaving ? "Saving..." : "Save changes"}
             </Button>
           </FieldGroup>
+
+          <div className="rounded-2xl border border-[#e9e9e9] bg-[#fafafa] p-5">
+            <div className="space-y-2">
+              <p className="text-lg font-semibold text-[#000000]">Host payouts</p>
+              <p className="text-sm text-[#6a6a6a]">
+                Connect Stripe so AirDrums can send reservation payouts to your bank account.
+              </p>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-4 text-sm">
+              {isLoadingConnect ? (
+                <p className="text-[#6a6a6a]">Loading payout onboarding status...</p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[#000000]">
+                    Status:{" "}
+                    <span className="font-medium">
+                      {isStripeConnected
+                        ? "Ready to receive payouts"
+                        : connectStatus?.stripeAccountId
+                          ? "Onboarding still required"
+                          : "Not connected"}
+                    </span>
+                  </p>
+                  <p className="text-[#6a6a6a]">
+                    {isStripeConnected
+                      ? "Your Stripe account is connected and payouts are enabled."
+                      : "Stripe will collect the identity and bank details needed to pay you out."}
+                  </p>
+                  {connectStatus?.stripeAccountId ? (
+                    <p className="text-xs text-[#8a8a8a]">Account ID: {connectStatus.stripeAccountId}</p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => void handleConnectStripe()}
+              className="mt-4 h-10 w-full"
+              disabled={isLoadingConnect || isOpeningConnect}
+            >
+              {isOpeningConnect ? "Opening Stripe..." : connectButtonLabel}
+            </Button>
+          </div>
+          </div>
         </CardContent>
 
         <CardFooter className="border-t border-[#e9e9e9] p-6">

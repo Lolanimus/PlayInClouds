@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { ensureConnectAccount } from "~/api/supabase/connect"
 import { processRpcRequest } from "~/api/supabase/helpers"
 import { useSetListingWeeklySlots } from "@/hooks/useHours"
 import { useCreateListing, useGetListing, useUpdateListing } from "@/hooks/useListings"
@@ -653,6 +654,12 @@ export default function CreateListingPage() {
           if (!policySaved) {
             setIsSubmitting(false)
             return
+          }
+
+          try {
+            await ensureConnectAccount()
+          } catch (error) {
+            console.error("Failed to auto-create Stripe Connect account after listing creation", error)
           }
 
           setIsSubmitting(false)
