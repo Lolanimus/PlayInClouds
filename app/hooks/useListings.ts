@@ -164,10 +164,12 @@ export const useCreateListing = () => {
           const safeName = img.name.replace(/[^a-zA-Z0-9._-]/g, "_");
           const path = `listings/${user.id}/${Date.now()}_${safeName}`;
           const uploadedPath = await uploadFile("images", path, img);
-          if (uploadedPath) {
-            const url = getPublicUrl("images", uploadedPath);
-            uploadedImageUrls.push(url);
+          if (!uploadedPath) {
+            throw new Error(`Failed to upload image "${img.name}".`)
           }
+
+          const url = getPublicUrl("images", uploadedPath);
+          uploadedImageUrls.push(url);
         }
       }
       return await listingEvents.createListing(
@@ -230,10 +232,12 @@ export const useUpdateListing = () => {
             const safeName = img.name.replace(/[^a-zA-Z0-9._-]/g, "_");
             const path = `listings/${user.id}/${Date.now()}_${safeName}`;
             const uploadedPath = await uploadFile("images", path, img);
-            if (uploadedPath) {
-              const url = getPublicUrl("images", uploadedPath);
-              uploadedImageUrls.push(url);
+            if (!uploadedPath) {
+              throw new Error(`Failed to upload image "${img.name}".`)
             }
+
+            const url = getPublicUrl("images", uploadedPath);
+            uploadedImageUrls.push(url);
           }
         }
         args.p_images = uploadedImageUrls;
