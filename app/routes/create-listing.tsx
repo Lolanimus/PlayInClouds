@@ -71,6 +71,7 @@ type ListingFormState = {
   address: string
   areaM2: string
   cancellationPolicyEnabled: boolean
+  cancellationAnyTime: boolean
   cancellationPolicyHours: string
   advanceNoticeEnabled: boolean
   advanceNoticeHours: string
@@ -93,6 +94,7 @@ const initialFormState: ListingFormState = {
   address: "50 Euclid Ave London",
   areaM2: "30",
   cancellationPolicyEnabled: false,
+  cancellationAnyTime: false,
   cancellationPolicyHours: "",
   advanceNoticeEnabled: false,
   advanceNoticeHours: "",
@@ -185,9 +187,12 @@ export default function CreateListingPage() {
       address: listing.address ?? "",
       areaM2: String(listing.area_m2 ?? ""),
       cancellationPolicyEnabled: typeof listing.cancellation_policy_hours === "number",
+      cancellationAnyTime: listing.cancellation_policy_hours === 0,
       cancellationPolicyHours:
         typeof listing.cancellation_policy_hours === "number"
-          ? String(listing.cancellation_policy_hours)
+          ? listing.cancellation_policy_hours > 0
+            ? String(listing.cancellation_policy_hours)
+            : ""
           : "",
       advanceNoticeEnabled: typeof listing.advance_notice_hours === "number",
       advanceNoticeHours:
@@ -401,7 +406,11 @@ export default function CreateListingPage() {
 
     const areaM2 = Number(form.areaM2)
     const hasCancellationPolicy = form.cancellationPolicyEnabled
-    const cancellationPolicyHours = hasCancellationPolicy ? Number(form.cancellationPolicyHours) : null
+    const cancellationPolicyHours = hasCancellationPolicy
+      ? form.cancellationAnyTime
+        ? 0
+        : Number(form.cancellationPolicyHours)
+      : null
     const hasAdvanceNotice = form.advanceNoticeEnabled
     const advanceNoticeHours = hasAdvanceNotice ? Number(form.advanceNoticeHours) : null
     const hasInstantBooking = form.instantBookingEnabled
@@ -413,15 +422,19 @@ export default function CreateListingPage() {
     if (!form.category.trim()) return setFormError("Category is required.")
     if (!form.address.trim()) return setFormError("Address is required.")
     if (!isAddressPickedFromSuggestions) return setFormError("Please pick the address from suggestions.")
-    if (hasCancellationPolicy && !form.cancellationPolicyHours.trim()) {
-      return setFormError("Enter cancellation policy hours.")
+    if (hasCancellationPolicy && !form.cancellationAnyTime && !form.cancellationPolicyHours.trim()) {
+      return setFormError("Enter the booker cancellation cutoff in hours.")
     }
     if (hasAdvanceNotice && !form.advanceNoticeHours.trim()) {
       return setFormError("Enter advance notice hours.")
     }
     if (!Number.isFinite(areaM2) || areaM2 <= 0) return setFormError("Area must be a valid positive number.")
-    if (hasCancellationPolicy && (!Number.isInteger(cancellationPolicyHours) || (cancellationPolicyHours ?? -1) < 0)) {
-      return setFormError("Cancellation policy must be a whole number of hours, or empty.")
+    if (
+      hasCancellationPolicy
+      && !form.cancellationAnyTime
+      && (!Number.isInteger(cancellationPolicyHours) || (cancellationPolicyHours ?? -1) < 0)
+    ) {
+      return setFormError("Booker cancellation cutoff must be a whole number of hours, or empty.")
     }
     if (hasAdvanceNotice && (!Number.isInteger(advanceNoticeHours) || (advanceNoticeHours ?? -1) < 0)) {
       return setFormError("Advance notice must be a whole number of hours 0 or greater.")
@@ -1082,11 +1095,13 @@ export default function CreateListingPage() {
                   <div className="rounded-xl border border-[#e6e6e6] bg-[#fafafa] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold text-[#6a6a6a]">Cancellation policy</p>
+                        <p className="text-xs font-semibold text-[#6a6a6a]">Booker cancellation</p>
                         <p className="mt-1 text-xs text-[#7a7a7a]">
-                          {form.cancellationPolicyEnabled
-                            ? "Renter can cancel only before the cutoff."
-                            : "Renter can cancel any time before reservation start."}
+                          {!form.cancellationPolicyEnabled
+                            ? "Off. The booker cannot cancel this reservation."
+                            : form.cancellationAnyTime
+                              ? "On. The booker can cancel any time before the reservation starts."
+                              : "On. The booker can cancel only before the cutoff."}
                         </p>
                       </div>
                       <Switch
@@ -1095,6 +1110,7 @@ export default function CreateListingPage() {
                           setForm((prev) => ({
                             ...prev,
                             cancellationPolicyEnabled: checked,
+                            cancellationAnyTime: checked ? prev.cancellationAnyTime : false,
                             cancellationPolicyHours: checked ? prev.cancellationPolicyHours : "",
                           }))
                         }
@@ -1102,16 +1118,38 @@ export default function CreateListingPage() {
                     </div>
 
                     {form.cancellationPolicyEnabled ? (
-                      <div className="mt-3 space-y-1.5">
-                        <p className="text-xs font-medium text-[#6a6a6a]">Hours before start *</p>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="1"
-                          placeholder="e.g. 24"
-                          value={form.cancellationPolicyHours}
-                          onChange={(e) => setForm((prev) => ({ ...prev, cancellationPolicyHours: e.target.value }))}
-                        />
+                      <div className="mt-3 space-y-3">
+                        <label className="flex items-start gap-2 rounded-lg border border-[#e6e6e6] bg-[#ffffff] px-3 py-2 text-sm text-[#4a4a4a]">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-4 w-4 accent-[#111111]"
+                            checked={form.cancellationAnyTime}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                cancellationAnyTime: e.target.checked,
+                              }))}
+                          />
+                          <span>
+                            <span className="block font-medium">Any time before start</span>
+                            <span className="mt-1 block text-xs text-[#6a6a6a]">
+                              The booker can cancel right up until the reservation begins.
+                            </span>
+                          </span>
+                        </label>
+
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-medium text-[#6a6a6a]">Otherwise, booker can cancel until this many hours before start *</p>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="e.g. 24"
+                            disabled={form.cancellationAnyTime}
+                            value={form.cancellationPolicyHours}
+                            onChange={(e) => setForm((prev) => ({ ...prev, cancellationPolicyHours: e.target.value }))}
+                          />
+                        </div>
                       </div>
                     ) : null}
                   </div>
