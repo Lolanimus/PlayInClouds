@@ -170,8 +170,8 @@ export default function PaymentPage() {
   const hourlyRate = listing.priceNumber
   const listingTimeZoneLabel = getTimeZoneLabel(listing.timezone)
   const subtotal = Number((hourlyRate * hours).toFixed(2))
-  const processingFee = Number((subtotal * 0.075).toFixed(2))
-  const total = Number((subtotal + processingFee).toFixed(2))
+  const bookerServiceFee = Number((subtotal * 0.075).toFixed(2))
+  const total = Number((subtotal + bookerServiceFee).toFixed(2))
   const reservationStartAt = listingLocalDateHourToUtc(dateKey, startHour, listing.timezone)
   const reservationEndAt = listingLocalDateHourToUtc(dateKey, endHour, listing.timezone)
   const listingRangeLabel = formatDateRangeInTimeZone(reservationStartAt.toISOString(), reservationEndAt.toISOString(), listing.timezone)
@@ -356,8 +356,8 @@ export default function PaymentPage() {
                     <p>${subtotal.toFixed(2)} CAD</p>
                   </div>
                   <div className="flex items-center justify-between">
-                    <p>Processing fee (7.5%)</p>
-                    <p>${processingFee.toFixed(2)} CAD</p>
+                    <p>Service fee (7.5%)</p>
+                    <p>${bookerServiceFee.toFixed(2)} CAD</p>
                   </div>
                 </div>
 

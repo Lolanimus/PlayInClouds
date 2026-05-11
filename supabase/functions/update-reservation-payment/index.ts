@@ -29,6 +29,7 @@ type ReservationAccessRow = {
   renter_id: string;
   listing_id: string;
   owner_id: string | null;
+  cancellation_policy_hours: number | null;
   status: string;
   start_at: string;
   end_at: string;
@@ -69,7 +70,7 @@ async function getReservationAccess(
 
   const { data: listingData, error: listingError } = await service
     .from("listings")
-    .select("owner_id")
+    .select("owner_id, cancellation_policy_hours")
     .eq("id", row.listing_id)
     .single();
 
@@ -87,6 +88,7 @@ async function getReservationAccess(
     renter_id: row.renter_id,
     listing_id: row.listing_id,
     owner_id: (listingData as { owner_id: string | null }).owner_id,
+    cancellation_policy_hours: (listingData as { cancellation_policy_hours: number | null }).cancellation_policy_hours,
     status: row.status,
     start_at: row.start_at,
     end_at: row.end_at,
@@ -203,6 +205,14 @@ Deno.serve(async (request) => {
     }
 
     if (
+      reservation.renter_id === user.id
+      && reservation.owner_id !== user.id
+      && reservation.cancellation_policy_hours === null
+    ) {
+      return errorResponse("The guest cannot cancel this reservation", 403);
+    }
+
+    if (
       reservation.late_consent_given_at
       && reservation.renter_id === user.id
       && reservation.owner_id !== user.id
@@ -226,6 +236,7 @@ Deno.serve(async (request) => {
         .update({
           status: "AUTH_CANCELED",
           canceled_at: new Date().toISOString(),
+          last_reconciled_at: new Date().toISOString(),
         })
         .eq("reservation_id", body.reservationId)
         .eq("status", "AUTH");

@@ -16,6 +16,8 @@ const stripe = new Stripe(stripeApiKey, {
 type DuePaymentRow = {
   reservation_id: string;
   stripe_payment_intent_id: string | null;
+  amount_total: number;
+  amount_platform_fee: number;
   reservations: {
     status: string;
     payment_deadline: string;
@@ -23,10 +25,17 @@ type DuePaymentRow = {
   } | null;
 };
 
+type PaymentIntentReconciliation = {
+  chargeId: string | null;
+  balanceTransactionId: string | null;
+  hostStripeAccountId: string | null;
+  stripeTransferId: string | null;
+};
+
 async function listDueAuthPayments(service: ReturnType<typeof createServiceClient>) {
   const { data, error } = await service
     .from("reservation_payments")
-    .select("reservation_id, stripe_payment_intent_id, reservations!reservation_payments_reservation_id_fkey(status, payment_deadline, start_at)")
+    .select("reservation_id, stripe_payment_intent_id, amount_total, amount_platform_fee, reservations!reservation_payments_reservation_id_fkey(status, payment_deadline, start_at)")
     .eq("status", "AUTH")
     .not("stripe_payment_intent_id", "is", null)
     .limit(200);
@@ -53,6 +62,38 @@ async function listDueAuthPayments(service: ReturnType<typeof createServiceClien
   });
 }
 
+function getPaymentIntentReconciliation(paymentIntent: Stripe.PaymentIntent | null): PaymentIntentReconciliation {
+  const latestCharge =
+    paymentIntent && typeof paymentIntent.latest_charge === "object"
+      ? paymentIntent.latest_charge
+      : null;
+  const balanceTransaction =
+    latestCharge && typeof latestCharge.balance_transaction === "object"
+      ? latestCharge.balance_transaction
+      : null;
+  const destination = paymentIntent?.transfer_data?.destination ?? null;
+  const transfer = latestCharge
+    ? (latestCharge as Stripe.Charge & { transfer?: string | Stripe.Transfer | null }).transfer ?? null
+    : null;
+
+  return {
+    chargeId:
+      latestCharge?.id
+      ?? (typeof paymentIntent?.latest_charge === "string" ? paymentIntent.latest_charge : null),
+    balanceTransactionId:
+      balanceTransaction?.id
+      ?? (latestCharge && typeof latestCharge.balance_transaction === "string" ? latestCharge.balance_transaction : null),
+    hostStripeAccountId:
+      typeof destination === "string"
+        ? destination
+        : destination?.id ?? null,
+    stripeTransferId:
+      typeof transfer === "string"
+        ? transfer
+        : transfer?.id ?? null,
+  };
+}
+
 async function transitionReservationsAwaitingLateConsent(service: ReturnType<typeof createServiceClient>) {
   const { data, error } = await service.rpc("transition_pending_reservations_to_late_consent");
 
@@ -70,6 +111,11 @@ async function captureConfirmedPayment(
   if (!payment.stripe_payment_intent_id) return false;
 
   await stripe.paymentIntents.capture(payment.stripe_payment_intent_id);
+  const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripe_payment_intent_id, {
+    expand: ["latest_charge.balance_transaction"],
+  });
+  const reconciliation = getPaymentIntentReconciliation(paymentIntent);
+  const hostNetAmount = Math.max(payment.amount_total - payment.amount_platform_fee, 0);
 
   const { error } = await service
     .from("reservation_payments")
@@ -77,6 +123,13 @@ async function captureConfirmedPayment(
       status: "PAID",
       paid_at: new Date().toISOString(),
       captured_at: new Date().toISOString(),
+      stripe_charge_id: reconciliation.chargeId,
+      stripe_balance_transaction_id: reconciliation.balanceTransactionId,
+      stripe_transfer_id: reconciliation.stripeTransferId,
+      host_stripe_account_id: reconciliation.hostStripeAccountId,
+      host_net_amount: hostNetAmount,
+      payout_status: reconciliation.hostStripeAccountId ? "PENDING" : "NOT_STARTED",
+      last_reconciled_at: new Date().toISOString(),
     })
     .eq("reservation_id", payment.reservation_id)
     .eq("status", "AUTH");
@@ -101,6 +154,7 @@ async function cancelPendingAuthorization(
     .update({
       status: "AUTH_CANCELED",
       canceled_at: new Date().toISOString(),
+      last_reconciled_at: new Date().toISOString(),
     })
     .eq("reservation_id", payment.reservation_id)
     .eq("status", "AUTH");

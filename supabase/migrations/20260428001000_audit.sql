@@ -135,8 +135,11 @@ begin
     'listing_booking_policies',
     'reservations',
     'reservation_reviews',
+    'reservation_payments',
     'chats',
-    'chat_participants'
+    'chat_participants',
+    'checkout_holds',
+    'host_payment_accounts'
   ] loop
     perform public.enable_audit_trigger('public', v_table_name);
   end loop;

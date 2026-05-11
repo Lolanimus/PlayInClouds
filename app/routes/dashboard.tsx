@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router"
 import { ChevronLeft, ChevronRight, PlusCircle, Settings } from "lucide-react"
 import { finalizeCheckoutSession } from "~/api/supabase/payments"
 
+import supabase from "@/utils/supabase"
+import { sortReservationsForViewer } from "@/lib/reservation-priority"
 import { ReservationCard } from "@/components/reservation-card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +35,7 @@ export default function DashboardPage() {
   const user = useUser()
   const isAuthLoading = useLoading()
   const [pastReservationsPage, setPastReservationsPage] = useState(1)
+  const [hasOpenCheckoutHold, setHasOpenCheckoutHold] = useState(false)
   const { toast } = useToast()
   const checkoutSuccess = searchParams.get("checkout") === "success"
   const checkoutSessionId = searchParams.get("session_id")
@@ -59,8 +62,30 @@ export default function DashboardPage() {
   const refetchPastReservationCount = pastReservationsCountQuery.refetch
   const refetchListings = listingsQuery.refetch
 
+  const refreshOpenCheckoutHolds = async () => {
+    if (!user?.id) {
+      setHasOpenCheckoutHold(false)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from("checkout_holds")
+      .select("id")
+      .eq("renter_id", user.id)
+      .eq("status", "OPEN")
+      .not("stripe_checkout_session_id", "is", null)
+      .limit(1)
+
+    if (error) {
+      console.error("Failed to load checkout holds", error)
+      return
+    }
+
+    setHasOpenCheckoutHold((data?.length ?? 0) > 0)
+  }
+
   const listingsById = new Map((listingsQuery.data ?? []).map((listing) => [listing.id, listing]))
-  const userReservations = (activeReservationsQuery.data ?? []).map((reservation) => {
+  const userReservations = sortReservationsForViewer((activeReservationsQuery.data ?? []).map((reservation) => {
     const listing = listingsById.get(reservation.listing_id)
 
     return {
@@ -70,9 +95,10 @@ export default function DashboardPage() {
       listingImage: listing?.images?.[0] ?? "",
       listingOwnerId: listing?.owner_id ?? null,
       listingTimezone: listing?.timezone ?? null,
+      listingCancellationPolicyHours: listing?.cancellation_policy_hours ?? null,
     }
-  })
-  const pastReservations = (pastReservationsQuery.data ?? []).map((reservation) => {
+  }), user?.id)
+  const pastReservations = sortReservationsForViewer((pastReservationsQuery.data ?? []).map((reservation) => {
     const listing = listingsById.get(reservation.listing_id)
 
     return {
@@ -82,13 +108,18 @@ export default function DashboardPage() {
       listingImage: listing?.images?.[0] ?? "",
       listingOwnerId: listing?.owner_id ?? null,
       listingTimezone: listing?.timezone ?? null,
+      listingCancellationPolicyHours: listing?.cancellation_policy_hours ?? null,
     }
-  })
+  }), user?.id)
   const totalPastReservations = pastReservationsCountQuery.data ?? 0
   const totalPastReservationPages = Math.max(1, Math.ceil(totalPastReservations / PAST_RESERVATIONS_PAGE_SIZE))
 
   useEffect(() => {
     setPastReservationsPage(1)
+  }, [user?.id])
+
+  useEffect(() => {
+    void refreshOpenCheckoutHolds()
   }, [user?.id])
 
   useEffect(() => {
@@ -118,6 +149,7 @@ export default function DashboardPage() {
         refetchPastReservations(),
         refetchPastReservationCount(),
         refetchListings(),
+        refreshOpenCheckoutHolds(),
       ])
 
       if (attempts >= maxAttempts) {
@@ -198,6 +230,12 @@ export default function DashboardPage() {
         </CardHeader>
 
         <CardContent className="space-y-6 p-6 text-sm text-foreground">
+          {hasOpenCheckoutHold ? (
+            <div className="rounded-2xl border border-[#f4dfb0] bg-[#fff8e8] px-4 py-3 text-sm text-[#9a6700]">
+              Your payment went through. It can take a few minutes for the reservation to appear here while Stripe finishes syncing the booking.
+            </div>
+          ) : null}
+
           <div className="grid gap-3 rounded-2xl border border-[#e9e9e9] bg-[#f8f8f8] p-4 md:grid-cols-3">
             <div className="rounded-xl bg-[#ffffff] px-3 py-2 shadow-sm">
               <p className="text-xs font-medium uppercase tracking-wide text-[#6a6a6a]">Email</p>
