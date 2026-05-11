@@ -8,7 +8,7 @@ import {
 export const useBroadcastChatsSubscription = () => {
   return useBroadcastSubscription(
     "chats",
-    { queryKey: queries.chats._def },
+    queries.chats._def,
     RealtimeEvents.chats_update
   );
 };
@@ -16,7 +16,7 @@ export const useBroadcastChatsSubscription = () => {
 export const useBroadcastNotificationsSubscription = () => {
   return useBroadcastSubscription(
     "notifications",
-    { queryKey: queries.notifications._def },
+    queries.notifications._def,
     RealtimeEvents.notifications_update
   );
 };

@@ -1,7 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useLocation, useNavigate } from "react-router"
-import { ArrowLeft, LifeBuoy, Loader2, Search, Send, Star, Trash2, UserCircle2 } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Link, useNavigate, useSearchParams } from "react-router"
+import { ArrowLeft, ExternalLink, Loader2, Search, Send, Trash2, UserCircle2 } from "lucide-react"
 
+import { getPublicProfile } from "@/db_rpc/profile_rpc"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -14,7 +16,6 @@ import { Input } from "@/components/ui/input"
 import { useChatByUserId, useChats, useDeleteChat } from "@/hooks/useChats"
 import { useListings } from "@/hooks/useListings"
 import { useSendMessage, useMessages } from "@/hooks/useMessages"
-import { usePendingReservationReviews } from "@/hooks/useReviews"
 import {
   useListHostMonthlyReservations,
   useListUserActiveReservations,
@@ -22,7 +23,7 @@ import {
 import { useBroadcastChatsSubscription } from "@/hooks/realtime_broadcast/useRealtimeSuscriptionsFactory"
 import { useToast } from "@/hooks/use-toast"
 import { useUser } from "@/store/user_state"
-import type { Chat, ChatParticipantProfile, Listing, Message, PendingReservationReview, Reservation } from "@/types/custom/api.types"
+import type { Chat, Listing, Message, Reservation } from "@/types/custom/api.types"
 
 type Conversation = {
   id: string
@@ -32,9 +33,8 @@ type Conversation = {
   updatedAt: string
   listingImageUrl?: string
   chatId?: string
-  listingId?: string
-  reservationId?: string
   targetUserId?: string
+  listingId?: string
 }
 
 type ChatMessage = {
@@ -44,27 +44,42 @@ type ChatMessage = {
   timestamp: string
 }
 
-type ChatLocationState = {
-  reservationId?: string
-  listingId?: string
-  targetUserId?: string
-}
+const headerActionButtonClass = "h-8 rounded-full border bg-[#ffffff] px-3 hover:bg-[#f3f3f3]"
 
 function shortLabel(userId: string) {
   return `User ${userId.slice(0, 6)}`
 }
 
-function isFallbackUserLabel(value: string) {
-  return /^User\s+[A-Za-z0-9]{1,}$/.test(value.trim())
+function getResolvedProfileName(
+  profileNamesByUserId: Record<string, string>,
+  userId: string,
+  fallback?: string | null,
+) {
+  return profileNamesByUserId[userId] ?? fallback ?? shortLabel(userId)
 }
 
-function formatParticipantName(participant?: ChatParticipantProfile) {
-  if (!participant) return null
+function getParticipantDisplayName(chat: Chat, currentUserId: string) {
+  const otherParticipant =
+    chat.participants?.find((participant) => participant.id !== currentUserId)
+    ?? null
 
-  const parts = [participant.first_name?.trim(), participant.last_name?.trim()].filter(Boolean)
-  if (parts.length > 0) return parts.join(" ")
+  if (!otherParticipant) return null
 
-  return shortLabel(participant.id)
+  const fullName = `${otherParticipant.first_name ?? ""} ${otherParticipant.last_name ?? ""}`.trim()
+  return fullName || shortLabel(otherParticipant.id)
+}
+
+function getOtherParticipantId(chat: Chat, currentUserId: string) {
+  return chat.participant_ids?.find((participantId) => participantId !== currentUserId) ?? null
+}
+
+function getDirectChatKey(targetUserId?: string, listingId?: string | null) {
+  if (!targetUserId || !listingId) return null
+  return `${targetUserId}:${listingId}`
+}
+
+function getReservationConversationKey(targetUserId?: string, listingId?: string | null) {
+  return getDirectChatKey(targetUserId, listingId)
 }
 
 function formatTime(timestamp: string) {
@@ -74,18 +89,7 @@ function formatTime(timestamp: string) {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
 }
 
-function getMessageDateKey(timestamp: string) {
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return ""
-
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
-
-  return `${year}-${month}-${day}`
-}
-
-function formatMessageDate(timestamp: string) {
+function formatDateLabel(timestamp: string) {
   const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return ""
 
@@ -126,42 +130,31 @@ function normalizeMessages(messages: Message[] | undefined, userId?: string): Ch
     }))
 }
 
-function formatReviewDeadline(value?: string) {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
-}
-
-function getReviewPromptTitle(prompt: PendingReservationReview) {
-  return prompt.reviewer_role === "HOST_TO_BOOKER"
-    ? "Leave a review for your guest"
-    : "Leave a review for your host"
-}
-
-function getReviewPromptDescription(prompt: PendingReservationReview) {
-  return prompt.reviewer_role === "HOST_TO_BOOKER"
-    ? `You're reviewing ${prompt.reviewee_display_name} as the host for this completed stay.`
-    : `You're reviewing ${prompt.reviewee_display_name} as the guest for this completed stay.`
-}
-
-function isReservationChatRelevant(reservation: Reservation) {
-  if (reservation.status === "CANCELLED") return false
-
-  const endAt = new Date(reservation.end_at)
-  if (Number.isNaN(endAt.getTime())) return true
-
-  return endAt.getTime() > Date.now()
+function ChatHeaderLinkAction({
+  to,
+  label,
+}: {
+  to: string
+  label: string
+}) {
+  return (
+    <Button
+      asChild
+      variant="ghost"
+      size="sm"
+      className={`${headerActionButtonClass} border-[#dfdfdf] text-[#111111]`}
+    >
+      <Link to={to}>
+        {label}
+        <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+      </Link>
+    </Button>
+  )
 }
 
 export default function ChatPage() {
   const navigate = useNavigate()
-  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { toast } = useToast()
   const user = useUser()
   const chatsQuery = useChats()
@@ -174,7 +167,6 @@ export default function ChatPage() {
     { p_host_id: user?.id ?? null, p_month: new Date().getMonth() + 1 },
     { enabled: Boolean(user?.id) }
   )
-  const pendingReviewsQuery = usePendingReservationReviews({ enabled: Boolean(user?.id) })
   const sendMessageMutation = useSendMessage()
   const deleteChatMutation = useDeleteChat()
 
@@ -183,12 +175,11 @@ export default function ChatPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [draft, setDraft] = useState("")
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
-  const locationState = (location.state as ChatLocationState | null) ?? null
-  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const requestedListingId = locationState?.listingId ?? searchParams.get("listingId") ?? undefined
-  const requestedTargetUserId = locationState?.targetUserId ?? searchParams.get("targetUserId") ?? undefined
-  const requestedReservationIdFromState = locationState?.reservationId ?? searchParams.get("reservationId") ?? undefined
-  const threadBottomRef = useRef<HTMLDivElement | null>(null)
+  const [profileNamesByUserId, setProfileNamesByUserId] = useState<Record<string, string>>({})
+
+  const preferredListingId = searchParams.get("listingId") ?? undefined
+  const preferredTargetUserId = searchParams.get("targetUserId") ?? undefined
+  const preferredConversationKey = getDirectChatKey(preferredTargetUserId, preferredListingId)
 
   useEffect(() => {
     if (!user) {
@@ -199,244 +190,269 @@ export default function ChatPage() {
   const listings = (listingsQuery.data as Listing[] | null) ?? []
   const chatRows = ((chatsQuery.data as Chat[] | null) ?? []).filter(isChat)
   const guestReservations = (guestReservationsQuery.data as Reservation[] | null) ?? []
-  const hostReservations = ((hostReservationsQuery.data as Reservation[] | null) ?? [])
-    .filter(isReservationChatRelevant)
-  const pendingReviewPrompts = (pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []
+  const hostReservations = (hostReservationsQuery.data as Reservation[] | null) ?? []
 
   const listingsById = useMemo(() => new Map(listings.map((listing) => [listing.id, listing])), [listings])
+  const participantUserIds = useMemo(() => {
+    if (!user) return []
+
+    const ids = new Set<string>()
+
+    for (const reservation of guestReservations) {
+      const listing = listingsById.get(reservation.listing_id)
+      if (listing?.owner_id) ids.add(listing.owner_id)
+    }
+
+    for (const reservation of hostReservations) {
+      ids.add(reservation.renter_id)
+    }
+
+    for (const chat of chatRows) {
+      const otherParticipantId = getOtherParticipantId(chat, user.id)
+      if (otherParticipantId) ids.add(otherParticipantId)
+    }
+
+    return Array.from(ids).sort()
+  }, [chatRows, guestReservations, hostReservations, listingsById, user])
+
+  const participantUserIdsKey = participantUserIds.join("|")
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!participantUserIdsKey) {
+      setProfileNamesByUserId({})
+      return
+    }
+
+    const loadProfiles = async () => {
+      const missingUserIds = participantUserIds.filter((userId) => !profileNamesByUserId[userId])
+
+      if (missingUserIds.length === 0) return
+
+      const entries = await Promise.all(
+        missingUserIds.map(async (userId) => {
+          try {
+            const profile = await getPublicProfile(userId)
+            const fullName = `${profile?.first_name ?? ""} ${profile?.last_name ?? ""}`.trim()
+
+            return [userId, getResolvedProfileName({}, userId, fullName)] as const
+          } catch {
+            return [userId, shortLabel(userId)] as const
+          }
+        }),
+      )
+
+      if (cancelled) return
+
+      setProfileNamesByUserId((current) => {
+        const nextEntries = Object.fromEntries(entries)
+        let changed = false
+
+        for (const [userId, name] of Object.entries(nextEntries)) {
+          if (current[userId] !== name) {
+            changed = true
+            break
+          }
+        }
+
+        if (!changed) return current
+
+        return {
+          ...current,
+          ...nextEntries,
+        }
+      })
+    }
+
+    void loadProfiles()
+
+    return () => {
+      cancelled = true
+    }
+  }, [participantUserIds, participantUserIdsKey, profileNamesByUserId])
 
   const conversations = useMemo<Conversation[]>(() => {
     if (!user) return []
 
-    const map = new Map<string, Conversation>()
-    const directChatTargetByListingId = new Map<string, string>()
+    const directChatsByTargetAndListing = new Map<string, Chat>()
 
     for (const chat of chatRows) {
-      if (chat.chat_type !== "DIRECT" || !chat.listing_id) continue
+      const metadata = chat.metadata as unknown as Record<string, unknown> | null
+      const otherUserId =
+        typeof metadata?.target_user_id === "string"
+          ? metadata.target_user_id
+          : typeof metadata?.other_user_id === "string"
+            ? metadata.other_user_id
+            : getOtherParticipantId(chat, user.id) ?? undefined
 
-      const otherUserId = (chat.participant_ids ?? []).find((participantId) => participantId !== user.id)
-      if (!otherUserId || otherUserId === user.id) continue
+      const directChatKey = getDirectChatKey(otherUserId, chat.listing_id)
 
-      if (!directChatTargetByListingId.has(chat.listing_id)) {
-        directChatTargetByListingId.set(chat.listing_id, otherUserId)
+      if (directChatKey) {
+        directChatsByTargetAndListing.set(directChatKey, chat)
       }
     }
 
-    const mergeConversation = (key: string, incoming: Conversation) => {
-      const existing = map.get(key)
-
-      if (!existing) {
-        map.set(key, incoming)
-        return
-      }
-
-      const keepExistingText = existing.updatedAt >= incoming.updatedAt
-      const preferIncomingPeerLabel =
-        isFallbackUserLabel(existing.peerLabel)
-        && !isFallbackUserLabel(incoming.peerLabel)
-
-      map.set(key, {
-        ...existing,
-        ...incoming,
-        peerLabel: preferIncomingPeerLabel
-          ? incoming.peerLabel
-          : keepExistingText
-            ? existing.peerLabel
-            : incoming.peerLabel,
-        listingTitle: keepExistingText ? existing.listingTitle : incoming.listingTitle,
-        subtitle: keepExistingText ? existing.subtitle : incoming.subtitle,
-        updatedAt: existing.updatedAt >= incoming.updatedAt ? existing.updatedAt : incoming.updatedAt,
-        chatId: incoming.chatId ?? existing.chatId,
-        listingId: incoming.listingId ?? existing.listingId,
-        reservationId: keepExistingText ? existing.reservationId ?? incoming.reservationId : incoming.reservationId ?? existing.reservationId,
-        targetUserId: incoming.targetUserId ?? existing.targetUserId,
-      })
-    }
+    const map = new Map<string, Conversation>()
 
     for (const reservation of guestReservations) {
       const listing = listingsById.get(reservation.listing_id)
-      const targetUserId = listing?.owner_id ?? directChatTargetByListingId.get(reservation.listing_id)
-      if (!targetUserId || targetUserId === user.id) continue
+      const targetUserId = listing?.owner_id ?? undefined
+      const directChatKey = getDirectChatKey(targetUserId, reservation.listing_id)
+      const directChat = directChatKey ? directChatsByTargetAndListing.get(directChatKey) : undefined
       const updatedAt = reservation.updated_at ?? reservation.created_at
-      const key = `direct:${reservation.listing_id}:${targetUserId}`
-
-      mergeConversation(key, {
-        id: key,
-        peerLabel: `Host • ${listing?.title ?? "Listing"}`,
+      const conversationKey = getReservationConversationKey(targetUserId, reservation.listing_id) ?? `guest-${reservation.id}`
+      const nextConversation: Conversation = {
+        id: conversationKey,
+        peerLabel: targetUserId ? getResolvedProfileName(profileNamesByUserId, targetUserId) : "Host",
         listingTitle: listing?.title ?? "Listing",
-        subtitle: `${reservation.guests} guest${reservation.guests !== 1 ? "s" : ""} • ${toDateKeyFromIso(reservation.start_at)}`,
+        subtitle: `Booking chat • ${toDateKeyFromIso(reservation.start_at)}`,
         updatedAt,
         listingImageUrl: listing?.images?.[0],
-        listingId: reservation.listing_id,
-        reservationId: reservation.id,
+        chatId: directChat?.id,
         targetUserId,
-      })
+        listingId: reservation.listing_id,
+      }
+
+      const existingConversation = map.get(conversationKey)
+      if (!existingConversation || existingConversation.updatedAt < nextConversation.updatedAt) {
+        map.set(conversationKey, nextConversation)
+      }
     }
 
     for (const reservation of hostReservations) {
       const listing = listingsById.get(reservation.listing_id)
       const targetUserId = reservation.renter_id
-      if (!targetUserId || targetUserId === user.id) continue
+      const directChatKey = getDirectChatKey(targetUserId, reservation.listing_id)
+      const directChat = directChatKey ? directChatsByTargetAndListing.get(directChatKey) : undefined
       const updatedAt = reservation.updated_at ?? reservation.created_at
-      const key = `direct:${reservation.listing_id}:${targetUserId}`
-
-      mergeConversation(key, {
-        id: key,
-        peerLabel: shortLabel(targetUserId),
+      const conversationKey = getReservationConversationKey(targetUserId, reservation.listing_id) ?? `host-${reservation.id}`
+      const nextConversation: Conversation = {
+        id: conversationKey,
+        peerLabel: getResolvedProfileName(profileNamesByUserId, targetUserId),
         listingTitle: listing?.title ?? "Listing",
-        subtitle: `${reservation.guests} guest${reservation.guests !== 1 ? "s" : ""} • ${toDateKeyFromIso(reservation.start_at)}`,
+        subtitle: `Booking chat • ${toDateKeyFromIso(reservation.start_at)}`,
         updatedAt,
         listingImageUrl: listing?.images?.[0],
-        listingId: reservation.listing_id,
-        reservationId: reservation.id,
+        chatId: directChat?.id,
         targetUserId,
-      })
+        listingId: reservation.listing_id,
+      }
+
+      const existingConversation = map.get(conversationKey)
+      if (!existingConversation || existingConversation.updatedAt < nextConversation.updatedAt) {
+        map.set(conversationKey, nextConversation)
+      }
     }
 
     for (const chat of chatRows) {
-      const listingId = chat.listing_id ?? undefined
-      const listing = listingId ? listingsById.get(listingId) : undefined
-      const participantIds = chat.participant_ids ?? []
-      const participants = chat.participants ?? []
-      const otherUserId = chat.chat_type === "DIRECT"
-        ? participantIds.find((participantId) => participantId !== user.id)
-        : undefined
-      const otherParticipant = chat.chat_type === "DIRECT"
-        ? participants.find((participant) => participant.id !== user.id)
-        : undefined
-      const updatedAt = chat.updated_at ?? new Date().toISOString()
+      if ([...map.values()].some((conversation) => conversation.chatId === chat.id)) continue
 
-      if (chat.chat_type === "DIRECT" && listingId && otherUserId && otherUserId !== user.id) {
-        mergeConversation(`direct:${listingId}:${otherUserId}`, {
-          id: `direct:${listingId}:${otherUserId}`,
-          peerLabel: formatParticipantName(otherParticipant) ?? shortLabel(otherUserId),
-          listingTitle: listing?.title ?? "Listing",
-          subtitle: "Direct chat",
-          updatedAt,
-          listingImageUrl: listing?.images?.[0],
-          chatId: chat.id,
-          listingId,
-          targetUserId: otherUserId,
-        })
-        continue
-      }
+      const targetUserId = getOtherParticipantId(chat, user.id) ?? undefined
+      const peerLabel = targetUserId
+        ? getResolvedProfileName(profileNamesByUserId, targetUserId, getParticipantDisplayName(chat, user.id))
+        : null
+      const listing = chat.listing_id ? listingsById.get(chat.listing_id) : undefined
 
-      mergeConversation(`chat-${chat.id}`, {
-        id: `chat-${chat.id}`,
-        peerLabel: chat.chat_type === "GROUP" ? "Group chat" : "Conversation",
-        listingTitle: listing?.title ?? "Listing",
-        subtitle: chat.chat_type === "GROUP"
-          ? participants.length > 0
-            ? participants
-              .map((participant) => formatParticipantName(participant) ?? shortLabel(participant.id))
-              .join(", ")
-            : `${participantIds.length} participant${participantIds.length === 1 ? "" : "s"}`
-          : chat.chat_type ?? "DIRECT",
-        updatedAt,
+      if (!targetUserId || !peerLabel) continue
+
+      const conversationKey = getDirectChatKey(targetUserId, chat.listing_id) ?? `chat-${chat.id}`
+      const nextConversation: Conversation = {
+        id: conversationKey,
+        peerLabel,
+        listingTitle: listing?.title ?? "Direct chat",
+        subtitle: listing?.subtitle ?? (chat.chat_type ?? "DIRECT"),
+        updatedAt: chat.updated_at ?? new Date().toISOString(),
         listingImageUrl: listing?.images?.[0],
         chatId: chat.id,
-        listingId,
-      })
+        targetUserId,
+        listingId: chat.listing_id ?? undefined,
+      }
+
+      const existingConversation = map.get(conversationKey)
+      if (!existingConversation || existingConversation.updatedAt < nextConversation.updatedAt) {
+        map.set(conversationKey, nextConversation)
+      }
     }
 
-    if (
-    requestedListingId
-    && requestedTargetUserId
-    && requestedTargetUserId !== user.id
-  ) {
-    const listing = listingsById.get(requestedListingId)
-    const key = `direct:${requestedListingId}:${requestedTargetUserId}`
-
-    mergeConversation(key, {
-    id: key,
-    peerLabel: listing?.owner_id === requestedTargetUserId
-      ? `Host • ${listing?.title ?? "Listing"}`
-      : shortLabel(requestedTargetUserId),
-    listingTitle: listing?.title ?? "Listing",
-    subtitle: "Direct chat",
-    updatedAt: new Date().toISOString(),
-    listingImageUrl: listing?.images?.[0],
-    listingId: requestedListingId,
-    targetUserId: requestedTargetUserId,
-    })
-  }
-
     return Array.from(map.values()).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-  }, [chatRows, guestReservations, hostReservations, listingsById, requestedListingId, requestedTargetUserId, user])
+  }, [chatRows, guestReservations, hostReservations, listingsById, profileNamesByUserId, user])
+
+  const conversationsWithPreferred = useMemo(() => {
+    if (!preferredConversationKey || !preferredListingId || !preferredTargetUserId) {
+      return conversations
+    }
+
+    if (conversations.some((conversation) => conversation.id === preferredConversationKey)) {
+      return conversations
+    }
+
+    const listing = listingsById.get(preferredListingId)
+    const preferredConversation: Conversation = {
+      id: preferredConversationKey,
+      peerLabel: getResolvedProfileName(
+        profileNamesByUserId,
+        preferredTargetUserId,
+        listing?.owner_id === preferredTargetUserId ? "Host" : null,
+      ),
+      listingTitle: listing?.title ?? "Listing",
+      subtitle: "Booking chat",
+      updatedAt: listing?.updated_at ?? new Date().toISOString(),
+      listingImageUrl: listing?.images?.[0],
+      targetUserId: preferredTargetUserId,
+      listingId: preferredListingId,
+    }
+
+    return [preferredConversation, ...conversations]
+  }, [
+    conversations,
+    listingsById,
+    preferredConversationKey,
+    preferredListingId,
+    preferredTargetUserId,
+    profileNamesByUserId,
+  ])
 
   useEffect(() => {
-    if (conversations.length === 0) {
+    if (conversationsWithPreferred.length === 0) {
       setActiveConversationId(null)
       return
     }
 
     setActiveConversationId((prev) => {
-      if (prev && conversations.some((conversation) => conversation.id === prev)) {
+      if (preferredConversationKey && conversationsWithPreferred.some((conversation) => conversation.id === preferredConversationKey)) {
+        return preferredConversationKey
+      }
+
+      if (prev && conversationsWithPreferred.some((conversation) => conversation.id === prev)) {
         return prev
       }
 
-      return conversations[0].id
+      return conversationsWithPreferred[0].id
     })
-  }, [conversations])
-
-  useEffect(() => {
-    if (!requestedReservationIdFromState || conversations.length === 0) return
-
-    const matchingConversation = conversations.find(
-      (conversation) => conversation.reservationId === requestedReservationIdFromState
-    )
-
-    if (matchingConversation) {
-      setActiveConversationId(matchingConversation.id)
-    }
-  }, [conversations, requestedReservationIdFromState])
-
-  useEffect(() => {
-    if (!requestedListingId || !requestedTargetUserId || conversations.length === 0) return
-
-    const matchingConversation = conversations.find(
-      (conversation) => conversation.listingId === requestedListingId && conversation.targetUserId === requestedTargetUserId
-    )
-
-    if (matchingConversation) {
-      setActiveConversationId(matchingConversation.id)
-    }
-  }, [conversations, requestedListingId, requestedTargetUserId])
+  }, [conversationsWithPreferred, preferredConversationKey])
 
   const filteredConversations = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
 
-    if (!q) return conversations
+    if (!q) return conversationsWithPreferred
 
-    return conversations.filter((conversation) => {
+    return conversationsWithPreferred.filter((conversation) => {
       return (
         conversation.peerLabel.toLowerCase().includes(q) ||
         conversation.listingTitle.toLowerCase().includes(q) ||
         conversation.subtitle.toLowerCase().includes(q)
       )
     })
-  }, [conversations, searchQuery])
+  }, [conversationsWithPreferred, searchQuery])
 
   const activeConversation = filteredConversations.find((conversation) => conversation.id === activeConversationId)
-    ?? conversations.find((conversation) => conversation.id === activeConversationId)
+    ?? conversationsWithPreferred.find((conversation) => conversation.id === activeConversationId)
     ?? null
-
-  const activeReviewPrompt = useMemo(() => {
-    if (!activeConversation) return null
-
-    return pendingReviewPrompts.find((prompt) => {
-      if (activeConversation.reservationId && prompt.reservation_id === activeConversation.reservationId) {
-        return true
-      }
-
-      return prompt.listing_id === activeConversation.listingId
-        && prompt.reviewee_user_id === activeConversation.targetUserId
-    }) ?? null
-  }, [activeConversation, pendingReviewPrompts])
 
   const activeDirectChatQuery = useChatByUserId(
     activeConversation?.targetUserId ?? "",
-    activeConversation?.listingId ?? ""
+    activeConversation?.listingId ?? "",
   )
   const resolvedActiveChatId = activeConversation?.chatId ?? activeDirectChatQuery.data?.id
 
@@ -446,16 +462,6 @@ export default function ChatPage() {
     return normalizeMessages(rows, user?.id)
   }, [messagesQuery.data?.messages, user?.id])
 
-  useEffect(() => {
-    if (!activeConversation) return
-
-    const frameId = window.requestAnimationFrame(() => {
-      threadBottomRef.current?.scrollIntoView({ block: "end" })
-    })
-
-    return () => window.cancelAnimationFrame(frameId)
-  }, [activeConversation?.id, activeMessages.length, activeReviewPrompt?.reservation_id])
-
   const isInitialLoading = chatsQuery.isLoading || guestReservationsQuery.isLoading || hostReservationsQuery.isLoading || listingsQuery.isLoading
 
   const handleSendMessage = async () => {
@@ -463,10 +469,10 @@ export default function ChatPage() {
 
     if (!activeConversation || !text || sendMessageMutation.isPending) return
 
-    if (!activeConversation.chatId && (!activeConversation.targetUserId || !activeConversation.listingId)) {
+    if (!activeConversation.chatId && !activeConversation.targetUserId) {
       toast({
         title: "Cannot start chat",
-        description: "This conversation is missing chat participants or listing.",
+        description: "This conversation is missing a target user.",
         variant: "destructive",
       })
       return
@@ -483,33 +489,27 @@ export default function ChatPage() {
       })
 
       setDraft("")
-    } catch (err) {
-      const message = err instanceof Error ? err.message : null
+    } catch {
       toast({
         title: "Message failed",
-        description: message ?? "Please try sending again.",
+        description: "Please try sending again.",
         variant: "destructive",
       })
     }
   }
 
   const handleDeleteChat = async () => {
-    if (!resolvedActiveChatId || deleteChatMutation.isPending) return
-
-    const confirmed = confirm(`Delete chat for ${activeConversation?.listingTitle ?? "this listing"}? This will remove all messages.`)
-    if (!confirmed) return
+    if (!activeConversation?.chatId || deleteChatMutation.isPending) return
+    if (!confirm("Delete this chat?")) return
 
     try {
-      await deleteChatMutation.mutateAsync(resolvedActiveChatId)
+      await deleteChatMutation.mutateAsync(activeConversation.chatId)
+      setActiveConversationId(null)
       setDraft("")
-      toast({
-        title: "Chat deleted",
-        description: "The conversation and its messages were removed.",
-      })
     } catch {
       toast({
-        title: "Delete failed",
-        description: "Please try deleting the chat again.",
+        title: "Could not delete chat",
+        description: "Please try again.",
         variant: "destructive",
       })
     }
@@ -522,11 +522,14 @@ export default function ChatPage() {
       <Card className="mx-auto flex h-[calc(100vh-8.5rem)] w-full max-w-6xl min-h-0 flex-col overflow-hidden border-[#e9e9e9] bg-[#ffffff] shadow-lg">
         <CardHeader className="border-b border-[#e9e9e9] bg-gradient-to-b from-[#fcfcfc] to-[#ffffff]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="pb-4">
+            <div>
               <CardTitle className="text-3xl text-[#000000]">Messages</CardTitle>
               <CardDescription>Chat about your bookings and listing requests.</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              <Badge variant="outline" className="w-fit border-[#dadada] bg-[#ffffff] text-[#000000]">
+                {conversationsWithPreferred.length} thread{conversationsWithPreferred.length !== 1 ? "s" : ""}
+              </Badge>
               <Button asChild variant="outline">
                 <Link to="/dashboard">
                   <ArrowLeft className="mr-2 h-4 w-4" />
@@ -550,25 +553,7 @@ export default function ChatPage() {
                 />
               </div>
 
-              <Link
-                to="/contactus"
-                state={{ page: `${location.pathname}${location.search}${location.hash}` }}
-                className="mb-3 flex w-full rounded-xl border border-[#d9d9d9] bg-[#ffffff] p-3 text-left transition-colors hover:bg-[#f6f6f6]"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-[#e9e9e9] bg-[#f4f4f4]">
-                    <LifeBuoy className="h-5 w-5 text-[#4a4a4a]" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[#1f1f1f]">Support</p>
-                    <p className="truncate text-xs text-[#6a6a6a]">Need help or found a bug?</p>
-                    <p className="mt-1 truncate text-xs text-[#8a8a8a]">Open the contact form</p>
-                  </div>
-                </div>
-              </Link>
-
-              <div className="space-y-2 overflow-y-auto md:max-h-[calc(100vh-22rem)]">
+              <div className="space-y-2 overflow-y-auto md:max-h-[calc(100vh-19rem)]">
                 {isInitialLoading ? (
                   <div className="rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-4 text-sm text-[#6a6a6a]">
                     Loading conversations...
@@ -595,25 +580,30 @@ export default function ChatPage() {
                           : "border-[#e9e9e9] bg-[#ffffff] text-[#1f1f1f] hover:bg-[#f6f6f6]"
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border ${isActive ? "border-[#ffffff]/20 bg-[#1f1f1f]" : "border-[#e9e9e9] bg-[#f4f4f4]"}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border ${
+                          isActive ? "border-[#ffffff]/15" : "border-[#ececec]"
+                        }`}>
                           {conversation.listingImageUrl ? (
                             <img
                               src={conversation.listingImageUrl}
                               alt={conversation.listingTitle}
                               className="h-full w-full object-cover"
+                              loading="lazy"
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center">
-                              <UserCircle2 className={`h-5 w-5 ${isActive ? "text-[#ffffff]/70" : "text-[#9a9a9a]"}`} />
+                            <div className={`flex h-full w-full items-center justify-center text-[10px] font-medium uppercase tracking-[0.12em] ${
+                              isActive ? "bg-[#1a1a1a] text-[#ffffff]/70" : "bg-[#f4f4f4] text-[#8a8a8a]"
+                            }`}>
+                              No image
                             </div>
                           )}
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold">{conversation.listingTitle}</p>
+                          <p className="truncate text-sm font-semibold">{conversation.peerLabel}</p>
                           <p className={`truncate text-xs ${isActive ? "text-[#ffffff]/85" : "text-[#6a6a6a]"}`}>
-                            {conversation.peerLabel}
+                            {conversation.listingTitle}
                           </p>
                           <p className={`mt-1 truncate text-xs ${isActive ? "text-[#ffffff]/85" : "text-[#8a8a8a]"}`}>
                             {conversation.subtitle}
@@ -629,63 +619,42 @@ export default function ChatPage() {
             <section className="flex min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[#ffffff]">
               {activeConversation ? (
                 <>
-                  <div className="flex items-start justify-between gap-3 border-b border-[#e9e9e9] px-4 py-3 md:px-5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[#000000]">{activeConversation.listingTitle}</p>
-                      <p className="truncate text-xs text-[#6a6a6a]">{activeConversation.peerLabel}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      {activeConversation.targetUserId ? (
-                        <Button asChild type="button" variant="outline" size="sm">
-                          <Link to={`/profile/${activeConversation.targetUserId}`}>
-                            View profile
-                          </Link>
-                        </Button>
-                      ) : (
-                        <Button type="button" variant="outline" size="sm" disabled>
-                          View profile
-                        </Button>
-                      )}
+                  <div className="border-b border-[#e9e9e9] bg-[#ffffff] px-4 py-4 md:px-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-base font-semibold leading-none text-[#000000]">{activeConversation.peerLabel}</p>
+                        <p className="truncate text-sm text-[#6a6a6a]">{activeConversation.listingTitle}</p>
+                      </div>
 
-                      {activeConversation.listingId ? (
-                        <Button asChild type="button" variant="outline" size="sm">
-                          <Link to={`/listing/${activeConversation.listingId}`}>
-                            Go to listing
-                          </Link>
-                        </Button>
-                      ) : (
-                        <Button type="button" variant="outline" size="sm" disabled>
-                          Go to listing
-                        </Button>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        {activeConversation.chatId ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={`${headerActionButtonClass} border-[#efc5c0] text-[#b42318] hover:bg-[#fff4f2]`}
+                            onClick={handleDeleteChat}
+                            disabled={deleteChatMutation.isPending}
+                          >
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                            {deleteChatMutation.isPending ? "Deleting..." : "Delete chat"}
+                          </Button>
+                        ) : null}
 
-                      {activeConversation.reservationId ? (
-                        <Button asChild type="button" variant="outline" size="sm">
-                          <Link to={`/reservation/${activeConversation.reservationId}`}>
-                            Go to reservation
-                          </Link>
-                        </Button>
-                      ) : (
-                        <Button type="button" variant="outline" size="sm" disabled>
-                          Go to reservation
-                        </Button>
-                      )}
+                        {activeConversation.listingId ? (
+                          <ChatHeaderLinkAction
+                            to={`/listing/${activeConversation.listingId}`}
+                            label="View listing"
+                          />
+                        ) : null}
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void handleDeleteChat()}
-                        disabled={!resolvedActiveChatId || deleteChatMutation.isPending}
-                        className="border-[#f2c9c5] text-[#b42318] hover:bg-[#fff3f2] hover:text-[#b42318]"
-                      >
-                        {deleteChatMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                        <span className="ml-2">Delete chat</span>
-                      </Button>
+                        {activeConversation.targetUserId ? (
+                          <ChatHeaderLinkAction
+                            to={`/profile/${activeConversation.targetUserId}`}
+                            label="View profile"
+                          />
+                        ) : null}
+                      </div>
                     </div>
                   </div>
 
@@ -696,7 +665,7 @@ export default function ChatPage() {
                       </div>
                     ) : null}
 
-                    {!messagesQuery.isLoading && activeMessages.length === 0 && !activeReviewPrompt ? (
+                    {!messagesQuery.isLoading && activeMessages.length === 0 ? (
                       <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
                         <div className="rounded-full bg-[#f2f2f2] p-3">
                           <UserCircle2 className="h-6 w-6 text-[#7a7a7a]" />
@@ -708,16 +677,19 @@ export default function ChatPage() {
 
                     {activeMessages.map((message, index) => {
                       const previousMessage = index > 0 ? activeMessages[index - 1] : null
-                      const shouldShowDate = !previousMessage
-                        || getMessageDateKey(previousMessage.timestamp) !== getMessageDateKey(message.timestamp)
+                      const messageDateKey = toDateKeyFromIso(message.timestamp)
+                      const previousDateKey = previousMessage ? toDateKeyFromIso(previousMessage.timestamp) : null
+                      const showDateSeparator = messageDateKey !== previousDateKey
 
                       return (
-                        <Fragment key={message.id}>
-                          {shouldShowDate ? (
-                            <div className="flex justify-center py-1">
-                              <div className="rounded-full border border-[#e9e9e9] bg-[#ffffff] px-3 py-1 text-[11px] font-medium text-[#6a6a6a] shadow-sm">
-                                {formatMessageDate(message.timestamp)}
-                              </div>
+                        <div key={message.id} className="space-y-3">
+                          {showDateSeparator ? (
+                            <div className="flex items-center gap-3 py-1">
+                              <div className="h-px flex-1 bg-[#e5e5e5]" />
+                              <p className="shrink-0 text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">
+                                {formatDateLabel(message.timestamp)}
+                              </p>
+                              <div className="h-px flex-1 bg-[#e5e5e5]" />
                             </div>
                           ) : null}
 
@@ -737,37 +709,9 @@ export default function ChatPage() {
                               </p>
                             </div>
                           </div>
-                        </Fragment>
+                        </div>
                       )
                     })}
-
-                    {activeReviewPrompt ? (
-                      <div className="flex justify-center pt-2">
-                        <div className="w-full max-w-md rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-4 shadow-sm">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#000000] text-[#ffffff]">
-                              <Star className="h-4 w-4 fill-current" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-[#000000]">{getReviewPromptTitle(activeReviewPrompt)}</p>
-                              <p className="mt-1 text-sm text-[#6a6a6a]">{getReviewPromptDescription(activeReviewPrompt)}</p>
-                              {formatReviewDeadline(activeReviewPrompt.expires_at) ? (
-                                <p className="mt-2 text-xs text-[#8a8a8a]">Leave a review by {formatReviewDeadline(activeReviewPrompt.expires_at)}</p>
-                              ) : null}
-                              <Button
-                                type="button"
-                                onClick={() => navigate(`/reservation/${activeReviewPrompt.reservation_id}?leaveReview=1`)}
-                                className="mt-4 h-10 rounded-xl bg-[#000000] px-4 text-[#ffffff] hover:bg-[#1f1f1f]"
-                              >
-                                Leave a review
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div ref={threadBottomRef} />
                   </div>
 
                   <div className="shrink-0 border-t border-[#e9e9e9] bg-[#ffffff] p-3 md:p-4">
@@ -811,12 +755,13 @@ export default function ChatPage() {
                     <UserCircle2 className="h-6 w-6 text-[#7a7a7a]" />
                   </div>
                   <p className="text-sm font-medium text-[#000000]">No conversation selected</p>
-                  <p className="text-sm text-[#6a6a6a]">Choose a conversation from the left column.</p>
+                  <p className="text-sm text-[#6a6a6a]">Choose a thread from the left column.</p>
                 </div>
               )}
             </section>
           </div>
         </CardContent>
+
       </Card>
     </main>
   )
