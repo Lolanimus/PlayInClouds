@@ -8,6 +8,7 @@ export type ConnectAccountStatus = {
   detailsSubmitted: boolean;
   country: string | null;
   defaultCurrency: string | null;
+  needsIdentityVerificationOnly: boolean;
   onboardingUrl: string | null;
 };
 

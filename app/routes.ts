@@ -12,6 +12,7 @@ export default [
 		route("dashboard", "routes/host-dashboard.tsx"),
 		route("calendar", "routes/host-calendar.tsx"),
 		route("reservations", "routes/host-reservations.tsx"),
+		route("finances", "routes/host-finances.tsx"),
 		route("chat", "routes/host-chat.tsx"),
 	]),
 	route("admin/listings", "routes/admin-listings.tsx"),

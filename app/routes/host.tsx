@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   CalendarDays,
   ClipboardList,
+  DollarSign,
   LayoutDashboard,
   MessageSquare,
   Settings,
@@ -17,6 +18,7 @@ export default function HostLayoutPage() {
     { label: "Overview", icon: LayoutDashboard, href: "/host/dashboard" },
     { label: "Calendar", icon: CalendarDays, href: "/host/calendar" },
     { label: "Reservations", icon: ClipboardList, href: "/host/reservations" },
+    { label: "Finances", icon: DollarSign, href: "/host/finances" },
     { label: "Messages", icon: MessageSquare, href: "/host/chat" },
     { label: "Settings", icon: Settings, href: "#" },
   ]

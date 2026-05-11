@@ -20,9 +20,42 @@ type UserRow = {
   email: string | null;
   first_name: string;
   last_name: string;
+  phone_number: string | null;
 };
 
+type ConnectAccountState = {
+  onboardingComplete: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+  defaultCurrency: string | null;
+  country: string | null;
+  needsIdentityVerificationOnly: boolean;
+};
+
+const identityRequirementPatterns = [
+  "verification.document",
+  "verification.additional_document",
+  "proof_of_liveness",
+  "id_number",
+  "id_numbers.",
+  "ssn_last_4",
+];
+
+function isIdentityRequirement(requirement: string) {
+  return identityRequirementPatterns.some((pattern) => requirement.includes(pattern));
+}
+
 function deriveAccountState(account: Stripe.Account) {
+  const dueRequirements = [
+    ...(account.requirements?.currently_due ?? []),
+    ...(account.requirements?.past_due ?? []),
+  ];
+  const uniqueDueRequirements = Array.from(new Set(dueRequirements));
+  const needsIdentityVerificationOnly =
+    uniqueDueRequirements.length > 0
+      && uniqueDueRequirements.every(isIdentityRequirement);
+
   return {
     onboardingComplete: Boolean(account.details_submitted && account.payouts_enabled),
     chargesEnabled: Boolean(account.charges_enabled),
@@ -30,6 +63,7 @@ function deriveAccountState(account: Stripe.Account) {
     detailsSubmitted: Boolean(account.details_submitted),
     defaultCurrency: account.default_currency ?? null,
     country: account.country ?? null,
+    needsIdentityVerificationOnly,
   };
 }
 
@@ -82,6 +116,8 @@ Deno.serve(async (request) => {
 
     const requestBody = await request.json().catch(() => ({}));
     const createOnboardingLink = requestBody.createOnboardingLink !== false;
+    const refreshOnly = requestBody.refreshOnly === true;
+    const openDashboard = requestBody.openDashboard === true;
     const returnPath =
       typeof requestBody.returnPath === "string" && requestBody.returnPath.startsWith("/")
         ? requestBody.returnPath
@@ -93,7 +129,7 @@ Deno.serve(async (request) => {
 
     const { data: profileData, error: profileError } = await service
       .from("user")
-      .select("id, email, first_name, last_name")
+      .select("id, email, first_name, last_name, phone_number")
       .eq("id", user.id)
       .single();
 
@@ -112,35 +148,58 @@ Deno.serve(async (request) => {
     const existingAccount = existingAccountData as { stripe_account_id: string } | null;
     const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim();
 
-    const account = existingAccount?.stripe_account_id
+    const discoveredExistingAccount = existingAccount?.stripe_account_id
       ? await stripe.accounts.retrieve(existingAccount.stripe_account_id)
-      : (await findExistingStripeAccountForHost(user.id)) ?? await stripe.accounts.create({
-            country: defaultCountry,
-            email: profile.email ?? user.email ?? undefined,
-            business_type: "individual",
-            controller: {
-              fees: { payer: "application" },
-              losses: { payments: "application" },
-              stripe_dashboard: { type: "express" },
-            },
-            capabilities: {
-              transfers: { requested: true },
-            },
-            business_profile: {
-              product_description: "AirDrums host payouts for listing reservations",
-            },
-            individual: fullName
-              ? {
-                  first_name: profile.first_name,
-                  last_name: profile.last_name,
-                }
-              : undefined,
-            metadata: {
-              host_user_id: user.id,
-            },
-          }, {
-            idempotencyKey: `host-connect-account:${user.id}`,
-          });
+      : await findExistingStripeAccountForHost(user.id);
+
+    if (!discoveredExistingAccount && refreshOnly) {
+      return jsonResponse({
+        account: {
+          stripeAccountId: null,
+          onboardingComplete: false,
+          chargesEnabled: false,
+          payoutsEnabled: false,
+          detailsSubmitted: false,
+          country: null,
+          defaultCurrency: null,
+          needsIdentityVerificationOnly: false,
+          onboardingUrl: null,
+        },
+      });
+    }
+
+    const account = discoveredExistingAccount ?? await stripe.accounts.create({
+      country: defaultCountry,
+      email: profile.email ?? user.email ?? undefined,
+      business_type: "individual",
+      controller: {
+        fees: { payer: "application" },
+        losses: { payments: "application" },
+        stripe_dashboard: { type: "express" },
+      },
+      capabilities: {
+        transfers: { requested: true },
+      },
+      business_profile: {
+        product_description: "AirDrums host payouts for listing reservations",
+      },
+      individual: fullName
+        ? {
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            phone: profile.phone_number ?? undefined,
+          }
+        : profile.phone_number
+          ? {
+              phone: profile.phone_number,
+            }
+          : undefined,
+      metadata: {
+        host_user_id: user.id,
+      },
+    }, {
+      idempotencyKey: `host-connect-account:${user.id}`,
+    });
 
     const state = deriveAccountState(account);
 
@@ -160,16 +219,18 @@ Deno.serve(async (request) => {
     }
 
     const onboardingLink = createOnboardingLink
-      ? await stripe.accountLinks.create({
-          account: account.id,
-          refresh_url: `${siteUrl}${refreshPath}?stripe=refresh`,
-          return_url: `${siteUrl}${returnPath}?stripe=return`,
-          type: "account_onboarding",
-          collection_options: {
-            fields: "eventually_due",
-            future_requirements: "include",
-          },
-        })
+      ? openDashboard && state.onboardingComplete
+        ? await stripe.accounts.createLoginLink(account.id)
+        : await stripe.accountLinks.create({
+            account: account.id,
+            refresh_url: `${siteUrl}${refreshPath}?stripe=refresh`,
+            return_url: `${siteUrl}${returnPath}?stripe=return`,
+            type: "account_onboarding",
+            collection_options: {
+              fields: "eventually_due",
+              future_requirements: "include",
+            },
+          })
       : null;
 
     return jsonResponse({
@@ -181,6 +242,7 @@ Deno.serve(async (request) => {
         detailsSubmitted: state.detailsSubmitted,
         country: state.country ?? defaultCountry,
         defaultCurrency: state.defaultCurrency,
+        needsIdentityVerificationOnly: state.needsIdentityVerificationOnly,
         onboardingUrl: onboardingLink?.url ?? null,
       },
     });

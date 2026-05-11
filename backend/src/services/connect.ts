@@ -26,6 +26,7 @@ type ConnectAccountStatus = {
   detailsSubmitted: boolean;
   country: string | null;
   defaultCurrency: string | null;
+  needsIdentityVerificationOnly: boolean;
 };
 
 type UserProfileRow = {
@@ -33,12 +34,32 @@ type UserProfileRow = {
   email: string | null;
   first_name: string;
   last_name: string;
+  phone_number: string | null;
 };
 
 const appUrl = (process.env.APP_URL ?? process.env.VITE_APP_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
 const stripeCountry = (process.env.STRIPE_COUNTRY ?? "CA").toUpperCase();
 
+const identityRequirementPatterns = [
+  "verification.document",
+  "verification.additional_document",
+  "proof_of_liveness",
+  "id_number",
+  "id_numbers.",
+  "ssn_last_4",
+];
+
+function isIdentityRequirement(requirement: string) {
+  return identityRequirementPatterns.some((pattern) => requirement.includes(pattern));
+}
+
 function deriveConnectStatus(account: Stripe.Account): ConnectAccountStatus {
+  const dueRequirements = [
+    ...(account.requirements?.currently_due ?? []),
+    ...(account.requirements?.past_due ?? []),
+  ];
+  const uniqueDueRequirements = Array.from(new Set(dueRequirements));
+
   return {
     stripeAccountId: account.id,
     onboardingComplete: Boolean(account.details_submitted && account.payouts_enabled),
@@ -47,6 +68,9 @@ function deriveConnectStatus(account: Stripe.Account): ConnectAccountStatus {
     detailsSubmitted: Boolean(account.details_submitted),
     country: account.country ?? null,
     defaultCurrency: account.default_currency ?? null,
+    needsIdentityVerificationOnly:
+      uniqueDueRequirements.length > 0
+      && uniqueDueRequirements.every(isIdentityRequirement),
   };
 }
 
@@ -93,7 +117,7 @@ async function getUserProfile(userId: string) {
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase
     .from("user")
-    .select("id, email, first_name, last_name")
+    .select("id, email, first_name, last_name, phone_number")
     .eq("id", userId)
     .single();
 
@@ -137,8 +161,13 @@ async function ensureStripeAccountForHost(userId: string) {
       ? {
           first_name: profile.first_name,
           last_name: profile.last_name,
+          phone: profile.phone_number ?? undefined,
         }
-      : undefined,
+      : profile.phone_number
+        ? {
+            phone: profile.phone_number,
+          }
+        : undefined,
     metadata: {
       host_user_id: userId,
     },
@@ -164,6 +193,7 @@ export async function getConnectAccountStatusService(args: {
       detailsSubmitted: false,
       country: null,
       defaultCurrency: null,
+      needsIdentityVerificationOnly: false,
       onboardingUrl: null,
     };
   }
