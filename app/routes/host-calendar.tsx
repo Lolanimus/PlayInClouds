@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { sortReservationsForViewer } from "@/lib/reservation-priority"
 import { useListings } from "@/hooks/useListings"
 import {
   useListHostMonthlyReservations,
@@ -71,6 +72,34 @@ function toDateKeyFromIso(isoValue: string) {
   return `${y}-${m}-${d}`
 }
 
+function hasReservationStarted(startAtIso: string) {
+  const start = new Date(startAtIso)
+  if (Number.isNaN(start.getTime())) return false
+  return start.getTime() <= Date.now()
+}
+
+function isHostActionRequired(reservation: Reservation) {
+  const isPending =
+    reservation.status === "PENDING"
+    || reservation.status === "PENDING_AWAITING_LATE_CONSENT"
+
+  if (!isPending) return false
+  if (hasReservationStarted(reservation.start_at)) return false
+
+  const paymentDeadline = new Date(reservation.payment_deadline)
+  if (Number.isNaN(paymentDeadline.getTime())) return false
+  if (paymentDeadline.getTime() <= Date.now()) return false
+
+  if (
+    reservation.status === "PENDING_AWAITING_LATE_CONSENT"
+    && reservation.host_preconfirmed_at
+  ) {
+    return false
+  }
+
+  return true
+}
+
 export default function HostCalendarPage() {
   const navigate = useNavigate()
   const user = useUser()
@@ -107,7 +136,7 @@ export default function HostCalendarPage() {
   const hostReservations = useMemo(() => {
     const rows = (monthlyReservationsQuery.data ?? []) as Reservation[]
 
-    return rows
+    return sortReservationsForViewer(rows
       .filter(
         (reservation) =>
           reservation.status !== "CANCELLED"
@@ -123,10 +152,10 @@ export default function HostCalendarPage() {
           listingImage: listing?.images?.[0] ?? "",
           listingOwnerId: listing?.owner_id ?? null,
           listingTimezone: listing?.timezone ?? null,
+          listingCancellationPolicyHours: listing?.cancellation_policy_hours ?? null,
         }
-      })
-      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-  }, [monthlyReservationsQuery.data, listingsById])
+      }), user?.id)
+  }, [monthlyReservationsQuery.data, listingsById, user?.id])
 
   const reservationsByDate = useMemo(() => {
     const grouped = new Map<string, typeof hostReservations>()
@@ -141,7 +170,10 @@ export default function HostCalendarPage() {
   }, [hostReservations])
 
   const calendarGrid = useMemo(() => getCalendarGrid(monthCursor), [monthCursor])
-  const selectedDayReservations = reservationsByDate.get(selectedDateKey) ?? []
+  const selectedDayReservations = useMemo(
+    () => sortReservationsForViewer(reservationsByDate.get(selectedDateKey) ?? [], user?.id),
+    [reservationsByDate, selectedDateKey, user?.id],
+  )
 
   return (
     <section className="h-full flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
@@ -219,6 +251,7 @@ export default function HostCalendarPage() {
 
                       const dayReservations = reservationsByDate.get(day.dateKey) ?? []
                       const isSelected = selectedDateKey === day.dateKey
+                      const hasHostActionDay = dayReservations.some((reservation) => isHostActionRequired(reservation))
 
                       return (
                         <button
@@ -227,13 +260,17 @@ export default function HostCalendarPage() {
                           onClick={() => setSelectedDateKey(day.dateKey)}
                           className={`min-h-[74px] rounded-xl border p-2 text-left transition-colors ${
                             isSelected
-                              ? "border-[#000000] bg-[#000000] text-[#ffffff]"
-                              : "border-[#e9e9e9] bg-[#ffffff] text-[#1f1f1f] hover:bg-[#f7f7f7]"
+                              ? hasHostActionDay
+                                ? "border-[#ad6800] bg-[#ad6800] text-[#ffffff]"
+                                : "border-[#000000] bg-[#000000] text-[#ffffff]"
+                              : hasHostActionDay
+                                ? "border-[#f4dfb0] bg-[#fff8e8] text-[#9a6700] hover:bg-[#fff2d6]"
+                                : "border-[#e9e9e9] bg-[#ffffff] text-[#1f1f1f] hover:bg-[#f7f7f7]"
                           }`}
                         >
                           <p className="text-sm font-medium">{day.date.getDate()}</p>
                           {dayReservations.length > 0 && (
-                            <p className={`mt-2 text-xs ${isSelected ? "text-[#ffffff]/90" : "text-[#5a5a5a]"}`}>
+                            <p className={`mt-2 text-xs ${isSelected ? "text-[#ffffff]/90" : hasHostActionDay ? "text-[#9a6700]" : "text-[#5a5a5a]"}`}>
                               {dayReservations.length} booking{dayReservations.length !== 1 ? "s" : ""}
                             </p>
                           )}

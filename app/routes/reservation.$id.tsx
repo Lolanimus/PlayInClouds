@@ -110,10 +110,21 @@ function getNormalConfirmationDeadline(startAtIso: string, cancellationPolicyHou
   return new Date(start.getTime() - cancellationPolicyHours * 60 * 60 * 1000)
 }
 
+function isExpiredUnresolvedReservation(status: string, paymentDeadlineIso: string) {
+  if (status !== "PENDING" && status !== "PENDING_AWAITING_LATE_CONSENT") return false
+
+  const paymentDeadline = new Date(paymentDeadlineIso)
+  if (Number.isNaN(paymentDeadline.getTime())) return false
+
+  return paymentDeadline.getTime() <= Date.now()
+}
+
 function getStatusBadgeClass(status: string) {
   switch (status) {
     case "CONFIRMED":
       return "border-[#cfe7d6] bg-[#effaf2] text-[#166534]"
+    case "EXPIRED":
+      return "border-[#ebd0d5] bg-[#fff1f3] text-[#b42318]"
     case "PENDING":
     case "PENDING_AWAITING_LATE_CONSENT":
       return "border-[#f4dfb0] bg-[#fff8e8] text-[#9a6700]"
@@ -128,6 +139,8 @@ function getStatusTextClass(status: string) {
   switch (status) {
     case "CONFIRMED":
       return "text-[#166534]"
+    case "EXPIRED":
+      return "text-[#b42318]"
     case "PENDING":
     case "PENDING_AWAITING_LATE_CONSENT":
       return "text-[#9a6700]"
@@ -230,6 +243,9 @@ export default function ReservationDetailsPage() {
   const isRenter = Boolean(user?.id && reservation?.renter_id === user.id)
   const isHost = Boolean(user?.id && owner?.id === user.id)
   const isAwaitingLateConsent = reservation?.status === "PENDING_AWAITING_LATE_CONSENT"
+  const isExpiredPending = reservation
+    ? isExpiredUnresolvedReservation(reservation.status, reservation.payment_deadline)
+    : false
   const hasAcceptedLateTerms = Boolean(reservation?.late_consent_given_at)
   const hostHasPreconfirmedLateRequest = Boolean(reservation?.host_preconfirmed_at)
   const normalConfirmationDeadline = reservation && listing
@@ -245,9 +261,11 @@ export default function ReservationDetailsPage() {
   const cancelAllowedByDeadline = reservation
     ? canCancelBeforePaymentDeadline(reservation.start_at, reservation.end_at, reservation.payment_deadline)
     : false
+  const renterCancellationEnabled = typeof listing?.cancellation_policy_hours === "number"
   const renterCanCancel = Boolean(
     reservation
     && isRenter
+    && renterCancellationEnabled
     && !hasAcceptedLateTerms
     && cancelAllowedByDeadline
   )
@@ -305,6 +323,41 @@ export default function ReservationDetailsPage() {
         targetUserId: profile?.id ?? undefined,
       }
     : undefined
+  const displayStatus = reservation
+    ? (isExpiredPending ? "EXPIRED" : reservation.status)
+    : null
+  const confirmationDeadlineMessage = reservation
+    ? (
+      isExpiredPending
+        ? `This reservation is no longer active. It has expired at ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+        : isHost
+          ? isAwaitingLateConsent
+            ? hostHasPreconfirmedLateRequest
+              ? `You already confirmed this late request. It will finalize only if the guest accepts the late-request terms before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+              : `You can confirm this late request before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. It will only finalize after the guest accepts the late-request terms.`
+            : hasLateRequestWindow
+              ? `Confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can continue as a late request until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+              : `Confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled.`
+          : isAwaitingLateConsent
+            ? reservation.host_preconfirmed_at
+              ? `The host already confirmed this late request. Accept it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} to finalize it.`
+              : `This reservation has entered the late-request window. Continue it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if you still want the booking.`
+            : hasAcceptedLateTerms
+              ? `This reservation is now in the late-request window. The host still needs to confirm it by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
+              : hasLateRequestWindow
+                ? `The host should confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can move into the late-request flow until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if the booking is still eligible.`
+                : `The host should confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled and you will not be charged.`
+    )
+    : null
+  const confirmationDeadlineLocalTime = reservation
+    ? (
+      isExpiredPending || isAwaitingLateConsent
+        ? formatDateTimeInViewerTimeZone(reservation.payment_deadline)
+        : hasLateRequestWindow
+          ? `Confirm by ${formatDateTimeInViewerTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline)}; late-request window until ${formatDateTimeInViewerTimeZone(reservation.payment_deadline)}`
+          : formatDateTimeInViewerTimeZone(reservation.payment_deadline)
+    )
+    : null
 
   useEffect(() => {
     if (searchParams.get("leaveReview") === "1" && reviewPrompt) {
@@ -416,7 +469,7 @@ export default function ReservationDetailsPage() {
                     </Link>
                   </Button>
                   {reservation ? (
-                      <Badge variant="outline" className={getStatusBadgeClass(reservation.status)}>
+                      <Badge variant="outline" className={getStatusBadgeClass(displayStatus ?? reservation.status)}>
                         Reservation #{reservation.id.slice(0, 8)}
                       </Badge>
                   ) : null}
@@ -430,7 +483,7 @@ export default function ReservationDetailsPage() {
                     <div className="grid gap-3 md:grid-cols-3">
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Status</p>
-                        <p className={`mt-1 text-sm font-semibold ${getStatusTextClass(reservation.status)}`}>{getStatusLabel(reservation.status)}</p>
+                        <p className={`mt-1 text-sm font-semibold ${getStatusTextClass(displayStatus ?? reservation.status)}`}>{getStatusLabel(displayStatus ?? reservation.status)}</p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Total paid</p>
@@ -485,53 +538,14 @@ export default function ReservationDetailsPage() {
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#5e738a]">Confirmation deadline</p>
                         <p className="mt-2 text-sm font-medium leading-6 text-[#16324f]">
                           <TimeWithLocalHint
-                            primaryText={
-                              isHost
-                                ? isAwaitingLateConsent
-                                  ? hostHasPreconfirmedLateRequest
-                                    ? `You already confirmed this late request. It will finalize only if the guest accepts the late-request terms before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
-                                    : `You can confirm this late request before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. It will only finalize after the guest accepts the late-request terms.`
-                                  : hasLateRequestWindow
-                                    ? `Confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can continue as a late request until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
-                                    : `Confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled.`
-                                : isAwaitingLateConsent
-                                  ? reservation.host_preconfirmed_at
-                                    ? `The host already confirmed this late request. Accept it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} to finalize it.`
-                                    : `This reservation has entered the late-request window. Continue it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if you still want the booking.`
-                                  : hasAcceptedLateTerms
-                                    ? `This reservation is now in the late-request window. The host still needs to confirm it by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
-                                    : hasLateRequestWindow
-                                      ? `The host should confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can move into the late-request flow until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if the booking is still eligible.`
-                                      : `The host should confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled and you will not be charged.`
-                            }
-                            localTime={isAwaitingLateConsent
-                              ? formatDateTimeInViewerTimeZone(reservation.payment_deadline)
-                              : hasLateRequestWindow
-                                ? `Confirm by ${formatDateTimeInViewerTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline)}; late-request window until ${formatDateTimeInViewerTimeZone(reservation.payment_deadline)}`
-                                : formatDateTimeInViewerTimeZone(reservation.payment_deadline)}
+                            primaryText={confirmationDeadlineMessage ?? ""}
+                            localTime={confirmationDeadlineLocalTime ?? ""}
                             align="right"
                           >
-                            {isHost
-                              ? isAwaitingLateConsent
-                                ? hostHasPreconfirmedLateRequest
-                                  ? `You already confirmed this late request. It will finalize only if the guest accepts the late-request terms before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
-                                  : `You can confirm this late request before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. It will only finalize after the guest accepts the late-request terms.`
-                                : hasLateRequestWindow
-                                  ? `Confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can continue as a late request until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
-                                  : `Confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled.`
-                              : isAwaitingLateConsent
-                                ? reservation.host_preconfirmed_at
-                                  ? `The host already confirmed this late request. Accept it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} to finalize it.`
-                                  : `This reservation has entered the late-request window. Continue it before ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if you still want the booking.`
-                                : hasAcceptedLateTerms
-                                  ? `This reservation is now in the late-request window. The host still needs to confirm it by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.`
-                                  : hasLateRequestWindow
-                                    ? `The host should confirm this reservation by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it can move into the late-request flow until ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)} if the booking is still eligible.`
-                                    : `The host should confirm this reservation by ${formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}. If it is still unresolved after that, it will be cancelled and you will not be charged.`}
+                            {confirmationDeadlineMessage ?? ""}
                           </TimeWithLocalHint>
                         </p>
-                        <p className="mt-2 text-xs text-[#5e738a]">Times shown in {listingTimeZoneLabel}</p>
-                        {!isHost && isRenter && isAwaitingLateConsent ? (
+                        {!isHost && isRenter && isAwaitingLateConsent && !isExpiredPending ? (
                           <p className="mt-2 text-sm leading-6 text-[#5e738a]">
                             This request has passed the standard cancellation window and now requires your approval to continue as a late request. The host still has to confirm it. If you continue, you will no longer be able to cancel it.
                           </p>
@@ -566,6 +580,12 @@ export default function ReservationDetailsPage() {
                             ? "Confirm late request"
                             : "Confirm reservation"}
                       </Button>
+                    ) : isExpiredPending ? (
+                      <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
+                        <Badge variant="outline" className="border-[#ebd0d5] bg-[#fff1f3] text-[#b42318]">
+                          Reservation expired
+                        </Badge>
+                      </div>
                     ) : isRenter && !isHost && !isPast ? (
                       <Badge variant="outline" className="border-[#dadada] bg-[#f7f7f7] text-[#6a6a6a]">
                         Confirmation deadline passed
@@ -877,6 +897,7 @@ export default function ReservationDetailsPage() {
   )
 }
 function getStatusLabel(status: string) {
+  if (status === "EXPIRED") return "EXPIRED"
   if (status === "PENDING_AWAITING_LATE_CONSENT") return "PENDING"
   return status
 }

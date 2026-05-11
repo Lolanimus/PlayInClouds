@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { ReservationCard } from "@/components/reservation-card"
+import { reservationRequiresActionForViewer, sortReservationsForViewer } from "@/lib/reservation-priority"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -73,7 +74,7 @@ export default function HostReservationsPage() {
   const listings = (listingsQuery.data as Listing[] | null) ?? []
   const listingsById = useMemo(() => new Map(listings.map((item) => [item.id, item])), [listings])
 
-  const reservations = ((reservationsQuery.data as Reservation[] | null) ?? []).map((reservation) => {
+  const reservations = sortReservationsForViewer(((reservationsQuery.data as Reservation[] | null) ?? []).map((reservation) => {
     const listing = listingsById.get(reservation.listing_id)
 
     return {
@@ -84,26 +85,38 @@ export default function HostReservationsPage() {
       listingImage: listing?.images?.[0] ?? "",
       listingOwnerId: listing?.owner_id ?? null,
       listingTimezone: listing?.timezone ?? null,
+      listingCancellationPolicyHours: listing?.cancellation_policy_hours ?? null,
     }
-  })
+  }), user?.id)
 
   const reservationsByDay = useMemo(() => {
     const grouped = new Map<string, typeof reservations>()
 
     for (const reservation of reservations) {
       const items = grouped.get(reservation.dateKey) ?? []
-      items.push(reservation)
+        items.push(reservation)
       grouped.set(reservation.dateKey, items)
     }
 
     return Array.from(grouped.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
+      .sort((a, b) => {
+        const aItems = sortReservationsForViewer(a[1], user?.id)
+        const bItems = sortReservationsForViewer(b[1], user?.id)
+        const aNeedsAction = aItems.some((reservation) => reservationRequiresActionForViewer(reservation, user?.id)) ? 1 : 0
+        const bNeedsAction = bItems.some((reservation) => reservationRequiresActionForViewer(reservation, user?.id)) ? 1 : 0
+
+        if (aNeedsAction !== bNeedsAction) {
+          return bNeedsAction - aNeedsAction
+        }
+
+        return a[0].localeCompare(b[0])
+      })
       .map(([dateKey, items]) => ({
         dateKey,
         heading: formatDayHeading(dateKey),
-        items,
+        items: sortReservationsForViewer(items, user?.id),
       }))
-  }, [reservations])
+  }, [reservations, user?.id])
 
   return (
     <section className="h-full min-h-0 overflow-y-auto p-4 md:p-6 lg:p-8">

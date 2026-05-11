@@ -4,7 +4,7 @@ import { useNavigate } from "react-router"
 import { TimeWithLocalHint } from "@/components/time-with-local-hint"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatDateRangeInTimeZone, formatDateRangeInViewerTimeZone } from "@/lib/date-time"
+import { formatDateRangeInTimeZone, formatDateRangeInViewerTimeZone, formatDateTimeInTimeZone } from "@/lib/date-time"
 import { usePendingReservationReviews } from "@/hooks/useReviews"
 import {
   useAcceptLateReservationTerms,
@@ -20,6 +20,7 @@ type ReservationCardReservation = Reservation & {
   listingImage?: string
   listingOwnerId?: string | null
   listingTimezone?: string | null
+  listingCancellationPolicyHours?: number | null
 }
 
 function formatCurrency(value: number) {
@@ -62,6 +63,27 @@ function getBookedHours(startAtIso: string, endAtIso: string) {
   return Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60))
 }
 
+function canCancelBeforePaymentDeadline(startAtIso: string, endAtIso: string, paymentDeadlineIso: string) {
+  const now = Date.now()
+  const start = new Date(startAtIso)
+  const end = new Date(endAtIso)
+  const paymentDeadline = new Date(paymentDeadlineIso)
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || Number.isNaN(paymentDeadline.getTime())) return false
+  if (end.getTime() <= now) return false
+  if (start.getTime() <= now) return false
+  return now < paymentDeadline.getTime()
+}
+
+function isExpiredUnresolvedReservation(status: string, paymentDeadlineIso: string) {
+  if (status !== "PENDING" && status !== "PENDING_AWAITING_LATE_CONSENT") return false
+
+  const paymentDeadline = new Date(paymentDeadlineIso)
+  if (Number.isNaN(paymentDeadline.getTime())) return false
+
+  return paymentDeadline.getTime() <= Date.now()
+}
+
 export function ReservationCard({
   reservation,
 }: {
@@ -79,7 +101,14 @@ export function ReservationCard({
   const isHost = Boolean(user?.id && reservation.listingOwnerId && reservation.listingOwnerId === user.id)
   const isRenter = Boolean(user?.id && reservation.renter_id === user.id)
   const isAwaitingLateConsent = reservation.status === "PENDING_AWAITING_LATE_CONSENT"
+  const isExpiredPending = isExpiredUnresolvedReservation(reservation.status, reservation.payment_deadline)
   const hostHasPreconfirmedLateRequest = Boolean(reservation.host_preconfirmed_at)
+  const renterCancellationEnabled = typeof reservation.listingCancellationPolicyHours === "number"
+  const cancelAllowedByDeadline = canCancelBeforePaymentDeadline(
+    reservation.start_at,
+    reservation.end_at,
+    reservation.payment_deadline
+  )
   const listingTimeZone = reservation.listingTimezone ?? "UTC"
   const listingRangeLabel = formatDateRangeInTimeZone(reservation.start_at, reservation.end_at, listingTimeZone)
   const localRangeLabel = formatDateRangeInViewerTimeZone(reservation.start_at, reservation.end_at)
@@ -149,7 +178,11 @@ export function ReservationCard({
             <h3 className="truncate text-base font-semibold text-[#000000]">
               {reservation.listingTitle}
             </h3>
-            {timeStatus === "upcoming" ? (
+            {isExpiredPending ? (
+              <Badge variant="outline" className="border-[#ebd0d5] bg-[#fff1f3] text-[#b42318]">
+                Expired
+              </Badge>
+            ) : timeStatus === "upcoming" ? (
               <Badge variant="success">Upcoming</Badge>
             ) : timeStatus === "ongoing" ? (
               <Badge variant="success">Ongoing</Badge>
@@ -163,7 +196,7 @@ export function ReservationCard({
               </Badge>
             )}
 
-            {reservation.status === "CONFIRMED" ? (
+            {isExpiredPending ? null : reservation.status === "CONFIRMED" ? (
               <Badge variant="outline" className="border-[#b7eb8f] bg-[#f6ffed] text-[#237804]">
                 Confirmed
               </Badge>
@@ -207,9 +240,15 @@ export function ReservationCard({
             </div>
           </div>
 
-          {isRenter && isAwaitingLateConsent ? (
+          {isRenter && isAwaitingLateConsent && !isExpiredPending ? (
             <p className="mt-3 rounded-lg border border-[#ffd591] bg-[#fff7e6] px-3 py-2 text-sm text-[#ad4e00]">
               This request has passed the standard cancellation window and now requires your approval to continue as a late request. The host still has to confirm it. If you continue, you won&apos;t be able to cancel it.
+            </p>
+          ) : null}
+
+          {isExpiredPending ? (
+            <p className="mt-3 rounded-lg border border-[#ebd0d5] bg-[#fff1f3] px-3 py-2 text-sm text-[#b42318]">
+              This reservation is no longer active. It expired at {formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.
             </p>
           ) : null}
 
@@ -242,7 +281,7 @@ export function ReservationCard({
                 </Button>
               ) : null}
 
-              {isRenter && isAwaitingLateConsent && !isPast ? (
+              {isRenter && isAwaitingLateConsent && !isPast && !isExpiredPending ? (
                 <Button
                   className="bg-[#ad6800] text-[#ffffff] hover:bg-[#8f5800]"
                   onClick={handleAcceptLate}
@@ -252,7 +291,7 @@ export function ReservationCard({
                 </Button>
               ) : null}
 
-              {isHost && (reservation.status === "PENDING" || reservation.status === "PENDING_AWAITING_LATE_CONSENT") && !isPast && !(isAwaitingLateConsent && hostHasPreconfirmedLateRequest) ? (
+              {isHost && (reservation.status === "PENDING" || reservation.status === "PENDING_AWAITING_LATE_CONSENT") && !isPast && !isExpiredPending && !(isAwaitingLateConsent && hostHasPreconfirmedLateRequest) ? (
                 <Button
                   className="bg-[#237804] text-[#ffffff] hover:bg-[#1f6a03]"
                   onClick={handleConfirm}
@@ -262,7 +301,7 @@ export function ReservationCard({
                 </Button>
               ) : null}
 
-              {isHost && reservation.status !== "CANCELLED" && !isPast ? (
+              {isHost && reservation.status !== "CANCELLED" && !isPast && cancelAllowedByDeadline ? (
                 <Button
                   variant="destructive"
                   onClick={handleCancel}
@@ -271,10 +310,27 @@ export function ReservationCard({
                   Cancel
                 </Button>
               ) : null}
+
+              {isRenter && renterCancellationEnabled && reservation.status !== "CANCELLED" && !isPast && !reservation.late_consent_given_at && cancelAllowedByDeadline ? (
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!confirm("Cancel this reservation?")) return
+                    try {
+                      await cancelMutation.mutateAsync({ p_reservation_id: reservation.id })
+                    } catch {
+                      // handled by error store
+                    }
+                  }}
+                  disabled={actionsDisabled}
+                >
+                  Cancel
+                </Button>
+              ) : null}
             </div>
           </div>
 
-          {isHost && isAwaitingLateConsent && hostHasPreconfirmedLateRequest && !isPast ? (
+          {isHost && isAwaitingLateConsent && hostHasPreconfirmedLateRequest && !isPast && !isExpiredPending ? (
             <p className="mt-3 rounded-lg border border-[#d8e3f0] bg-[#f6f9fc] px-3 py-2 text-sm text-[#35516d]">
               You already confirmed this late request. It is now waiting for the guest to accept the late-request terms.
             </p>
