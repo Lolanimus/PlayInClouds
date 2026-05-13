@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, PlusCircle, Settings } from "lucide-react"
 import { finalizeCheckoutSession } from "~/api/supabase/payments"
 
 import supabase from "@/utils/supabase"
-import { sortReservationsForViewer } from "@/lib/reservation-priority"
+import { sortPastReservationsByMostRecent, sortReservationsForViewer } from "@/lib/reservation-priority"
 import { ReservationCard } from "@/components/reservation-card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -98,7 +98,7 @@ export default function DashboardPage() {
       listingCancellationPolicyHours: listing?.cancellation_policy_hours ?? null,
     }
   }), user?.id)
-  const pastReservations = sortReservationsForViewer((pastReservationsQuery.data ?? []).map((reservation) => {
+  const pastReservations = sortPastReservationsByMostRecent((pastReservationsQuery.data ?? []).map((reservation) => {
     const listing = listingsById.get(reservation.listing_id)
 
     return {
@@ -110,7 +110,7 @@ export default function DashboardPage() {
       listingTimezone: listing?.timezone ?? null,
       listingCancellationPolicyHours: listing?.cancellation_policy_hours ?? null,
     }
-  }), user?.id)
+  }))
   const totalPastReservations = pastReservationsCountQuery.data ?? 0
   const totalPastReservationPages = Math.max(1, Math.ceil(totalPastReservations / PAST_RESERVATIONS_PAGE_SIZE))
 

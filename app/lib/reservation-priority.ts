@@ -1,6 +1,7 @@
 type ReservationLike = {
   status: string
   start_at: string
+  end_at?: string
   payment_deadline: string
   host_preconfirmed_at?: string | null
   renter_id: string
@@ -58,5 +59,14 @@ export function sortReservationsForViewer<T extends ReservationLike>(
     }
 
     return new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
+  })
+}
+
+export function sortPastReservationsByMostRecent<T extends ReservationLike>(reservations: T[]) {
+  return [...reservations].sort((a, b) => {
+    const aTime = new Date(a.end_at ?? a.start_at).getTime()
+    const bTime = new Date(b.end_at ?? b.start_at).getTime()
+
+    return bTime - aTime
   })
 }
