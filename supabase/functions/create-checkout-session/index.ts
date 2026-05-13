@@ -4,7 +4,7 @@ import { corsHeaders, errorResponse, jsonResponse } from "../_shared/http.ts";
 import { createAuthedClient, createServiceClient } from "../_shared/supabase.ts";
 
 const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
-const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:5173";
+const rawSiteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:5173";
 const currency = (Deno.env.get("STRIPE_CURRENCY") ?? "cad").toLowerCase();
 const bookerFeeBps = Number(Deno.env.get("STRIPE_BOOKER_FEE_BPS") ?? "750");
 const hostFeeBps = Number(Deno.env.get("STRIPE_HOST_FEE_BPS") ?? "500");
@@ -55,7 +55,21 @@ type HostPaymentAccountRow = {
 
 function buildAbsoluteUrl(path: string, fallback: string) {
   const safePath = path.startsWith("/") ? path : fallback;
-  return `${siteUrl}${safePath}`;
+  return `${normalizeLocalSiteUrl(rawSiteUrl)}${safePath}`;
+}
+
+function normalizeLocalSiteUrl(siteUrl: string) {
+  try {
+    const parsed = new URL(siteUrl);
+
+    if (parsed.hostname === "127.0.0.1") {
+      parsed.hostname = "localhost";
+    }
+
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return siteUrl.replace("://127.0.0.1", "://localhost").replace(/\/+$/, "");
+  }
 }
 
 function appendQueryParam(url: string, key: string, value: string) {
