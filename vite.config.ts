@@ -5,4 +5,18 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
+  server: {
+    watch: {
+      ignored: [
+        "**/.git/**",
+        "**/.react-router/**",
+        "**/build/**",
+        "**/chat_history/**",
+        "**/supabase/**",
+      ],
+    },
+    allowedHosts: [
+      "uselessly-affluent-blast.ngrok-free.dev"
+    ]
+  },
 });
