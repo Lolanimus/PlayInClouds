@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { MapPin } from "lucide-react"
 import { useNavigate } from "react-router"
@@ -130,7 +130,9 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
   const navigate = useNavigate()
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
-  const markerEntriesRef = useRef<Array<{ id: string; price: string; root: Root; isUnmounted: boolean }>>([])
+  const markerEntriesRef = useRef<
+    Array<{ id: string; price: string; root: Root | null; isUnmounted: boolean }>
+  >([])
   const isTearingDownRef = useRef(false)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [activeListingId, setActiveListingId] = useState<string | null>(null)
@@ -235,20 +237,41 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
   )
   const filteredListingIds = new Set(filteredListings.map((listing) => String(listing.id)))
 
+  const safelyRenderMarker = (
+    entry: { root: Root | null; isUnmounted: boolean },
+    content: ReactNode
+  ) => {
+    if (entry.isUnmounted || !entry.root || isTearingDownRef.current) return
+
+    try {
+      entry.root.render(content)
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Cannot update an unmounted root")) {
+        entry.isUnmounted = true
+        entry.root = null
+        return
+      }
+
+      throw error
+    }
+  }
+
   const renderMarkerButtons = () => {
     if (isTearingDownRef.current) return
 
-    markerEntriesRef.current.forEach(({ id, price, root, isUnmounted }) => {
-      if (isUnmounted) return
+    markerEntriesRef.current.forEach((entry) => {
+      const { id, price, root, isUnmounted } = entry
+      if (isUnmounted || !root) return
 
       if (!filteredListingIds.has(id)) {
-        root.render(<></>)
+        safelyRenderMarker(entry, <></>)
         return
       }
 
       const isAvailableNow = availableNowListingIds.has(id)
 
-      root.render(
+      safelyRenderMarker(
+        entry,
         markerVariant === "pin" ? (
           <PinMarker
             isActive={activeListingId === id}
@@ -272,7 +295,7 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
 
     isTearingDownRef.current = false
 
-    const markerRoots: Root[] = []
+    const markerRoots: Array<{ root: Root; entry: { id: string; price: string; root: Root | null; isUnmounted: boolean } }> = []
     const markerOverlays: any[] = []
     markerEntriesRef.current = []
 
@@ -359,8 +382,8 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
         const container = document.createElement("div")
         const root = createRoot(container)
         const markerEntry = { id: listingId, price, root, isUnmounted: false }
-        markerRoots.push(root)
         markerEntriesRef.current.push(markerEntry)
+        markerRoots.push({ root, entry: markerEntry })
 
         class PriceOverlay extends window.google.maps.OverlayView {
           private div: HTMLDivElement | null = null
@@ -377,7 +400,8 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
             if (isTearingDownRef.current || markerEntry.isUnmounted) return
 
             if (filteredListingIds.has(listingId)) {
-              root.render(
+              safelyRenderMarker(
+                markerEntry,
                 markerVariant === "pin" ? (
                   <PinMarker
                     isActive={activeListingId === listingId}
@@ -394,7 +418,7 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
                 )
               )
             } else {
-              root.render(<></>)
+              safelyRenderMarker(markerEntry, <></>)
             }
 
             this.div.appendChild(container)
@@ -443,12 +467,15 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
       markerEntriesRef.current.forEach((entry) => {
         entry.isUnmounted = true
       })
-      markerEntriesRef.current = []
+        markerEntriesRef.current = []
       mapInstanceRef.current = null
 
       // Defer unmount to avoid unmounting a root during an in-progress React render.
       setTimeout(() => {
-        markerRoots.forEach((root) => root.unmount())
+        markerRoots.forEach(({ root, entry }) => {
+          root.unmount()
+          entry.root = null
+        })
       }, 0)
     }
   }, [allListings, markerVariant])
