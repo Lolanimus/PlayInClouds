@@ -1,0 +1,623 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { MapPin } from "lucide-react"
+import { useNavigate } from "react-router"
+import { ListingCard, type ListingItem } from "@/components/listings"
+import { useListings } from "@/hooks/useListings"
+import { useHostListings } from "@/store/host_listings_state"
+import { useSearchStore } from "@/store/search-store"
+import type { Listing as ApiListing } from "@/types/custom/api.types"
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
+const DEFAULT_SEARCH_MAP_CENTER = { lat: 39.8283, lng: -98.5795 }
+const DEFAULT_SEARCH_MAP_ZOOM = 3
+
+function PriceMarker({
+  price,
+  isActive,
+  isAvailableInSelectedSlot,
+  hasSelectedSlot,
+  onClick,
+}: {
+  price: string
+  isActive: boolean
+  isAvailableInSelectedSlot: boolean
+  hasSelectedSlot: boolean
+  onClick: () => void
+}) {
+  const isOtherTime = hasSelectedSlot && !isAvailableInSelectedSlot
+
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+      className={[
+        "inline-flex items-center justify-center rounded-full border px-3 py-1 text-sm font-semibold shadow-sm transition-colors",
+        isActive
+          ? hasSelectedSlot
+            ? isAvailableInSelectedSlot
+              ? "border-[#0f6130] bg-[#0f6130] text-[#ffffff]"
+              : "border-[#6a6a6a] bg-[#6a6a6a] text-[#ffffff]"
+            : "border-[#000000] bg-[#000000] text-[#ffffff]"
+          : isOtherTime
+            ? "border-[#9a9a9a] bg-[#f0f0f0] text-[#6a6a6a] hover:bg-[#e5e5e5]"
+            : hasSelectedSlot
+              ? "border-[#1f8f4a] bg-[#eaf8ef] text-[#0f6130] hover:bg-[#ddf2e5]"
+              : "border-[#ffffff] bg-[#f5f5f5] text-[#000000] hover:bg-[#f5f5f5]",
+      ].join(" ")}
+      aria-label={`Open listing ${price}`}
+    >
+      {price}
+    </button>
+  )
+}
+
+function PinMarker({
+  isActive,
+  onClick,
+}: {
+  isActive: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        onClick()
+      }}
+      className={[
+        "inline-flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-colors",
+        isActive
+          ? "border-[#000000] bg-[#000000] text-[#ffffff]"
+          : "border-[#000000] bg-[#000000] text-[#ffffff] hover:bg-[#1f1f1f]",
+      ].join(" ")}
+      aria-label="Open listing location"
+    >
+      <MapPin className="h-4 w-4" />
+    </button>
+  )
+}
+
+type MapViewProps = {
+  listingsOverride?: ListingItem[]
+  disableFilters?: boolean
+  markerVariant?: "price" | "pin"
+}
+
+export function MapView({ listingsOverride, disableFilters = false, markerVariant = "price" }: MapViewProps) {
+  const hostListings = useHostListings()
+  const listingsQuery = useListings()
+  const whereValue = useSearchStore((state) => state.where)
+  const dbListings = useMemo(() => {
+    const rows = (listingsQuery.data as ApiListing[] | null) ?? []
+
+    return rows.map<ListingItem>((item) => ({
+      id: item.id,
+      lat: item.lat,
+      lng: item.lng,
+      address: item.address,
+      title: item.title,
+      subtitle: item.subtitle,
+      category: item.category,
+      price: `$${item.price} CAD/hour`,
+      distance: "",
+      rating: item.average_rating,
+      reviews: item.review_count,
+      images: item.images ?? [],
+      description: item.description,
+      equipmentDesc: item.equipment_desc,
+      conveniencesDesc: item.conveniences_desc,
+      areaM2: item.area_m2,
+      weeklySlotsByDay: item.weekly_slots_by_day ?? {},
+    }))
+  }, [listingsQuery.data])
+  const allListings = useMemo(() => {
+    if (listingsOverride && listingsOverride.length > 0) return listingsOverride
+    return dbListings.length > 0 ? dbListings : hostListings
+  }, [dbListings, hostListings, listingsOverride])
+
+  const priceMaxParam = useSearchStore((state) => state.priceMax)
+  const distanceMaxParam = useSearchStore((state) => state.distanceMax)
+  const selectedDateParam = useSearchStore((state) => state.date)
+  const selectedStartParam = useSearchStore((state) => state.startHour)
+  const selectedDurationParam = useSearchStore((state) => state.duration)
+  const navigate = useNavigate()
+  const mapRef = useRef<HTMLDivElement>(null)
+  const mapInstanceRef = useRef<any>(null)
+  const markerEntriesRef = useRef<
+    Array<{ id: string; price: string; root: Root | null; isUnmounted: boolean }>
+  >([])
+  const isTearingDownRef = useRef(false)
+  const [mapLoaded, setMapLoaded] = useState(false)
+  const [activeListingId, setActiveListingId] = useState<string | null>(null)
+  const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const shouldUseSearchContext = !disableFilters && !listingsOverride
+  const whereQuery = shouldUseSearchContext ? whereValue.trim().toLowerCase() : ""
+  const hasSpecifiedLocation = !shouldUseSearchContext || whereQuery.length > 0
+  const hasSelectedSlot =
+    selectedDateParam &&
+    selectedStartParam !== null &&
+    selectedStartParam >= 0 &&
+    selectedStartParam <= 23 &&
+    selectedDurationParam >= 1 &&
+    selectedDurationParam <= 12
+
+  const parseListingPrice = (value: string) => {
+    const match = value.match(/\$\s*(\d+(?:\.\d+)?)/)
+    if (!match) return Number.POSITIVE_INFINITY
+    return Number(match[1])
+  }
+
+  const parseListingDistance = (value: string) => {
+    const match = value.match(/(\d+(?:\.\d+)?)\s*km/i)
+    if (!match) return Number.POSITIVE_INFINITY
+    return Number(match[1])
+  }
+
+  const toRadians = (value: number) => (value * Math.PI) / 180
+  const getDistanceKm = (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const earthRadiusKm = 6371
+    const deltaLat = toRadians(to.lat - from.lat)
+    const deltaLng = toRadians(to.lng - from.lng)
+
+    const a =
+      Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+      Math.cos(toRadians(from.lat)) *
+        Math.cos(toRadians(to.lat)) *
+        Math.sin(deltaLng / 2) *
+        Math.sin(deltaLng / 2)
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return earthRadiusKm * c
+  }
+
+  const filteredListings = !hasSpecifiedLocation
+    ? []
+    : disableFilters
+    ? allListings
+    : allListings
+        .filter((listing) => {
+          if (!whereQuery) return true
+
+          const matchesText = [listing.title, listing.subtitle, listing.category, listing.address]
+            .join(" ")
+            .toLowerCase()
+            .includes(whereQuery)
+
+          if (matchesText) return true
+          if (!searchCoords) return false
+
+          const distanceKm = getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
+          if (!Number.isFinite(distanceKm)) return false
+
+          return distanceKm <= distanceMaxParam
+        })
+        .filter((listing) => {
+          if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
+          return parseListingPrice(listing.price) <= priceMaxParam
+        })
+        .filter((listing) => {
+          if (!Number.isFinite(distanceMaxParam) || distanceMaxParam < 0) return true
+
+          const distanceKm = searchCoords
+            ? getDistanceKm(searchCoords, { lat: listing.lat, lng: listing.lng })
+            : parseListingDistance(listing.distance)
+
+          if (!Number.isFinite(distanceKm)) return false
+          return distanceKm <= distanceMaxParam
+        })
+
+  const isAvailableInSelectedSlot = (listingId: string) => {
+    if (!hasSelectedSlot || !selectedDateParam || selectedStartParam === null) return false
+
+    const listing = filteredListings.find((l) => String(l.id) === listingId)
+    const slots = listing?.weeklySlotsByDay
+    if (!slots || Object.keys(slots).length === 0) return false
+
+    const selectedDay = selectedDateParam.getDay()
+    const hoursForDay = slots[String(selectedDay)]
+    if (!hoursForDay || hoursForDay.length === 0) return false
+
+    for (let h = selectedStartParam; h < selectedStartParam + selectedDurationParam; h++) {
+      if (!hoursForDay.includes(h)) return false
+    }
+    return true
+  }
+
+  const availableNowListingIds = new Set(
+    filteredListings
+      .filter((listing) => isAvailableInSelectedSlot(String(listing.id)))
+      .map((listing) => String(listing.id))
+  )
+  const filteredListingIds = new Set(filteredListings.map((listing) => String(listing.id)))
+
+  const safelyRenderMarker = (
+    entry: { root: Root | null; isUnmounted: boolean },
+    content: ReactNode
+  ) => {
+    if (entry.isUnmounted || !entry.root || isTearingDownRef.current) return
+
+    try {
+      entry.root.render(content)
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Cannot update an unmounted root")) {
+        entry.isUnmounted = true
+        entry.root = null
+        return
+      }
+
+      throw error
+    }
+  }
+
+  const renderMarkerButtons = () => {
+    if (isTearingDownRef.current) return
+
+    markerEntriesRef.current.forEach((entry) => {
+      const { id, price, root, isUnmounted } = entry
+      if (isUnmounted || !root) return
+
+      if (!filteredListingIds.has(id)) {
+        safelyRenderMarker(entry, <></>)
+        return
+      }
+
+      const isAvailableNow = availableNowListingIds.has(id)
+
+      safelyRenderMarker(
+        entry,
+        markerVariant === "pin" ? (
+          <PinMarker
+            isActive={activeListingId === id}
+            onClick={() => setActiveListingId(id)}
+          />
+        ) : (
+          <PriceMarker
+            price={price}
+            isActive={activeListingId === id}
+            isAvailableInSelectedSlot={isAvailableNow}
+            hasSelectedSlot={Boolean(hasSelectedSlot)}
+            onClick={() => setActiveListingId(id)}
+          />
+        )
+      )
+    })
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    isTearingDownRef.current = false
+
+    const markerRoots: Array<{ root: Root; entry: { id: string; price: string; root: Root | null; isUnmounted: boolean } }> = []
+    const markerOverlays: any[] = []
+    markerEntriesRef.current = []
+
+    const loadGoogleMaps = () => {
+      if (window.google?.maps) {
+        initMap()
+        return
+      }
+
+      const existingScript = document.getElementById("google-maps-script")
+      if (existingScript) {
+        existingScript.addEventListener("load", initMap)
+        return
+      }
+
+      const script = document.createElement("script")
+      script.id = "google-maps-script"
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY || ""}&libraries=places`
+      script.async = true
+      script.defer = true
+      script.onload = initMap
+      document.head.appendChild(script)
+    }
+
+    const initMap = () => {
+      if (!mapRef.current || !window.google?.maps) return
+
+      const initialCenter =
+        hasSpecifiedLocation && allListings[0]
+          ? { lat: allListings[0].lat, lng: allListings[0].lng }
+          : DEFAULT_SEARCH_MAP_CENTER
+      const initialZoom = hasSpecifiedLocation && allListings[0] ? 15 : DEFAULT_SEARCH_MAP_ZOOM
+
+      const map = new window.google.maps.Map(mapRef.current, {
+        center: initialCenter,
+        zoom: initialZoom,
+        styles: [
+          {
+            featureType: "all",
+            elementType: "geometry",
+            stylers: [{ color: "#f5f5f5" }],
+          },
+          {
+            featureType: "road",
+            elementType: "geometry",
+            stylers: [{ color: "#ffffff" }],
+          },
+          {
+            featureType: "road",
+            elementType: "labels.text.fill",
+            stylers: [{ color: "#9e9e9e" }],
+          },
+          {
+            featureType: "water",
+            elementType: "geometry",
+            stylers: [{ color: "#c9c9c9" }],
+          },
+          {
+            featureType: "poi",
+            elementType: "labels",
+            stylers: [{ visibility: "off" }],
+          },
+        ],
+        disableDefaultUI: true,
+        zoomControl: true,
+        zoomControlOptions: {
+          position: window.google.maps.ControlPosition.RIGHT_CENTER,
+        },
+      })
+      mapInstanceRef.current = map
+
+      if (hasSpecifiedLocation && allListings.length > 1) {
+        const bounds = new window.google.maps.LatLngBounds()
+        allListings.forEach((listing) => {
+          bounds.extend(new window.google.maps.LatLng(listing.lat, listing.lng))
+        })
+        map.fitBounds(bounds, 80)
+      }
+
+      allListings.forEach((listing) => {
+        const listingId = String(listing.id)
+        const price = listing.price.split(" ")[0] ?? "$--"
+
+        const container = document.createElement("div")
+        const root = createRoot(container)
+        const markerEntry = { id: listingId, price, root, isUnmounted: false }
+        markerEntriesRef.current.push(markerEntry)
+        markerRoots.push({ root, entry: markerEntry })
+
+        class PriceOverlay extends window.google.maps.OverlayView {
+          private div: HTMLDivElement | null = null
+
+          onAdd() {
+            this.div = document.createElement("div")
+            this.div.style.position = "absolute"
+            this.div.style.transform = "translate(-50%, -50%)"
+
+            this.div.addEventListener("click", (event) => {
+              event.stopPropagation()
+            })
+
+            if (isTearingDownRef.current || markerEntry.isUnmounted) return
+
+            if (filteredListingIds.has(listingId)) {
+              safelyRenderMarker(
+                markerEntry,
+                markerVariant === "pin" ? (
+                  <PinMarker
+                    isActive={activeListingId === listingId}
+                    onClick={() => setActiveListingId(listingId)}
+                  />
+                ) : (
+                  <PriceMarker
+                    price={price}
+                    isActive={activeListingId === listingId}
+                    isAvailableInSelectedSlot={availableNowListingIds.has(listingId)}
+                    hasSelectedSlot={Boolean(hasSelectedSlot)}
+                    onClick={() => setActiveListingId(listingId)}
+                  />
+                )
+              )
+            } else {
+              safelyRenderMarker(markerEntry, <></>)
+            }
+
+            this.div.appendChild(container)
+            this.getPanes()?.overlayMouseTarget?.appendChild(this.div)
+          }
+
+          draw() {
+            if (!this.div) return
+
+            const projection = this.getProjection()
+            if (!projection) return
+
+            const position = projection.fromLatLngToDivPixel(
+              new window.google.maps.LatLng(listing.lat, listing.lng)
+            )
+
+            if (!position) return
+
+            this.div.style.left = `${position.x}px`
+            this.div.style.top = `${position.y}px`
+          }
+
+          onRemove() {
+            this.div?.remove()
+            this.div = null
+          }
+        }
+
+        const overlay = new PriceOverlay()
+        overlay.setMap(map)
+        markerOverlays.push(overlay)
+      })
+
+      map.addListener("click", () => {
+        setActiveListingId(null)
+      })
+
+      setMapLoaded(true)
+    }
+
+    loadGoogleMaps()
+
+    return () => {
+      isTearingDownRef.current = true
+      markerOverlays.forEach((overlay) => overlay.setMap(null))
+      markerEntriesRef.current.forEach((entry) => {
+        entry.isUnmounted = true
+      })
+        markerEntriesRef.current = []
+      mapInstanceRef.current = null
+
+      // Defer unmount to avoid unmounting a root during an in-progress React render.
+      setTimeout(() => {
+        markerRoots.forEach(({ root, entry }) => {
+          root.unmount()
+          entry.root = null
+        })
+      }, 0)
+    }
+  }, [allListings, markerVariant])
+
+  useEffect(() => {
+    if (!shouldUseSearchContext) {
+      setSearchCoords(null)
+      return
+    }
+
+    const where = whereValue.trim()
+    if (!where) {
+      setSearchCoords(null)
+      return
+    }
+    if (!mapLoaded) return
+    if (!mapInstanceRef.current) return
+    if (!window.google?.maps || !GOOGLE_MAPS_API_KEY) return
+
+    const controller = new AbortController()
+
+    const centerMapToSearch = async () => {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(where)}&key=${GOOGLE_MAPS_API_KEY}`,
+          { signal: controller.signal }
+        )
+
+        if (!response.ok) return
+
+        const data = (await response.json()) as {
+          results?: Array<{ geometry?: { location?: { lat?: number; lng?: number } } }>
+        }
+
+        const lat = data.results?.[0]?.geometry?.location?.lat
+        const lng = data.results?.[0]?.geometry?.location?.lng
+
+        if (typeof lat !== "number" || typeof lng !== "number") return
+
+        setSearchCoords({ lat, lng })
+
+        const target = new window.google.maps.LatLng(lat, lng)
+        mapInstanceRef.current.panTo(target)
+        mapInstanceRef.current.setZoom(12)
+      } catch {
+        setSearchCoords(null)
+        // ignore geocode failures for map centering
+      }
+    }
+
+    centerMapToSearch()
+
+    return () => {
+      controller.abort()
+    }
+  }, [whereValue, mapLoaded, shouldUseSearchContext])
+
+  useEffect(() => {
+    if (!mapLoaded || !mapInstanceRef.current || !window.google?.maps) return
+    if (filteredListings.length === 0) return
+
+    if (filteredListings.length === 1) {
+      mapInstanceRef.current.panTo({ lat: filteredListings[0].lat, lng: filteredListings[0].lng })
+      mapInstanceRef.current.setZoom(14)
+      return
+    }
+
+    const bounds = new window.google.maps.LatLngBounds()
+    filteredListings.forEach((listing) => {
+      bounds.extend(new window.google.maps.LatLng(listing.lat, listing.lng))
+    })
+    mapInstanceRef.current.fitBounds(bounds, 80)
+  }, [filteredListings, mapLoaded])
+
+  useEffect(() => {
+    if (activeListingId && !filteredListingIds.has(activeListingId)) {
+      setActiveListingId(null)
+      return
+    }
+
+    renderMarkerButtons()
+  }, [
+    whereValue,
+    priceMaxParam,
+    distanceMaxParam,
+    selectedDateParam,
+    selectedStartParam,
+    selectedDurationParam,
+    searchCoords,
+    activeListingId,
+    allListings,
+  ])
+
+  const activeListing = activeListingId
+    ? filteredListings.find((listing) => String(listing.id) === activeListingId) ?? null
+    : null
+
+  return (
+    <div className="relative w-full h-full bg-[#e9e9e9] rounded-lg overflow-hidden">
+      <div ref={mapRef} className="w-full h-full" />
+      {hasSelectedSlot && (
+        <div className="absolute right-4 top-4 z-20 rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-3 shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-[#2a2a2a]">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#1f8f4a]" />
+            <span>Available at selected time</span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-xs text-[#2a2a2a]">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#9e9e9e]" />
+            <span>Available at other times</span>
+          </div>
+        </div>
+      )}
+      {!hasSpecifiedLocation && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#f5f5f5]/80 backdrop-blur-[1px]">
+          <div className="rounded-2xl border border-[#e9e9e9] bg-[#ffffff] px-5 py-4 text-center shadow-sm">
+            <p className="text-sm font-medium text-[#000000]">Enter a location to see listings on the map</p>
+          </div>
+        </div>
+      )}
+      {activeListing && (
+        <div className="absolute left-4 top-4 z-20 w-[min(20rem,calc(100%-2rem))]">
+          <ListingCard
+            listing={activeListing}
+            onClose={() => setActiveListingId(null)}
+            onClick={() => navigate(`/listing/${activeListing.id}`)}
+          />
+        </div>
+      )}
+      {!mapLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#f5f5f5]">
+          <div className="text-center">
+            <div className="w-12 h-12 border-2 border-[#dadada] border-t-[#000000] rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-sm text-[#6a6a6a]">Loading map...</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+declare global {
+  interface Window {
+    google: any
+  }
+}
