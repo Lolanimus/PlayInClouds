@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router"
 import { signup } from "~/api/supabase/auth"
+import { AuthTurnstile, isTurnstileEnabled } from "@/components/auth-turnstile"
 import { queryClient } from "@/queries/queries"
 import { useError, useErrorActions } from "@/store/error_state"
 import type { UserSignup } from "@/types/custom/api.types"
@@ -26,6 +27,7 @@ import {
   InputGroupAddon,
   InputGroupText,
 } from "@/components/ui/input-group"
+import type { TurnstileInstance } from "@marsidev/react-turnstile"
 
 export default function SignupPage() {
   const [searchParams] = useSearchParams()
@@ -38,10 +40,12 @@ export default function SignupPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const error = useError();
   const { setError, setSuccess } = useErrorActions();
   const redirectParam = searchParams.get("redirect")
   const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : null
+  const turnstileRef = useRef<TurnstileInstance | null>(null)
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -71,8 +75,14 @@ export default function SignupPage() {
       return
     }
 
+    if (isTurnstileEnabled() && !captchaToken) {
+      setError("Please complete the CAPTCHA challenge.")
+      setIsSubmitting(false)
+      return
+    }
+
     try {
-      const result = await signup(formData)
+      const result = await signup(formData, captchaToken)
 
       if (!result.success) {
         setError(result.message)
@@ -84,6 +94,8 @@ export default function SignupPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed. Please try again.")
     } finally {
+      turnstileRef.current?.reset()
+      setCaptchaToken(null)
       setIsSubmitting(false)
     }
   }
@@ -170,6 +182,13 @@ export default function SignupPage() {
                 onChange={handleInputChange}
               />
             </Field>
+
+            <AuthTurnstile
+              id="signup-turnstile"
+              captchaToken={captchaToken}
+              turnstileRef={turnstileRef}
+              onTokenChange={setCaptchaToken}
+            />
 
             <Button type="button" onClick={() => void submitEvent()} className="h-10 w-full cursor-pointer" disabled={isSubmitting}>
               {isSubmitting ? "Creating..." : "Create account"}

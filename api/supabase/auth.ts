@@ -16,10 +16,14 @@ type SignupResult = {
 };
 
 const login = async (
-  creds: UserLogin
+  creds: UserLogin,
+  captchaToken?: string | null
 ): Promise<void> => {
   await processAuthRequest(async () => {
-    const { data, error } = await supabase.auth.signInWithPassword(creds);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      ...creds,
+      ...(captchaToken ? { options: { captchaToken } } : {}),
+    });
 
     if (error) throw error;
 
@@ -46,7 +50,8 @@ const signout = async (): Promise<void> => {
 const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL!;
 
 const signup = async (
-  creds: UserSignup
+  creds: UserSignup,
+  captchaToken?: string | null
 ): Promise<SignupResult> => {
   const email = creds.email?.trim();
 
@@ -61,6 +66,7 @@ const signup = async (
     email,
     password: creds.password,
     options: {
+      ...(captchaToken ? { captchaToken } : {}),
       data: {
         first_name: creds.first_name,
         last_name: creds.last_name,

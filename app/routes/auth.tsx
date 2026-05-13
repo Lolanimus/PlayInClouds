@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { login } from "~/api/supabase/auth"
+import { AuthTurnstile, isTurnstileEnabled } from "@/components/auth-turnstile"
 import { queryClient } from "@/queries/queries"
 import { useError, useErrorActions } from "@/store/error_state"
 import { useLoading } from "@/store/loading_state"
 import { useUser } from "@/store/user_state"
 import type { UserLogin } from "@/types/custom/api.types"
+import type { TurnstileInstance } from "@marsidev/react-turnstile"
 import {
   Card,
   CardContent,
@@ -35,8 +37,10 @@ export default function AuthPage() {
     email: "",
     password: "",
   });
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const error = useError();
   const { setError } = useErrorActions();
+  const turnstileRef = useRef<TurnstileInstance | null>(null)
 
   const handleInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -50,8 +54,15 @@ export default function AuthPage() {
     // Clear any previous error before attempting login
     setError(null);
 
-    await login(formData);
+    if (isTurnstileEnabled() && !captchaToken) {
+      setError("Please complete the CAPTCHA challenge.")
+      return
+    }
+
+    await login(formData, captchaToken);
     await queryClient.invalidateQueries();
+    turnstileRef.current?.reset()
+    setCaptchaToken(null)
   }
 
   useEffect(() => {
@@ -103,6 +114,13 @@ export default function AuthPage() {
                   onChange={handleInputChange}
                 />
               </Field>
+
+              <AuthTurnstile
+                id="login-turnstile"
+                captchaToken={captchaToken}
+                turnstileRef={turnstileRef}
+                onTokenChange={setCaptchaToken}
+              />
 
               {error && (
                 <FieldError className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-center">
