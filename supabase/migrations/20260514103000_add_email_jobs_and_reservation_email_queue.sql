@@ -70,6 +70,8 @@ declare
   v_host_email text;
   v_host_first_name text;
   v_host_last_name text;
+  v_host_stripe_account_id text;
+  v_host_payouts_enabled boolean;
   v_renter_email text;
   v_renter_first_name text;
   v_renter_last_name text;
@@ -83,6 +85,8 @@ begin
     host.email,
     host.first_name,
     host.last_name,
+    hpa.stripe_account_id,
+    hpa.payouts_enabled,
     renter.email,
     renter.first_name,
     renter.last_name
@@ -93,11 +97,14 @@ begin
     v_host_email,
     v_host_first_name,
     v_host_last_name,
+    v_host_stripe_account_id,
+    v_host_payouts_enabled,
     v_renter_email,
     v_renter_first_name,
     v_renter_last_name
   from public.listings l
   join public."user" host on host.id = l.owner_id
+  left join public.host_payment_accounts hpa on hpa.user_id = l.owner_id
   join public."user" renter on renter.id = new.renter_id
   where l.id = new.listing_id;
 
@@ -141,6 +148,23 @@ begin
         v_payload,
         'reservation-created-' || new.id::text || '-host'
       );
+
+      if v_host_stripe_account_id is null or coalesce(v_host_payouts_enabled, false) = false then
+        perform public.enqueue_email(
+          'host_payout_setup_needed',
+          'host',
+          v_host_id,
+          v_host_email,
+          jsonb_build_object(
+            'reservation_id', new.id,
+            'listing_id', new.listing_id,
+            'listing_title', v_listing_title,
+            'host_first_name', v_host_first_name,
+            'host_last_name', v_host_last_name
+          ),
+          'host-payout-setup-needed-' || new.id::text || '-host'
+        );
+      end if;
     end if;
 
     return new;
@@ -234,4 +258,3 @@ begin
   );
 end;
 $$;
-
