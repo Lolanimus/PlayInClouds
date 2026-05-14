@@ -1,9 +1,24 @@
 import { Resend } from "npm:resend";
 import {
+  buildListingEmailJob,
+  isListingEmailJobType,
+  type ListingQueueMessage,
+} from "../_shared/email-jobs/listing.ts";
+import {
+  buildPayoutEmailJob,
+  isPayoutEmailJobType,
+  type PayoutQueueMessage,
+} from "../_shared/email-jobs/payout.ts";
+import {
   buildReservationEmailJob,
   isReservationEmailJobType,
   type ReservationQueueMessage,
 } from "../_shared/email-jobs/reservation.ts";
+import {
+  buildReviewEmailJob,
+  isReviewEmailJobType,
+  type ReviewQueueMessage,
+} from "../_shared/email-jobs/review.ts";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/http.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
@@ -34,7 +49,7 @@ type QueueRecord = {
   read_ct: number;
   enqueued_at: string;
   vt: string;
-  message: ReservationQueueMessage & { payload: QueuePayload };
+  message: (ListingQueueMessage | PayoutQueueMessage | ReservationQueueMessage | ReviewQueueMessage) & { payload: QueuePayload };
 };
 
 async function readQueue(limit: number) {
@@ -93,11 +108,20 @@ async function sendEmail(args: {
 
 async function processMessage(record: QueueRecord) {
   try {
-    if (!isReservationEmailJobType(record.message.job_type)) {
+    const email = isReservationEmailJobType(record.message.job_type)
+      ? await buildReservationEmailJob(record.message as ReservationQueueMessage, siteUrl)
+      : isListingEmailJobType(record.message.job_type)
+      ? await buildListingEmailJob(record.message as ListingQueueMessage, siteUrl)
+      : isPayoutEmailJobType(record.message.job_type)
+      ? await buildPayoutEmailJob(record.message as PayoutQueueMessage, siteUrl)
+      : isReviewEmailJobType(record.message.job_type)
+      ? await buildReviewEmailJob(record.message as ReviewQueueMessage, siteUrl)
+      : null;
+
+    if (!email) {
       throw new Error(`Unhandled email job type: ${record.message.job_type}`);
     }
 
-    const email = await buildReservationEmailJob(record.message, siteUrl);
     const providerMessageId = await sendEmail(email);
 
     await deleteMessage(record.msg_id);
