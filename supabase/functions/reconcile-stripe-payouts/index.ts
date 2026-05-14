@@ -1,7 +1,7 @@
 import Stripe from "npm:stripe";
 
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/http.ts";
-import { reconcileStripePayoutForConnectedAccount } from "../_shared/stripe-payouts.ts";
+import { reconcileStripePayoutForConnectedAccount } from "../_shared/stripe/stripe-payouts.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const stripeApiKey = Deno.env.get("STRIPE_API_KEY");

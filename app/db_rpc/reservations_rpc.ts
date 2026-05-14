@@ -1,9 +1,9 @@
-import { processRpcRequest } from "~/api/supabase/helpers";
+import { processRpcRequest } from "~/app/api/supabase/helpers";
 import {
   acceptLateReservationTermsWithPayment,
   cancelReservationWithPayment,
   confirmReservationWithPayment,
-} from "~/api/supabase/reservations";
+} from "~/app/api/supabase/reservations";
 
 const getReservation = async (p_reservation_id: string) => {
   return await processRpcRequest("get_reservation", {

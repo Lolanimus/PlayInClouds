@@ -3,7 +3,7 @@ import Stripe from "npm:stripe";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/http.ts";
 import {
   finalizeCompletedCheckoutSession,
-} from "../_shared/checkout-finalization.ts";
+} from "../_shared/stripe/checkout-finalization.ts";
 import { createAuthedClient, createServiceClient } from "../_shared/supabase.ts";
 
 const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
