@@ -1,5 +1,5 @@
 import * as listingEvents from "@/db_rpc/listings_rpc";
-import { deleteFile, uploadFile, getPublicUrl } from "~/api/supabase/blob";
+import { deleteFile, uploadFile, getPublicUrl } from "~/app/api/supabase/blob";
 import { queries } from "@/queries/queries";
 import type { Listing, ListingModerationQueueItem } from "@/types/custom/api.types";
 import supabase from "@/utils/supabase";

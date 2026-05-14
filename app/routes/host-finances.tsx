@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 
-import { createConnectOnboardingLink, getConnectAccountStatus, type ConnectAccountStatus } from "~/api/supabase/connect"
+import { createConnectOnboardingLink, getConnectAccountStatus, type ConnectAccountStatus } from "~/app/api/supabase/connect"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {

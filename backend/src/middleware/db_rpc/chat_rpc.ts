@@ -1,4 +1,4 @@
-import { processRpcRequest } from "~/api/supabase/helpers";
+import { processRpcRequest } from "~/app/api/supabase/helpers";
 import supabase from "@/utils/supabase";
 
 const getClientChats = async () => {

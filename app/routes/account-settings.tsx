@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router"
 
-import { updateAccountSettings } from "~/api/supabase/auth"
+import { updateAccountSettings } from "~/app/api/supabase/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,

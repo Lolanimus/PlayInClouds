@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
-import { login } from "~/api/supabase/auth"
+import { login } from "~/app/api/supabase/auth"
 import { AuthTurnstile, isTurnstileEnabled } from "@/components/auth-turnstile"
 import { queryClient } from "@/queries/queries"
 import { useError, useErrorActions } from "@/store/error_state"

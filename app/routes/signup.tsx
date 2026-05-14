@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router"
-import { signup } from "~/api/supabase/auth"
+import { signup } from "~/app/api/supabase/auth"
 import { AuthTurnstile, isTurnstileEnabled } from "@/components/auth-turnstile"
 import { queryClient } from "@/queries/queries"
 import { useError, useErrorActions } from "@/store/error_state"

@@ -1,4 +1,4 @@
-import { processRpcRequest } from "~/api/supabase/helpers"
+import { processRpcRequest } from "~/app/api/supabase/helpers"
 
 const listNotifications = async (p_limit = 20, p_offset = 0) => {
   return await processRpcRequest("list_notifications", { p_limit, p_offset })

@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { ChevronLeft, Star } from "lucide-react"
-import { createCheckoutSession } from "~/api/supabase/payments"
+import { createCheckoutSession } from "~/app/api/supabase/payments"
 import { TimeWithLocalHint } from "@/components/time-with-local-hint"
 import {
   formatDateRangeInTimeZone,

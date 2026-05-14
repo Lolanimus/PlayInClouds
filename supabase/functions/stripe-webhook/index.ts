@@ -2,9 +2,9 @@ import Stripe from "npm:stripe";
 
 import {
   finalizeCompletedCheckoutSession,
-} from "../_shared/checkout-finalization.ts";
+} from "../_shared/stripe/checkout-finalization.ts";
 import { errorResponse, jsonResponse } from "../_shared/http.ts";
-import { reconcileStripePayoutForConnectedAccount } from "../_shared/stripe-payouts.ts";
+import { reconcileStripePayoutForConnectedAccount } from "../_shared/stripe/stripe-payouts.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
