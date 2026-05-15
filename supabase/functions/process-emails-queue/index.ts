@@ -1,5 +1,10 @@
 import { Resend } from "npm:resend";
 import {
+  buildChatEmailJob,
+  isChatEmailJobType,
+  type ChatQueueMessage,
+} from "../_shared/email-jobs/chat.ts";
+import {
   buildListingEmailJob,
   isListingEmailJobType,
   type ListingQueueMessage,
@@ -49,7 +54,7 @@ type QueueRecord = {
   read_ct: number;
   enqueued_at: string;
   vt: string;
-  message: (ListingQueueMessage | PayoutQueueMessage | ReservationQueueMessage | ReviewQueueMessage) & { payload: QueuePayload };
+  message: (ChatQueueMessage | ListingQueueMessage | PayoutQueueMessage | ReservationQueueMessage | ReviewQueueMessage) & { payload: QueuePayload };
 };
 
 async function readQueue(limit: number) {
@@ -108,7 +113,9 @@ async function sendEmail(args: {
 
 async function processMessage(record: QueueRecord) {
   try {
-    const email = isReservationEmailJobType(record.message.job_type)
+    const email = isChatEmailJobType(record.message.job_type)
+      ? await buildChatEmailJob(record.message as ChatQueueMessage, siteUrl)
+      : isReservationEmailJobType(record.message.job_type)
       ? await buildReservationEmailJob(record.message as ReservationQueueMessage, siteUrl)
       : isListingEmailJobType(record.message.job_type)
       ? await buildListingEmailJob(record.message as ListingQueueMessage, siteUrl)
