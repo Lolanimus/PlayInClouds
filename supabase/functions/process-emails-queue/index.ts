@@ -69,6 +69,57 @@ type QueueRecord = {
   ) & { payload: QueuePayload };
 };
 
+async function shouldSendEmail(recipientUserId?: string | null) {
+  if (!recipientUserId) return true;
+
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from("user_notification_preferences")
+    .select("channel, category, enabled")
+    .eq("user_id", recipientUserId)
+    .eq("channel", "email");
+
+  if (error) {
+    throw new Error(`Failed to load email notification settings: ${error.message}`);
+  }
+
+  return data ?? null;
+}
+
+function emailSettingEnabledForJob(
+  jobType: string,
+  settings: Array<{
+    channel: string
+    category: string
+    enabled: boolean
+  }> | null
+) {
+  if (!settings) return true;
+
+  const enabledForCategory = (category: string, fallback: boolean) => {
+    const row = settings.find((item) => item.category === category);
+    return row ? row.enabled !== false : fallback;
+  };
+
+  switch (jobType) {
+    case "listing_created":
+    case "listing_status_changed":
+      return enabledForCategory("listing_activity", true);
+    case "review_reminder":
+      return enabledForCategory("reminders", true);
+    case "chat_message":
+      return enabledForCategory("messages", true);
+    case "reservation_created":
+    case "reservation_status_changed":
+    case "host_payout_setup_needed":
+    case "review_received":
+    case "late_reservation_status_changed":
+      return enabledForCategory("account_activity", true);
+    default:
+      return true;
+  }
+}
+
 async function readQueue(limit: number) {
   const service = createServiceClient();
   const { data, error } = await service
@@ -125,6 +176,20 @@ async function sendEmail(args: {
 
 async function processMessage(record: QueueRecord) {
   try {
+    const settings = await shouldSendEmail(record.message.recipient_user_id);
+    const canSend = emailSettingEnabledForJob(record.message.job_type, settings);
+
+    if (!canSend) {
+      await deleteMessage(record.msg_id);
+      return {
+        msgId: record.msg_id,
+        dedupeKey: record.message.dedupe_key,
+        sent: false,
+        skipped: true,
+        reason: "email_notifications_disabled",
+      };
+    }
+
     const email = isChatEmailJobType(record.message.job_type)
       ? await buildChatEmailJob(record.message as ChatQueueMessage, siteUrl)
       : isLateReservationEmailJobType(record.message.job_type)

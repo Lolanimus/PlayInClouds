@@ -391,6 +391,7 @@ export type Database = {
       user: {
         Row: {
           account_status: Database["public"]["Enums"]["account_status"]
+          email_notifications_enabled: boolean
           email: string | null
           first_name: string
           id: string
@@ -402,6 +403,7 @@ export type Database = {
         }
         Insert: {
           account_status?: Database["public"]["Enums"]["account_status"]
+          email_notifications_enabled?: boolean
           email?: string | null
           first_name: string
           id: string
@@ -413,6 +415,7 @@ export type Database = {
         }
         Update: {
           account_status?: Database["public"]["Enums"]["account_status"]
+          email_notifications_enabled?: boolean
           email?: string | null
           first_name?: string
           id?: string
@@ -450,7 +453,42 @@ export type Database = {
           },
         ]
       }
-    }
+      user_notification_preferences: {
+        Row: {
+          category: string
+          channel: string
+          created_at: string
+          enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          channel: string
+          created_at?: string
+          enabled: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          channel?: string
+          created_at?: string
+          enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      }
     Views: {
       [_ in never]: never
     }
@@ -545,6 +583,10 @@ export type Database = {
       get_client_chats: { Args: never; Returns: Json }
       get_direct_chat_by_user_id: {
         Args: { target_user_id: string }
+        Returns: Json
+      }
+      get_email_notification_settings: {
+        Args: never
         Returns: Json
       }
       get_listing: { Args: { p_id: string }; Returns: Json }
@@ -643,6 +685,15 @@ export type Database = {
             }
             Returns: Json
           }
+      update_email_notification_settings: {
+        Args: {
+          p_email_account_activity_enabled: boolean
+          p_email_listing_activity_enabled: boolean
+          p_email_messages_enabled: boolean
+          p_email_reminders_enabled: boolean
+        }
+        Returns: Json
+      }
       update_review: {
         Args: { p_id: string; p_rating?: number; p_text?: string }
         Returns: Json
