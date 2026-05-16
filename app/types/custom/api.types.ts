@@ -16,6 +16,13 @@ export interface ActorContextPayload {
 	roles: UserRole[];
 }
 
+export interface EmailNotificationSettings {
+	email_account_activity_enabled: boolean;
+	email_listing_activity_enabled: boolean;
+	email_reminders_enabled: boolean;
+	email_messages_enabled: boolean;
+}
+
 export interface CurrentActor {
 	userId: string;
 	email: string | null;
