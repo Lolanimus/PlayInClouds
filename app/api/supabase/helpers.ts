@@ -20,6 +20,8 @@ export async function processAuthRequest<T>(
       errorStore.getState().actions.setError(err.message);
     else if (err instanceof AuthError)
       errorStore.getState().actions.setError(err.message);
+    else if (err instanceof Error)
+      errorStore.getState().actions.setError(err.message);
 
     return null;
   }
