@@ -26,7 +26,7 @@ export const useListUserActiveReservations = (
 ): UseQueryResult<Reservation[] | null, Error> => {
   const query = useQuery({
     ...queries.reservations.listUserActive(opts),
-    enabled: config?.enabled ?? true,
+    enabled: config?.enabled ?? Boolean(opts?.p_renter_id),
   });
 
   return query as UseQueryResult<Reservation[] | null, Error>;
@@ -38,7 +38,7 @@ export const useListUserPastReservations = (
 ): UseQueryResult<Reservation[] | null, Error> => {
   const query = useQuery({
     ...queries.reservations.listUserPast(opts),
-    enabled: config?.enabled ?? true,
+    enabled: config?.enabled ?? Boolean(opts?.p_renter_id),
   });
 
   return query as UseQueryResult<Reservation[] | null, Error>;
@@ -50,7 +50,7 @@ export const useCountUserPastReservations = (
 ): UseQueryResult<number | null, Error> => {
   const query = useQuery({
     ...queries.reservations.countUserPast(opts),
-    enabled: config?.enabled ?? true,
+    enabled: config?.enabled ?? Boolean(opts?.p_renter_id),
   });
 
   return query as UseQueryResult<number | null, Error>;
@@ -62,7 +62,7 @@ export const useListHostMonthlyReservations = (
 ): UseQueryResult<Reservation[] | null, Error> => {
   const query = useQuery({
     ...queries.reservations.listHostMonthly(opts),
-    enabled: config?.enabled ?? true,
+    enabled: config?.enabled ?? Boolean(opts?.p_host_id && opts?.p_month),
   });
 
   return query as UseQueryResult<Reservation[] | null, Error>;

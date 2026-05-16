@@ -18,10 +18,12 @@ export const useListings = (opts?: {
   p_max_price?: number;
   p_limit?: number;
   p_offset?: number;
+}, config?: {
+  enabled?: boolean;
 }): UseQueryResult<Listing[] | null, Error> => {
   const query = useQuery({
     ...queries.listings.list(opts),
-    enabled: true,
+    enabled: config?.enabled ?? true,
   });
 
   return query as UseQueryResult<Listing[] | null, Error>;
