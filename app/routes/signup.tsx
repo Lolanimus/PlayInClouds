@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { Link, useSearchParams } from "react-router"
-import { signup } from "~/app/api/supabase/auth"
+import { useNavigate, useSearchParams } from "react-router"
+import { signup, verifySignupCode } from "~/app/api/supabase/auth"
 import { AuthTurnstile, isTurnstileEnabled } from "@/components/auth-turnstile"
 import { queryClient } from "@/queries/queries"
 import { useError, useErrorActions } from "@/store/error_state"
+import { getSiteRedirectUrl } from "@/utils/site-url"
 import type { UserSignup } from "@/types/custom/api.types"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,9 +31,10 @@ import {
 import type { TurnstileInstance } from "@marsidev/react-turnstile"
 
 export default function SignupPage() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [formData, setFormData] = useState<UserSignup>({
-    email: "",
+    email: searchParams.get("email") ?? "",
     first_name: "",
     last_name: "",
     password: "",
@@ -41,11 +43,15 @@ export default function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [verificationCode, setVerificationCode] = useState("")
+  const [awaitingVerification, setAwaitingVerification] = useState(false)
   const error = useError();
   const { setError, setSuccess } = useErrorActions();
   const redirectParam = searchParams.get("redirect")
   const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : null
   const turnstileRef = useRef<TurnstileInstance | null>(null)
+  const confirmedRedirect = safeRedirect ?? "/dashboard"
+  const loginPath = safeRedirect ? `/login?redirect=${encodeURIComponent(safeRedirect)}` : "/login"
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -82,7 +88,8 @@ export default function SignupPage() {
     }
 
     try {
-      const result = await signup(formData, captchaToken)
+      const emailRedirectTo = getSiteRedirectUrl(confirmedRedirect)
+      const result = await signup(formData, captchaToken, emailRedirectTo)
 
       if (!result.success) {
         setError(result.message)
@@ -90,7 +97,16 @@ export default function SignupPage() {
       }
 
       await queryClient.invalidateQueries()
-      setSuccess(result.message)
+
+      if (!result.needsVerification) {
+        setSuccess(result.message)
+        navigate(confirmedRedirect, { replace: true })
+        return
+      }
+
+      setVerificationCode("")
+      setAwaitingVerification(true)
+      setSuccess("Enter the confirmation code from your email to activate your account.")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signup failed. Please try again.")
     } finally {
@@ -98,6 +114,40 @@ export default function SignupPage() {
       setCaptchaToken(null)
       setIsSubmitting(false)
     }
+  }
+
+  const submitVerification = async () => {
+    if (isSubmitting) return
+
+    setIsSubmitting(true)
+    setError(null)
+    setSuccess(null)
+
+    if (!verificationCode.trim()) {
+      setError("Enter the confirmation code from your email.")
+      setIsSubmitting(false)
+      return
+    }
+
+    try {
+      await verifySignupCode(formData.email!, verificationCode)
+      await queryClient.invalidateQueries()
+      setSuccess("Email verified.")
+      navigate(confirmedRedirect, { replace: true })
+    } catch (err) {
+      setAwaitingVerification(true)
+      setError(err instanceof Error ? err.message : "Verification failed. Please try again.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const goToLogin = () => {
+    setAwaitingVerification(false)
+    setVerificationCode("")
+    setError(null)
+    setSuccess(null)
+    navigate(loginPath)
   }
 
   useEffect(() => {
@@ -125,6 +175,7 @@ export default function SignupPage() {
                 autoComplete="given-name"
                 value={formData.first_name}
                 onChange={handleInputChange}
+                disabled={awaitingVerification}
               />
             </Field>
 
@@ -137,6 +188,7 @@ export default function SignupPage() {
                 autoComplete="family-name"
                 value={formData.last_name}
                 onChange={handleInputChange}
+                disabled={awaitingVerification}
               />
             </Field>
 
@@ -154,6 +206,7 @@ export default function SignupPage() {
                   value={formData.email ?? ""}
                   onChange={handleInputChange}
                   className="rounded-l-none"
+                  disabled={awaitingVerification}
                 />
               </InputGroup>
               <FieldDescription>Use a valid email address.</FieldDescription>
@@ -168,6 +221,7 @@ export default function SignupPage() {
                 autoComplete="new-password"
                 value={formData.password}
                 onChange={handleInputChange}
+                disabled={awaitingVerification}
               />
             </Field>
 
@@ -180,21 +234,29 @@ export default function SignupPage() {
                 autoComplete="new-password"
                 value={formData.confirmPassword}
                 onChange={handleInputChange}
+                disabled={awaitingVerification}
               />
             </Field>
 
-            <AuthTurnstile
-              id="signup-turnstile"
-              captchaToken={captchaToken}
-              turnstileRef={turnstileRef}
-              onTokenChange={setCaptchaToken}
-            />
+            {!awaitingVerification ? (
+              <AuthTurnstile
+                id="signup-turnstile"
+                captchaToken={captchaToken}
+                turnstileRef={turnstileRef}
+                onTokenChange={setCaptchaToken}
+              />
+            ) : null}
 
-            <Button type="button" onClick={() => void submitEvent()} className="h-10 w-full cursor-pointer" disabled={isSubmitting}>
+            <Button
+              type="button"
+              onClick={() => void submitEvent()}
+              className="h-10 w-full cursor-pointer"
+              disabled={isSubmitting || awaitingVerification}
+            >
               {isSubmitting ? "Creating..." : "Create account"}
             </Button>
 
-            {isHydrated && error ? (
+            {isHydrated && error && !awaitingVerification ? (
               <FieldError className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-center">
                 {error}
               </FieldError>
@@ -203,14 +265,81 @@ export default function SignupPage() {
         </CardContent>
 
         <CardFooter className="justify-center text-sm text-muted-foreground">
-          <Link
-            className="underline-offset-4 hover:underline"
-            to={safeRedirect ? `/login?redirect=${encodeURIComponent(safeRedirect)}` : "/login"}
+          <button
+            type="button"
+            className="cursor-pointer underline-offset-4 hover:underline"
+            onClick={goToLogin}
           >
             Already have an account? Login
-          </Link>
+          </button>
         </CardFooter>
       </Card>
+
+      {awaitingVerification ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center px-4 py-6">
+          <div className="absolute inset-0 bg-black/45" />
+
+          <Card className="relative w-full max-w-md border-border bg-background shadow-2xl">
+            <CardHeader>
+              <CardTitle>Verify your email</CardTitle>
+              <CardDescription>
+                Enter the confirmation code sent to {formData.email || "your email address"}.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="verificationCode">Confirmation code</FieldLabel>
+                  <Input
+                    id="verificationCode"
+                    name="verificationCode"
+                    inputMode="text"
+                    autoComplete="one-time-code"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    maxLength={64}
+                    value={verificationCode}
+                    onChange={(event) =>
+                      setVerificationCode(event.target.value.replace(/\s+/g, "").trim())
+                    }
+                    autoFocus
+                  />
+                  <FieldDescription>
+                    Use the full code from the email. If it is invalid or expired, this module will stay open.
+                  </FieldDescription>
+                </Field>
+
+                {isHydrated && error ? (
+                  <FieldError className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-center">
+                    {error}
+                  </FieldError>
+                ) : null}
+
+                <Button
+                  type="button"
+                  onClick={() => void submitVerification()}
+                  className="h-10 w-full cursor-pointer"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Verifying..." : "Verify email"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={goToLogin}
+                  className="h-10 w-full cursor-pointer"
+                  disabled={isSubmitting}
+                >
+                  Go to login
+                </Button>
+              </FieldGroup>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </main>
   )
 }

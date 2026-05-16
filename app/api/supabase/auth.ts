@@ -5,6 +5,7 @@ import type { UserLogin, UserSignup } from "@/types/custom/api.types";
 
 type UpdateAccountPayload = {
   email?: string;
+  current_password?: string;
   password?: string;
   first_name?: string;
   last_name?: string;
@@ -13,24 +14,131 @@ type UpdateAccountPayload = {
 type SignupResult = {
   success: boolean;
   message: string;
+  needsVerification: boolean;
 };
+
+type AuthCodeRequestResult = {
+  success: boolean;
+  message: string;
+  needsSignupConfirmation?: boolean;
+};
+
+function isEmailConfirmed(user: {
+  email_confirmed_at?: string | null;
+} | null | undefined) {
+  return Boolean(user?.email_confirmed_at);
+}
+
+function getAuthErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: unknown }).message ?? "");
+  }
+  return "";
+}
+
+function isEmailNotConfirmedError(error: { message?: string; code?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  const code = error?.code?.toLowerCase() ?? "";
+  
+  return code === "email_not_confirmed" || message.includes("email not confirmed");
+}
+
+async function requestSignupConfirmationCode(
+  email: string,
+  captchaToken?: string | null,
+  emailRedirectTo?: string | null
+): Promise<AuthCodeRequestResult> {
+  await supabase.auth.resend({
+    type: "signup",
+    email,
+    options: {
+      ...(captchaToken ? { captchaToken } : {}),
+      ...(emailRedirectTo ? { emailRedirectTo } : {}),
+    },
+  });
+
+  userStore.getState().actions.setUser(null);
+
+  return {
+    success: true,
+    message: "Your email is not confirmed yet. Enter the new confirmation code from your email.",
+    needsSignupConfirmation: true,
+  };
+}
 
 const login = async (
   creds: UserLogin,
-  captchaToken?: string | null
-): Promise<void> => {
-  await processAuthRequest(async () => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      ...creds,
+  captchaToken?: string | null,
+  emailRedirectTo?: string | null
+): Promise<AuthCodeRequestResult> => {
+  const email = creds.email.trim();
+
+  if (!email) {
+    return {
+      success: false,
+      message: "Email is required",
+    };
+  }
+
+  let signInResult;
+
+  try {
+    signInResult = await supabase.auth.signInWithPassword({
+      email,
+      password: creds.password,
       ...(captchaToken ? { options: { captchaToken } } : {}),
     });
+  } catch (err: any) {
+    if (isEmailNotConfirmedError(err)) {
+      return requestSignupConfirmationCode(email, captchaToken, emailRedirectTo);
+    }
 
-    if (error) throw error;
+    userStore.getState().actions.setUser(null);
+    return {
+      success: false,
+      message: getAuthErrorMessage(err) || "Login failed.",
+    };
+  }
 
-    console.info("Successfully logged in!");
+  const { data, error: passwordError } = signInResult;
 
-    return data.user;
-  });
+  if (passwordError) {
+    if (isEmailNotConfirmedError(passwordError)) {
+      try {
+        return await requestSignupConfirmationCode(email, captchaToken, emailRedirectTo);
+      } catch (resendError) {
+        userStore.getState().actions.setUser(null);
+        return {
+          success: true,
+          message: "Your email is not confirmed yet. Enter the confirmation code from your email.",
+          needsSignupConfirmation: true,
+        };
+      }
+    }
+
+    userStore.getState().actions.setUser(null);
+    return {
+      success: false,
+      message: passwordError.message,
+    };
+  }
+
+  if (!data.user) {
+    userStore.getState().actions.setUser(null);
+    return {
+      success: false,
+      message: "Login did not return a user.",
+    };
+  }
+
+  userStore.getState().actions.setUser(data.user);
+
+  return {
+    success: true,
+    message: "Logged in.",
+    needsSignupConfirmation: false,
+  };
 };
 
 const signout = async (): Promise<void> => {
@@ -47,11 +155,10 @@ const signout = async (): Promise<void> => {
   userStore.getState().actions.setUser(null);
 };
 
-const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL!;
-
 const signup = async (
   creds: UserSignup,
-  captchaToken?: string | null
+  captchaToken?: string | null,
+  emailRedirectTo?: string | null
 ): Promise<SignupResult> => {
   const email = creds.email?.trim();
 
@@ -59,6 +166,7 @@ const signup = async (
     return {
       success: false,
       message: "Email is required",
+      needsVerification: false,
     };
   }
 
@@ -67,6 +175,7 @@ const signup = async (
     password: creds.password,
     options: {
       ...(captchaToken ? { captchaToken } : {}),
+      ...(emailRedirectTo ? { emailRedirectTo } : {}),
       data: {
         first_name: creds.first_name,
         last_name: creds.last_name,
@@ -78,6 +187,7 @@ const signup = async (
     return {
       success: false,
       message: error.message,
+      needsVerification: false,
     };
   }
 
@@ -89,6 +199,7 @@ const signup = async (
     return {
       success: false,
       message: "An account with this email already exists. Try logging in instead.",
+      needsVerification: false,
     };
   }
 
@@ -105,7 +216,28 @@ const signup = async (
     message: data.session?.user
       ? "Account created successfully."
       : "Account created. Check your email to confirm your address before logging in.",
+    needsVerification: !isEmailConfirmed(data.user),
   };
+};
+
+const verifySignupCode = async (
+  email: string,
+  code: string
+): Promise<void> => {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: code.trim(),
+    type: "signup",
+  });
+
+  if (error) throw error;
+
+  if (data.session?.user) {
+    userStore.getState().actions.setUser(data.session.user);
+    return;
+  }
+
+  userStore.getState().actions.setUser(null);
 };
 
 const updateAccountSettings = async (
@@ -114,17 +246,26 @@ const updateAccountSettings = async (
   const trimmedEmail = payload.email?.trim();
   const trimmedFirstName = payload.first_name?.trim();
   const trimmedLastName = payload.last_name?.trim();
+  const currentPassword = payload.current_password?.trim();
   const trimmedPassword = payload.password?.trim();
 
   const user = await processAuthRequest(async () => {
-    const { data, error } = await supabase.auth.updateUser({
+    if (trimmedPassword) {
+      if (!currentPassword) {
+        throw new Error("Current password is required when setting a new password.");
+      }
+    }
+
+    const updatePayload = {
       ...(trimmedEmail ? { email: trimmedEmail } : {}),
-      ...(trimmedPassword ? { password: trimmedPassword } : {}),
+      ...(trimmedPassword ? { current_password: currentPassword, password: trimmedPassword } : {}),
       data: {
         ...(trimmedFirstName ? { first_name: trimmedFirstName } : {}),
         ...(trimmedLastName ? { last_name: trimmedLastName } : {}),
       },
-    });
+    };
+
+    const { data, error } = await supabase.auth.updateUser(updatePayload as Parameters<typeof supabase.auth.updateUser>[0]);
 
     if (error) throw error;
 
@@ -136,5 +277,5 @@ const updateAccountSettings = async (
   }
 };
 
-export { login, signout, signup, updateAccountSettings };
-export type { SignupResult };
+export { login, signout, signup, updateAccountSettings, verifySignupCode };
+export type { AuthCodeRequestResult, SignupResult };
