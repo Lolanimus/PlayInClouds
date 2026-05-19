@@ -1,6 +1,7 @@
 import Stripe from "npm:stripe";
 
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/http.ts";
+import { ensureHostTransfer, releasePendingHostTransfersForHost } from "../_shared/stripe/host-transfers.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
@@ -14,10 +15,10 @@ const stripe = new Stripe(stripeApiKey, {
 });
 
 type DuePaymentRow = {
+  id: string;
+  host_user_id: string;
   reservation_id: string;
   stripe_payment_intent_id: string | null;
-  amount_total: number;
-  amount_platform_fee: number;
   reservations: {
     status: string;
     payment_deadline: string;
@@ -28,14 +29,12 @@ type DuePaymentRow = {
 type PaymentIntentReconciliation = {
   chargeId: string | null;
   balanceTransactionId: string | null;
-  hostStripeAccountId: string | null;
-  stripeTransferId: string | null;
 };
 
 async function listDueAuthPayments(service: ReturnType<typeof createServiceClient>) {
   const { data, error } = await service
-    .from("reservation_payments")
-    .select("reservation_id, stripe_payment_intent_id, amount_total, amount_platform_fee, reservations!reservation_payments_reservation_id_fkey(status, payment_deadline, start_at)")
+    .from("reservation_guest_payments")
+    .select("id, host_user_id, reservation_id, stripe_payment_intent_id, reservations(status, payment_deadline, start_at)")
     .eq("status", "AUTH")
     .not("stripe_payment_intent_id", "is", null)
     .limit(200);
@@ -71,10 +70,6 @@ function getPaymentIntentReconciliation(paymentIntent: Stripe.PaymentIntent | nu
     latestCharge && typeof latestCharge.balance_transaction === "object"
       ? latestCharge.balance_transaction
       : null;
-  const destination = paymentIntent?.transfer_data?.destination ?? null;
-  const transfer = latestCharge
-    ? (latestCharge as Stripe.Charge & { transfer?: string | Stripe.Transfer | null }).transfer ?? null
-    : null;
 
   return {
     chargeId:
@@ -83,14 +78,6 @@ function getPaymentIntentReconciliation(paymentIntent: Stripe.PaymentIntent | nu
     balanceTransactionId:
       balanceTransaction?.id
       ?? (latestCharge && typeof latestCharge.balance_transaction === "string" ? latestCharge.balance_transaction : null),
-    hostStripeAccountId:
-      typeof destination === "string"
-        ? destination
-        : destination?.id ?? null,
-    stripeTransferId:
-      typeof transfer === "string"
-        ? transfer
-        : transfer?.id ?? null,
   };
 }
 
@@ -115,27 +102,34 @@ async function captureConfirmedPayment(
     expand: ["latest_charge.balance_transaction"],
   });
   const reconciliation = getPaymentIntentReconciliation(paymentIntent);
-  const hostNetAmount = Math.max(payment.amount_total - payment.amount_platform_fee, 0);
 
   const { error } = await service
-    .from("reservation_payments")
+    .from("reservation_guest_payments")
     .update({
       status: "PAID",
       paid_at: new Date().toISOString(),
       captured_at: new Date().toISOString(),
       stripe_charge_id: reconciliation.chargeId,
       stripe_balance_transaction_id: reconciliation.balanceTransactionId,
-      stripe_transfer_id: reconciliation.stripeTransferId,
-      host_stripe_account_id: reconciliation.hostStripeAccountId,
-      host_net_amount: hostNetAmount,
-      payout_status: reconciliation.hostStripeAccountId ? "PENDING" : "NOT_STARTED",
       last_reconciled_at: new Date().toISOString(),
     })
-    .eq("reservation_id", payment.reservation_id)
+    .eq("id", payment.id)
     .eq("status", "AUTH");
 
   if (error) {
     throw new Error(`Could not persist captured payment: ${error.message}`);
+  }
+
+  const hostTransfer = await ensureHostTransfer({
+    guestPaymentId: payment.id,
+  });
+
+  if (hostTransfer.accountId) {
+    await releasePendingHostTransfersForHost({
+      stripe,
+      hostUserId: payment.host_user_id,
+      accountId: hostTransfer.accountId,
+    });
   }
 
   return true;
@@ -150,13 +144,13 @@ async function cancelPendingAuthorization(
   await stripe.paymentIntents.cancel(payment.stripe_payment_intent_id);
 
   const { error } = await service
-    .from("reservation_payments")
+    .from("reservation_guest_payments")
     .update({
       status: "AUTH_CANCELED",
       canceled_at: new Date().toISOString(),
       last_reconciled_at: new Date().toISOString(),
     })
-    .eq("reservation_id", payment.reservation_id)
+    .eq("id", payment.id)
     .eq("status", "AUTH");
 
   if (error) {

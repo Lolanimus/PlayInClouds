@@ -127,7 +127,7 @@ export default function HostFinancesPage() {
             <div className="space-y-2">
               <p className="text-lg font-semibold text-[#000000]">Stripe payouts</p>
               <p className="text-sm text-[#6a6a6a]">
-                Connect Stripe so AirDrums can send reservation payouts to your bank account.
+                Connect Stripe so PlayInClouds can send reservation payouts to your bank account.
               </p>
             </div>
 

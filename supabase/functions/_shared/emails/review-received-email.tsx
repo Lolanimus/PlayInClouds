@@ -175,7 +175,7 @@ function ReviewReceivedEmail(props: { email: ReviewReceivedEmailViewModel }) {
             <Hr />
 
             <Text style={footer}>
-              Reviews appear on the recipient profile and help build trust on AirDrums.
+              Reviews appear on the recipient profile and help build trust on PlayInClouds.
             </Text>
           </Section>
         </Container>

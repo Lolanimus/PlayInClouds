@@ -199,7 +199,7 @@ function buildReservationEmailViewModel(input: ReservationEmailInput): Reservati
       return {
         ...base,
         subject,
-        previewText: "Your AirDrums reservation request was submitted.",
+        previewText: "Your PlayInClouds reservation request was submitted.",
         heading: subject,
         intro,
         metaLabel: "Host response deadline",
@@ -348,7 +348,7 @@ export function ReservationRequestEmail({ input }: { input: ReservationEmailInpu
 
           <Section style={{ ...section, paddingTop: "0" }}>
             <Text style={footer}>
-              AirDrums sent this email because of activity on your reservation.
+              PlayInClouds sent this email because of activity on your reservation.
             </Text>
           </Section>
         </Container>

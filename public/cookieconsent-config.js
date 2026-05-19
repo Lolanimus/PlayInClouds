@@ -30,7 +30,7 @@ CookieConsent.run({
             en: {
                 consentModal: {
                     title: "Hello traveller, it's cookie time!",
-                    description: "We use cookies to keep AirDrums working properly, remember your preferences, understand how the app is used, and show relevant content. You can accept all cookies or manage your choices.",
+                    description: "We use cookies to keep PlayInClouds working properly, remember your preferences, understand how the app is used, and show relevant content. You can accept all cookies or manage your choices.",
                     acceptAllBtn: "Accept all",
                     acceptNecessaryBtn: "Reject all",
                     showPreferencesBtn: "Manage preferences",
@@ -46,21 +46,21 @@ CookieConsent.run({
                     sections: [
                         {
                             title: "Cookie Usage",
-                            description: "We use cookies and similar technologies to run core site features, save your settings, measure performance, and improve your experience in AirDrums. You can update your consent choices at any time."
+                            description: "We use cookies and similar technologies to run core site features, save your settings, measure performance, and improve your experience in PlayInClouds. You can update your consent choices at any time."
                         },
                         {
                             title: "Strictly Necessary Cookies <span class=\"pm__badge\">Always Enabled</span>",
-                            description: "These cookies are required for essential functions such as security, session management, and basic navigation. Without them, AirDrums cannot operate correctly.",
+                            description: "These cookies are required for essential functions such as security, session management, and basic navigation. Without them, PlayInClouds cannot operate correctly.",
                             linkedCategory: "necessary"
                         },
                         {
                             title: "Functionality Cookies",
-                            description: "These cookies remember your preferences, such as interface settings and feature selections, so AirDrums can provide a more personalized experience.",
+                            description: "These cookies remember your preferences, such as interface settings and feature selections, so PlayInClouds can provide a more personalized experience.",
                             linkedCategory: "functionality"
                         },
                         {
                             title: "Analytics Cookies",
-                            description: "These cookies help us understand how visitors use AirDrums by collecting aggregated usage data. This helps us improve performance, reliability, and overall usability.",
+                            description: "These cookies help us understand how visitors use PlayInClouds by collecting aggregated usage data. This helps us improve performance, reliability, and overall usability.",
                             linkedCategory: "analytics"
                         },
                         {

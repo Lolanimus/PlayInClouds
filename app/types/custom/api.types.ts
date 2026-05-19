@@ -23,6 +23,24 @@ export interface EmailNotificationSettings {
 	email_messages_enabled: boolean;
 }
 
+export type CurrencyCode = "CAD" | "USD" | "EUR";
+
+export interface CurrencyPreferenceSettings {
+	preferred_currency: CurrencyCode;
+}
+
+export interface ExchangeRatesPayload {
+	base_currency: "CAD";
+	as_of: string | null;
+	cad_to_cad: number;
+	cad_to_usd: number | null;
+	cad_to_eur: number | null;
+}
+
+export interface TimeZonePreferenceSettings {
+	preferred_time_zone: string | null;
+}
+
 export interface CurrentActor {
 	userId: string;
 	email: string | null;

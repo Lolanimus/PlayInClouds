@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card"
 
 import { Textarea } from "@/components/ui/textarea"
+import { useCurrency } from "@/hooks/useCurrency"
 import {
   useApproveListing,
   usePendingListings,
@@ -37,6 +38,7 @@ function formatSubmittedAt(value: string) {
 export default function AdminListingsPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const currency = useCurrency()
   const pendingListingsQuery = usePendingListings({ enabled: Boolean(user) })
   const approveListingMutation = useApproveListing()
   const rejectListingMutation = useRejectListing()
@@ -175,7 +177,7 @@ if (pendingListingsQuery.isLoading) {
                                 {formatListingCategory(listing.category)}
                               </span>
                               <span className="rounded-full border border-[#dadada] bg-[#ffffff] px-3 py-1 text-xs font-medium text-[#111111]">
-                                ${listing.price} CAD/hour
+                                {currency.formatHourlyRateFromCad(listing.price)}
                               </span>
                             </div>
                           </div>

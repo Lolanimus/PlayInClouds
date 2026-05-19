@@ -297,7 +297,7 @@ function LateReservationEmail(props: { email: LateReservationEmailViewModel }) {
             <Hr />
 
             <Text style={footer}>
-              AirDrums sent this email because the reservation needs another late-request action.
+              PlayInClouds sent this email because the reservation needs another late-request action.
             </Text>
           </Section>
         </Container>

@@ -37,7 +37,8 @@ type UserProfileRow = {
   phone_number: string | null;
 };
 
-const appUrl = (process.env.APP_URL ?? process.env.VITE_APP_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
+const appUrl = (process.env.APP_URL ?? process.env.VITE_APP_URL ?? "http://127.0.0.1:5173").replace(/\/+$/, "");
+const publicSiteUrl = (process.env.VITE_PUBLIC_SITE_URL ?? process.env.APP_URL ?? process.env.VITE_APP_URL ?? "http://127.0.0.1:5173").replace(/\/+$/, "");
 const stripeCountry = (process.env.STRIPE_COUNTRY ?? "CA").toUpperCase();
 
 const identityRequirementPatterns = [
@@ -59,10 +60,13 @@ function deriveConnectStatus(account: Stripe.Account): ConnectAccountStatus {
     ...(account.requirements?.past_due ?? []),
   ];
   const uniqueDueRequirements = Array.from(new Set(dueRequirements));
+  const canReceiveHostFunds =
+    account.capabilities?.transfers === "active"
+    && account.payouts_enabled === true;
 
   return {
     stripeAccountId: account.id,
-    onboardingComplete: Boolean(account.details_submitted && account.payouts_enabled),
+    onboardingComplete: canReceiveHostFunds,
     chargesEnabled: Boolean(account.charges_enabled),
     payoutsEnabled: Boolean(account.payouts_enabled),
     detailsSubmitted: Boolean(account.details_submitted),
@@ -141,6 +145,7 @@ async function ensureStripeAccountForHost(userId: string) {
 
   const profile = await getUserProfile(userId);
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim();
+  const businessProfileUrl = `${publicSiteUrl}/profile/${userId}`;
 
   const account = await stripe.accounts.create({
     country: stripeCountry,
@@ -155,7 +160,9 @@ async function ensureStripeAccountForHost(userId: string) {
       transfers: { requested: true },
     },
     business_profile: {
-      product_description: "AirDrums host payouts for listing reservations",
+      mcc: "7929",
+      url: businessProfileUrl,
+      product_description: "PlayInClouds lets hosts list rehearsal and drumming spaces, accept paid reservations from guests, and receive payouts after completed bookings.",
     },
     individual: fullName
       ? {

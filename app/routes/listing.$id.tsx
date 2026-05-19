@@ -2,7 +2,8 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { ChevronLeft, Heart, MessageCircle, Plus, Share, Star, X, Minus } from "lucide-react"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
-import { TimeWithLocalHint } from "@/components/time-with-local-hint"
+import { TimeRangeDisplay } from "@/components/time-display"
+import { useCurrency } from "@/hooks/useCurrency"
 import { UserProfileCard } from "@/components/user-profile-card"
 import { useGetListing } from "@/hooks/useListings"
 import { usePublicProfile } from "@/hooks/useProfile"
@@ -10,14 +11,15 @@ import { useReviews } from "@/hooks/useReviews"
 import { queries } from "@/queries/queries"
 import {
   formatDateRangeInTimeZone,
-  formatDateRangeInViewerTimeZone,
   getTimeZoneLabel,
 } from "@/lib/date-time"
 import { formatListingCategory } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useViewerTimeZone } from "@/hooks/useViewerTimeZone"
 import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
 import { useUser } from "@/store/user_state"
+import { parseCadAmountFromPriceLabel } from "@/utils/money"
 import type { Listing as ApiListing, PublicProfile } from "@/types/custom/api.types"
 import { useQueries } from "@tanstack/react-query"
 
@@ -209,6 +211,8 @@ function getReviewerInitials(name: string) {
 export default function ListingDetailsPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const currency = useCurrency()
+  const { viewerTimeZone } = useViewerTimeZone()
   const hostListings = useHostListings()
   const selectedDateParam = useSearchStore((state) => state.date)
   const selectedStartParam = useSearchStore((state) => state.startHour)
@@ -229,7 +233,6 @@ export default function ListingDetailsPage() {
   const [reviewsPage, setReviewsPage] = useState(1)
   const hasInitializedSelectionRef = useRef(false)
   const now = new Date()
-  const localBrowserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
   const { id } = useParams()
   const isUuidId = useMemo(
     () => Boolean(id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)),
@@ -241,7 +244,7 @@ export default function ListingDetailsPage() {
     if (!id) return null
     return hostListings.find((item) => String(item.id) === id) ?? null
   }, [hostListings, id])
-  const listingTimeZone = remoteListing?.timezone ?? localBrowserTimeZone
+  const listingTimeZone = remoteListing?.timezone ?? viewerTimeZone
   const upcomingDays = useMemo(() => getBookingWindowDays(1, listingTimeZone), [listingTimeZone])
   const monthStartsForWindow = useMemo(
     () => Array.from(new Set(upcomingDays.map((day) => getMonthStartKey(day.dateKey)))),
@@ -286,7 +289,7 @@ export default function ListingDetailsPage() {
         advanceNoticeHours: remote.advance_notice_hours,
         timezone: remote.timezone,
         images: remote.images,
-        priceLabel: `$${remote.price} CAD/hour`,
+        priceLabel: currency.formatFromCad(remote.price),
         priceNumber: remote.price,
         rating: remote.average_rating,
         reviews: remote.review_count,
@@ -309,10 +312,12 @@ export default function ListingDetailsPage() {
         areaM2: localListing.areaM2,
         cancellationPolicyHours: null,
         advanceNoticeHours: localListing.advanceNoticeHours ?? null,
-        timezone: localBrowserTimeZone,
+        timezone: viewerTimeZone,
         images: localListing.images,
-        priceLabel: localListing.price,
-        priceNumber: parseHourlyPrice(localListing.price),
+        priceLabel: typeof localListing.pricePerHourCad === "number"
+          ? currency.formatFromCad(localListing.pricePerHourCad)
+          : localListing.price,
+        priceNumber: localListing.pricePerHourCad ?? parseCadAmountFromPriceLabel(localListing.price) ?? parseHourlyPrice(localListing.price),
         rating: localListing.rating,
         reviews: localListing.reviews,
         ownerId: null,
@@ -321,7 +326,7 @@ export default function ListingDetailsPage() {
     }
 
     return null
-  }, [remoteListing, localListing, localBrowserTimeZone])
+  }, [currency, remoteListing, localListing, viewerTimeZone])
 
   const hostProfileQuery = usePublicProfile(
     {
@@ -526,9 +531,9 @@ export default function ListingDetailsPage() {
   const selectedSlotLabel =
     selectedDay && selectedStartHour !== null && selectedEndHour !== null
       ? formatDateRangeInTimeZone(
-          listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing.timezone).toISOString(),
-          listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing.timezone).toISOString(),
-          listing.timezone,
+          listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing!.timezone).toISOString(),
+          listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing!.timezone).toISOString(),
+          listing!.timezone,
         )
       : null
 
@@ -1005,7 +1010,7 @@ export default function ListingDetailsPage() {
                                   : "bg-[#efefef] text-[#9a9a9a] cursor-not-allowed",
                               ].join(" ")}
                             >
-                              {isAvailable && rate !== null ? `$${Math.round(rate)}` : isBooked ? "Booked" : "—"}
+                              {isAvailable && rate !== null ? currency.formatFromCad(rate, { maximumFractionDigits: 0 }) : isBooked ? "Booked" : "—"}
                             </button>
                           )
                         })}
@@ -1020,15 +1025,12 @@ export default function ListingDetailsPage() {
                   <p className="text-xs font-medium text-[#000000]">Selected time</p>
                   <p className="mt-1 text-sm text-[#4a4a4a]">
                     {selectedDay && selectedStartHour !== null && selectedEndHour !== null ? (
-                      <TimeWithLocalHint
-                        primaryText={selectedSlotLabel}
-                        localTime={formatDateRangeInViewerTimeZone(
-                          listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing.timezone).toISOString(),
-                          listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing.timezone).toISOString(),
-                        )}
-                      >
-                        {selectedSlotLabel}
-                      </TimeWithLocalHint>
+                      <TimeRangeDisplay
+                        startUtcIso={listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing.timezone).toISOString()}
+                        endUtcIso={listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing.timezone).toISOString()}
+                        eventTimeZone={listing.timezone}
+                        mode="event-primary"
+                      />
                     ) : (
                       "Click one available slot for start, then another for end"
                     )}

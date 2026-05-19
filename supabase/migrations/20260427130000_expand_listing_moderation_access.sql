@@ -129,7 +129,7 @@ begin
       result.owner_id,
       'listing_approved',
       'Listing approved',
-      format('%s is now live on AirDrums.', result.title),
+      format('%s is now live on PlayInClouds.', result.title),
       '/host/dashboard',
       'listing',
       result.id::text,

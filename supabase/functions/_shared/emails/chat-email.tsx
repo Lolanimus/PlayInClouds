@@ -139,8 +139,8 @@ function buildChatEmailViewModel(input: ChatEmailInput): ChatEmailViewModel {
     ? "You have a new message"
     : "You have new messages";
   const intro = input.conversationCount === 1
-    ? "You have a new unread conversation on AirDrums."
-    : `You have unread messages in ${input.conversationCount} conversations on AirDrums.`;
+    ? "You have a new unread conversation on PlayInClouds."
+    : `You have unread messages in ${input.conversationCount} conversations on PlayInClouds.`;
   const conversations = input.conversations.slice(0, 3).map((conversation) => ({
     label: conversation.listingTitle
       ? `${conversation.otherUserName} - ${conversation.listingTitle}`

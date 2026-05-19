@@ -3,9 +3,12 @@ import Stripe from "npm:stripe";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/http.ts";
 import { createAuthedClient, createServiceClient } from "../_shared/supabase.ts";
 
-const siteUrl = Deno.env.get("SITE_URL") ?? "http://localhost:5173";
+const siteUrl = (Deno.env.get("SITE_URL") ?? "http://localhost:5173").replace(/\/+$/, "");
+const publicSiteUrl = (Deno.env.get("VITE_PUBLIC_SITE_URL") ?? siteUrl).replace(/\/+$/, "");
 const defaultCountry = (Deno.env.get("STRIPE_COUNTRY") ?? "CA").toUpperCase();
 const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
+const businessType = "7929";
+const businessDescription = "PlayInClouds lets hosts list rehearsal and drumming spaces, accept paid reservations from guests, and receive payouts after completed bookings.";
 
 if (!stripeApiKey) {
   throw new Error("Missing STRIPE_API_KEY.");
@@ -55,9 +58,12 @@ function deriveAccountState(account: Stripe.Account) {
   const needsIdentityVerificationOnly =
     uniqueDueRequirements.length > 0
       && uniqueDueRequirements.every(isIdentityRequirement);
+  const canReceiveHostFunds =
+    account.capabilities?.transfers === "active"
+    && account.payouts_enabled === true;
 
   return {
-    onboardingComplete: Boolean(account.details_submitted && account.payouts_enabled),
+    onboardingComplete: canReceiveHostFunds,
     chargesEnabled: Boolean(account.charges_enabled),
     payoutsEnabled: Boolean(account.payouts_enabled),
     detailsSubmitted: Boolean(account.details_submitted),
@@ -147,6 +153,7 @@ Deno.serve(async (request) => {
 
     const existingAccount = existingAccountData as { stripe_account_id: string } | null;
     const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim();
+    const businessProfileUrl = `${publicSiteUrl}/profile/${user.id}`;
 
     const discoveredExistingAccount = existingAccount?.stripe_account_id
       ? await stripe.accounts.retrieve(existingAccount.stripe_account_id)
@@ -181,7 +188,9 @@ Deno.serve(async (request) => {
         transfers: { requested: true },
       },
       business_profile: {
-        product_description: "AirDrums host payouts for listing reservations",
+        mcc: businessType,
+        url: businessProfileUrl,
+        product_description: businessDescription,
       },
       individual: fullName
         ? {
