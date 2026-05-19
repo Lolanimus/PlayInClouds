@@ -2,22 +2,22 @@ import { useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { ChevronLeft, Star } from "lucide-react"
 import { createCheckoutSession } from "~/app/api/supabase/payments"
-import { TimeWithLocalHint } from "@/components/time-with-local-hint"
+import { TimeRangeDisplay, TimeTextHint } from "@/components/time-display"
 import {
-  formatDateRangeInTimeZone,
   formatDateTimeInTimeZone,
-  formatDateRangeInViewerTimeZone,
-  formatDateTimeInViewerTimeZone,
   getTimeZoneLabel,
 } from "@/lib/date-time"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AuthRequiredModal } from "@/components/auth-required-modal"
+import { useCurrency } from "@/hooks/useCurrency"
 import { useGetListing } from "@/hooks/useListings"
 import { useToast } from "@/hooks/use-toast"
+import { useViewerTimeZone } from "@/hooks/useViewerTimeZone"
 import { useErrorActions } from "@/store/error_state"
 import { useHostListings } from "@/store/host_listings_state"
 import { useUser } from "@/store/user_state"
+import { formatMoney, parseCadAmountFromPriceLabel, resolveDisplayCurrency } from "@/utils/money"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 function parseHourlyPrice(price: string) {
@@ -86,6 +86,8 @@ function listingLocalDateHourToUtc(dateKey: string, hour: number, timeZone: stri
 export default function PaymentPage() {
   const navigate = useNavigate()
   const user = useUser()
+  const currency = useCurrency()
+  const { viewerTimeZone } = useViewerTimeZone()
   const hostListings = useHostListings()
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isStartingCheckout, setIsStartingCheckout] = useState(false)
@@ -122,10 +124,10 @@ export default function PaymentPage() {
           title: localListing.title,
           subtitle: localListing.subtitle,
           images: localListing.images,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+          timezone: viewerTimeZone,
           rating: localListing.rating,
           reviews: localListing.reviews,
-          priceNumber: parseHourlyPrice(localListing.price),
+          priceNumber: localListing.pricePerHourCad ?? parseCadAmountFromPriceLabel(localListing.price) ?? parseHourlyPrice(localListing.price),
           cancellationPolicyHours: null,
           advanceNoticeHours: localListing.advanceNoticeHours ?? null,
         }
@@ -172,10 +174,9 @@ export default function PaymentPage() {
   const subtotal = Number((hourlyRate * hours).toFixed(2))
   const bookerServiceFee = Number((subtotal * 0.075).toFixed(2))
   const total = Number((subtotal + bookerServiceFee).toFixed(2))
+  const displayCurrency = resolveDisplayCurrency(currency.preferredCurrency, currency.rates)
   const reservationStartAt = listingLocalDateHourToUtc(dateKey, startHour, listing.timezone)
   const reservationEndAt = listingLocalDateHourToUtc(dateKey, endHour, listing.timezone)
-  const listingRangeLabel = formatDateRangeInTimeZone(reservationStartAt.toISOString(), reservationEndAt.toISOString(), listing.timezone)
-  const localRangeLabel = formatDateRangeInViewerTimeZone(reservationStartAt.toISOString(), reservationEndAt.toISOString())
   const normalBookingDeadlineAt =
     typeof listing.cancellationPolicyHours === "number"
       ? new Date(reservationStartAt.getTime() - listing.cancellationPolicyHours * 60 * 60 * 1000)
@@ -208,10 +209,10 @@ export default function PaymentPage() {
         ? `The host should confirm this reservation by ${formatDateTimeInTimeZone(normalBookingDeadlineAt, listing.timezone)}. If it is still unresolved after that, it can continue as a late request until ${formatDateTimeInTimeZone(lateResponseDeadlineAt, listing.timezone)}.`
         : `The host should confirm this reservation by ${formatDateTimeInTimeZone(lateResponseDeadlineAt, listing.timezone)}. If it is still unresolved after that, it will be cancelled and you will not be charged.`
   const localDeadlineNotice = isLateRequest
-    ? formatDateTimeInViewerTimeZone(lateResponseDeadlineAt)
+    ? formatDateTimeInTimeZone(lateResponseDeadlineAt, viewerTimeZone)
     : hasLateRequestWindow
-      ? `Confirm by ${formatDateTimeInViewerTimeZone(normalBookingDeadlineAt)}; late-request window until ${formatDateTimeInViewerTimeZone(lateResponseDeadlineAt)}`
-      : formatDateTimeInViewerTimeZone(lateResponseDeadlineAt)
+      ? `Confirm by ${formatDateTimeInTimeZone(normalBookingDeadlineAt, viewerTimeZone)}; late-request window until ${formatDateTimeInTimeZone(lateResponseDeadlineAt, viewerTimeZone)}`
+      : formatDateTimeInTimeZone(lateResponseDeadlineAt, viewerTimeZone)
 
   const handleBuy = async () => {
     if (isStartingCheckout) return
@@ -299,12 +300,12 @@ export default function PaymentPage() {
               <div className="mt-5 border-t border-[#e9e9e9] pt-4">
                 <p className="text-lg font-semibold text-[#000000]">Date & time</p>
                 <p className="mt-1 text-sm text-[#4a4a4a]">
-                  <TimeWithLocalHint
-                    primaryText={listingRangeLabel}
-                    localTime={localRangeLabel}
-                  >
-                    {listingRangeLabel}
-                  </TimeWithLocalHint>
+                  <TimeRangeDisplay
+                    startUtcIso={reservationStartAt.toISOString()}
+                    endUtcIso={reservationEndAt.toISOString()}
+                    eventTimeZone={listing.timezone}
+                    mode="event-primary"
+                  />
                 </p>
               </div>
 
@@ -317,12 +318,11 @@ export default function PaymentPage() {
                 <div className="mt-5 rounded-2xl border border-[#d8e3f0] bg-[#f6f9fc] px-4 py-4">
                   <p className="text-sm font-semibold text-[#16324f]">Confirmation deadline</p>
                   <p className="mt-1 text-sm text-[#35516d]">
-                    <TimeWithLocalHint
+                    <TimeTextHint
+                      mode="event-primary"
                       primaryText={paymentDeadlineNotice}
-                      localTime={localDeadlineNotice}
-                    >
-                      {paymentDeadlineNotice}
-                    </TimeWithLocalHint>
+                      secondaryText={localDeadlineNotice}
+                    />
                   </p>
                 </div>
               ) : null}
@@ -352,19 +352,25 @@ export default function PaymentPage() {
                 <p className="text-lg font-semibold text-[#000000]">Price details</p>
                 <div className="mt-3 space-y-2 text-sm text-[#2a2a2a]">
                   <div className="flex items-center justify-between">
-                    <p>{hours} {hours === 1 ? "hour" : "hours"} × ${hourlyRate.toFixed(2)} CAD</p>
-                    <p>${subtotal.toFixed(2)} CAD</p>
+                    <p>{hours} {hours === 1 ? "hour" : "hours"} × {currency.formatFromCad(hourlyRate)}</p>
+                    <p>{currency.formatFromCad(subtotal)}</p>
                   </div>
                   <div className="flex items-center justify-between">
                     <p>Service fee (7.5%)</p>
-                    <p>${bookerServiceFee.toFixed(2)} CAD</p>
+                    <p>{currency.formatFromCad(bookerServiceFee)}</p>
                   </div>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between border-t border-[#e9e9e9] pt-3 text-base font-semibold text-[#000000]">
-                  <p>Total CAD</p>
-                  <p>${total.toFixed(2)} CAD</p>
+                  <p>Total</p>
+                  <p>{currency.formatFromCad(total)}</p>
                 </div>
+
+                {displayCurrency !== "CAD" ? (
+                  <p className="mt-3 text-xs text-[#6a6a6a]">
+                    Displayed in {displayCurrency} using the latest daily exchange rate. Your card will still be charged {formatMoney(total, "CAD")}.
+                  </p>
+                ) : null}
               </div>
 
               {cancellationWarning ? (
@@ -383,7 +389,7 @@ export default function PaymentPage() {
                   disabled={isStartingCheckout || Boolean(advanceNoticeWarning) || isPastPaymentDeadline}
                   className="h-11 rounded-xl bg-[#000000] px-8 text-[#ffffff] hover:bg-[#2a2a2a]"
                 >
-                  {isStartingCheckout ? "Redirecting..." : isPastPaymentDeadline ? "Booking unavailable" : `Buy now · $${total.toFixed(2)} CAD`}
+                  {isStartingCheckout ? "Redirecting..." : isPastPaymentDeadline ? "Booking unavailable" : `Buy now · ${currency.formatFromCad(total)}`}
                 </Button>
               </div>
               {!user && <p className="mt-3 text-sm text-[#6a6a6a]">You’ll need to log in before purchase.</p>}

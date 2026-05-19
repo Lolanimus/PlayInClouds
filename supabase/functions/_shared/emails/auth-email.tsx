@@ -139,37 +139,37 @@ function getVariantContent(input: RenderAuthEmailInput) {
   switch (input.variant) {
     case "signup":
       return {
-        subject: "Confirm your AirDrums account",
+        subject: "Confirm your PlayInClouds account",
         previewText: "Confirm your email to finish creating your account.",
         heading: "Confirm your account",
-        intro: "Use the button below to confirm your AirDrums account, or enter the code in the app.",
+        intro: "Use the button below to confirm your PlayInClouds account, or enter the code in the app.",
         ctaLabel: "Confirm email",
         otpLabel: "Confirmation code",
         supportText: "If you did not create this account, you can ignore this email.",
       };
     case "magiclink":
       return {
-        subject: "Your AirDrums login link",
+        subject: "Your PlayInClouds login link",
         previewText: "Use this link or code to sign in.",
-        heading: "Sign in to AirDrums",
-        intro: "Use the button below to sign in to your AirDrums account, or enter the code in the app.",
+        heading: "Sign in to PlayInClouds",
+        intro: "Use the button below to sign in to your PlayInClouds account, or enter the code in the app.",
         ctaLabel: "Sign in",
         otpLabel: "Login code",
         supportText: "If you did not request this email, you can ignore it.",
       };
     case "recovery":
       return {
-        subject: "Reset your AirDrums password",
+        subject: "Reset your PlayInClouds password",
         previewText: "Use this link or code to reset your password.",
         heading: "Reset your password",
-        intro: "Use the button below to reset your AirDrums password, or enter the code in the app.",
+        intro: "Use the button below to reset your PlayInClouds password, or enter the code in the app.",
         ctaLabel: "Reset password",
         otpLabel: "Reset code",
         supportText: "If you did not request a password reset, you can ignore this email.",
       };
     case "invite":
       return {
-        subject: "You’ve been invited to AirDrums",
+        subject: "You’ve been invited to PlayInClouds",
         previewText: "Accept your invitation and finish setting up your account.",
         heading: "Accept your invitation",
         intro: "Use the button below to accept your invitation, or enter the code in the app.",
@@ -189,24 +189,24 @@ function getVariantContent(input: RenderAuthEmailInput) {
       };
     case "email_change_current":
       return {
-        subject: "Approve your AirDrums email change",
+        subject: "Approve your PlayInClouds email change",
         previewText: "Confirm that you want to move your account to a new email address.",
         heading: "Approve this email change",
         intro: input.newEmail
-          ? `Confirm that you want to move your AirDrums account from ${input.recipientEmail} to ${input.newEmail}.`
-          : "Confirm that you want to change the email address on your AirDrums account.",
+          ? `Confirm that you want to move your PlayInClouds account from ${input.recipientEmail} to ${input.newEmail}.`
+          : "Confirm that you want to change the email address on your PlayInClouds account.",
         ctaLabel: "Approve change",
         otpLabel: "Approval code",
         supportText: "If you did not request this change, do not approve it.",
       };
     case "email_change_new":
       return {
-        subject: "Confirm your new AirDrums email address",
+        subject: "Confirm your new PlayInClouds email address",
         previewText: "Confirm the new email address for your account.",
         heading: "Confirm your new email",
         intro: input.newEmail
-          ? `Confirm that ${input.newEmail} should be used for your AirDrums account.`
-          : "Confirm the new email address for your AirDrums account.",
+          ? `Confirm that ${input.newEmail} should be used for your PlayInClouds account.`
+          : "Confirm the new email address for your PlayInClouds account.",
         ctaLabel: "Confirm new email",
         otpLabel: "Confirmation code",
         supportText: "If you did not request this change, you can ignore this email.",

@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "AirDrums"
+project_id = "PlayInClouds"
 
 [api]
 enabled = true
@@ -380,7 +380,7 @@ verify_jwt = false
 [functions.process-reservation-payment-deadlines]
 verify_jwt = false
 
-[functions.reconcile-stripe-payouts]
+[functions.release-pending-host-transfers]
 verify_jwt = false
 
 [functions.reconcile-checkout-holds]
@@ -393,6 +393,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send_auth_emails]
+verify_jwt = false
+
+[functions.sync-exchange-rates]
 verify_jwt = false
 
 # Experimental features may be deprecated any time

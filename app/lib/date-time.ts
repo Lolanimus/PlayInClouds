@@ -1,4 +1,4 @@
-export function getViewerTimeZone() {
+export function getBrowserTimeZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
 }
 
@@ -21,13 +21,29 @@ export function getTimeZoneLabel(timeZone: string) {
   }
 }
 
-export function getViewerTimeZoneLabel() {
-  return getTimeZoneLabel(getViewerTimeZone())
-}
-
 function toDate(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value)
   return Number.isNaN(date.getTime()) ? null : date
+}
+
+export function isValidTimeZone(timeZone: string | null | undefined) {
+  if (!timeZone?.trim()) return false
+
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date())
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function getSupportedTimeZones() {
+  const intlWithSupportedValues = Intl as typeof Intl & {
+    supportedValuesOf?: (key: string) => string[]
+  }
+
+  const timeZones = intlWithSupportedValues.supportedValuesOf?.("timeZone")
+  return Array.isArray(timeZones) ? timeZones : []
 }
 
 export function formatDateTimeInTimeZone(
@@ -107,22 +123,4 @@ export function formatDateRangeInTimeZone(startAtIso: string, endAtIso: string, 
   const endTimeLabel = end.toLocaleTimeString("en-US", timeFormatterOptions)
 
   return `${dayLabel}, ${startTimeLabel}–${endTimeLabel} ${getTimeZoneLabel(timeZone)}`
-}
-
-export function formatDateTimeInViewerTimeZone(
-  value: string | Date,
-  options: Intl.DateTimeFormatOptions = {},
-) {
-  return formatDateTimeInTimeZone(value, getViewerTimeZone(), options)
-}
-
-export function formatDateInViewerTimeZone(
-  value: string | Date,
-  options: Intl.DateTimeFormatOptions = {},
-) {
-  return formatDateInTimeZone(value, getViewerTimeZone(), options)
-}
-
-export function formatDateRangeInViewerTimeZone(startAtIso: string, endAtIso: string) {
-  return formatDateRangeInTimeZone(startAtIso, endAtIso, getViewerTimeZone())
 }

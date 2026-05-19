@@ -1,10 +1,10 @@
 import { ArrowRight, CalendarClock, Clock3, Star, Users } from "lucide-react"
 import { useNavigate } from "react-router"
 
-import { TimeWithLocalHint } from "@/components/time-with-local-hint"
+import { TimeDisplay, TimeRangeDisplay } from "@/components/time-display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { formatDateRangeInTimeZone, formatDateRangeInViewerTimeZone, formatDateTimeInTimeZone } from "@/lib/date-time"
+import { useCurrency } from "@/hooks/useCurrency"
 import { usePendingReservationReviews } from "@/hooks/useReviews"
 import {
   useAcceptLateReservationTerms,
@@ -21,14 +21,6 @@ type ReservationCardReservation = Reservation & {
   listingOwnerId?: string | null
   listingTimezone?: string | null
   listingCancellationPolicyHours?: number | null
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-    maximumFractionDigits: 2,
-  }).format(value)
 }
 
 function getReservationTimeStatus(startAtIso: string, endAtIso: string) {
@@ -91,6 +83,7 @@ export function ReservationCard({
 }) {
   const navigate = useNavigate()
   const user = useUser()
+  const currency = useCurrency()
   const pendingReviewsQuery = usePendingReservationReviews({ enabled: Boolean(user?.id) })
   const confirmMutation = useConfirmReservation()
   const cancelMutation = useCancelReservation()
@@ -110,8 +103,6 @@ export function ReservationCard({
     reservation.payment_deadline
   )
   const listingTimeZone = reservation.listingTimezone ?? "UTC"
-  const listingRangeLabel = formatDateRangeInTimeZone(reservation.start_at, reservation.end_at, listingTimeZone)
-  const localRangeLabel = formatDateRangeInViewerTimeZone(reservation.start_at, reservation.end_at)
   const pendingReviewPrompt =
     (((pendingReviewsQuery.data as PendingReservationReview[] | null) ?? []).find(
       (review) => review.reservation_id === reservation.id
@@ -216,12 +207,12 @@ export function ReservationCard({
           <div className="grid gap-2 text-sm text-[#000000] md:grid-cols-2">
             <div className="flex items-center gap-2 rounded-lg bg-[#f8f8f8] px-3 py-2">
               <CalendarClock className="h-4 w-4 text-[#6a6a6a]" />
-              <TimeWithLocalHint
-                primaryText={listingRangeLabel}
-                localTime={localRangeLabel}
-              >
-                {listingRangeLabel}
-              </TimeWithLocalHint>
+              <TimeRangeDisplay
+                startUtcIso={reservation.start_at}
+                endUtcIso={reservation.end_at}
+                eventTimeZone={listingTimeZone}
+                mode="event-primary"
+              />
             </div>
 
             <div className="flex items-center gap-2 rounded-lg bg-[#f8f8f8] px-3 py-2">
@@ -236,7 +227,7 @@ export function ReservationCard({
 
             <div className="flex items-center justify-between rounded-lg bg-[#f8f8f8] px-3 py-2 font-medium">
               <span className="text-[#6a6a6a]">Total</span>
-              <span>{formatCurrency(reservation.total_price)}</span>
+              <span>{currency.formatFromCad(reservation.total_price)}</span>
             </div>
           </div>
 
@@ -248,7 +239,13 @@ export function ReservationCard({
 
           {isExpiredPending ? (
             <p className="mt-3 rounded-lg border border-[#ebd0d5] bg-[#fff1f3] px-3 py-2 text-sm text-[#b42318]">
-              This reservation is no longer active. It expired at {formatDateTimeInTimeZone(reservation.payment_deadline, listingTimeZone)}.
+              This reservation is no longer active. It expired at{" "}
+              <TimeDisplay
+                utcIso={reservation.payment_deadline}
+                eventTimeZone={listingTimeZone}
+                mode="event-primary"
+              />
+              .
             </p>
           ) : null}
 

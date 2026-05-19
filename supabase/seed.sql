@@ -1,11 +1,11 @@
--- AirDrums demo seed
+-- PlayInClouds demo seed
 --
 -- Demo accounts (all use password: Demo123456! )
---   admin@airdrums.demo        -> admin account
---   mona@airdrums.demo         -> host with approved + pending listings
---   leo@airdrums.demo          -> host with approved + rejected listings
---   gina@airdrums.demo         -> verified guest with completed + future stays
---   sam@airdrums.demo          -> guest with pending request + review reminder
+--   admin@playinclouds.demo        -> admin account
+--   mona@playinclouds.demo         -> host with approved + pending listings
+--   leo@playinclouds.demo          -> host with approved + rejected listings
+--   gina@playinclouds.demo         -> verified guest with completed + future stays
+--   sam@playinclouds.demo          -> guest with pending request + review reminder
 --   antox.qscwdv@gmail.com     -> demo user account for Artem Melnikov
 --
 -- Run with:
@@ -46,7 +46,8 @@ truncate table
   public.chat_messages,
   public.chat_participants,
   public.chats,
-  public.reservation_payments,
+  public.reservation_host_transfers,
+  public.reservation_guest_payments,
   public.checkout_holds,
   public.reservations,
   public.listing_weekly_slots,
@@ -84,7 +85,7 @@ values
     '10000000-0000-4000-8000-000000000001',
     'authenticated',
     'authenticated',
-    'admin@airdrums.demo',
+    'admin@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -98,7 +99,7 @@ values
     '10000000-0000-4000-8000-000000000002',
     'authenticated',
     'authenticated',
-    'mona@airdrums.demo',
+    'mona@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -112,7 +113,7 @@ values
     '10000000-0000-4000-8000-000000000003',
     'authenticated',
     'authenticated',
-    'leo@airdrums.demo',
+    'leo@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -126,7 +127,7 @@ values
     '10000000-0000-4000-8000-000000000004',
     'authenticated',
     'authenticated',
-    'gina@airdrums.demo',
+    'gina@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -140,7 +141,7 @@ values
     '10000000-0000-4000-8000-000000000005',
     'authenticated',
     'authenticated',
-    'sam@airdrums.demo',
+    'sam@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -178,41 +179,41 @@ values
   (
     '11000000-0000-4000-8000-000000000001',
     '10000000-0000-4000-8000-000000000001',
-    '{"sub":"10000000-0000-4000-8000-000000000001","email":"admin@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000001","email":"admin@playinclouds.demo"}'::jsonb,
     'email',
-    'admin@airdrums.demo',
+    'admin@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000002',
-    '{"sub":"10000000-0000-4000-8000-000000000002","email":"mona@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000002","email":"mona@playinclouds.demo"}'::jsonb,
     'email',
-    'mona@airdrums.demo',
+    'mona@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000003',
     '10000000-0000-4000-8000-000000000003',
-    '{"sub":"10000000-0000-4000-8000-000000000003","email":"leo@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000003","email":"leo@playinclouds.demo"}'::jsonb,
     'email',
-    'leo@airdrums.demo',
+    'leo@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000004',
     '10000000-0000-4000-8000-000000000004',
-    '{"sub":"10000000-0000-4000-8000-000000000004","email":"gina@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000004","email":"gina@playinclouds.demo"}'::jsonb,
     'email',
-    'gina@airdrums.demo',
+    'gina@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000005',
     '10000000-0000-4000-8000-000000000005',
-    '{"sub":"10000000-0000-4000-8000-000000000005","email":"sam@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000005","email":"sam@playinclouds.demo"}'::jsonb,
     'email',
-    'sam@airdrums.demo',
+    'sam@playinclouds.demo',
     now(), now(), now()
   ),
   (
@@ -836,7 +837,7 @@ select * from (
 
 alter table public.reservations enable trigger validate_and_price_reservation;
 
-insert into public.reservation_payments (
+insert into public.reservation_guest_payments (
   id,
   reservation_id,
   renter_id,
@@ -987,6 +988,59 @@ values
     null,
     now() - interval '4 days',
     now() - interval '4 days',
+    null,
+    now() - interval '4 days',
+    now() - interval '2 days'
+  );
+
+insert into public.reservation_host_transfers (
+  id,
+  guest_payment_id,
+  reservation_id,
+  host_user_id,
+  host_stripe_account_id,
+  amount,
+  currency,
+  transfer_group,
+  status,
+  stripe_transfer_id,
+  failure_reason,
+  transferred_at,
+  reversed_at,
+  created_at,
+  updated_at
+)
+values
+  (
+    '42000000-0000-4000-8000-000000000001',
+    '41000000-0000-4000-8000-000000000001',
+    '40000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000002',
+    null,
+    10500,
+    'cad',
+    'reservation:40000000-0000-4000-8000-000000000001',
+    'NOT_READY'::public.host_transfer_status,
+    null,
+    null,
+    null,
+    null,
+    now() - interval '8 days',
+    now() - interval '8 days'
+  ),
+  (
+    '42000000-0000-4000-8000-000000000002',
+    '41000000-0000-4000-8000-000000000006',
+    '40000000-0000-4000-8000-000000000007',
+    '10000000-0000-4000-8000-000000000003',
+    null,
+    11000,
+    'cad',
+    'reservation:40000000-0000-4000-8000-000000000007',
+    'NOT_READY'::public.host_transfer_status,
+    null,
+    null,
+    null,
     null,
     now() - interval '4 days',
     now() - interval '2 days'
@@ -1161,7 +1215,7 @@ values
     '10000000-0000-4000-8000-000000000002',
     'listing_approved',
     'Listing approved',
-    'Downtown Drum Loft is now live on AirDrums.',
+    'Downtown Drum Loft is now live on PlayInClouds.',
     '/host/dashboard',
     'listing',
     '20000000-0000-4000-8000-000000000001',

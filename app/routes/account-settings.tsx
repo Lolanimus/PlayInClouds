@@ -10,6 +10,14 @@ import {
 
 import { updateAccountSettings } from "~/app/api/supabase/auth"
 import {
+  getCurrentUserCurrencyPreference,
+  updateCurrentUserCurrencyPreference,
+} from "@/db_rpc/currency_rpc"
+import {
+  getCurrentUserTimeZonePreference,
+  updateCurrentUserTimeZonePreference,
+} from "@/db_rpc/timezone_rpc"
+import {
   getEmailNotificationSettings,
   updateEmailNotificationSettings,
 } from "@/db_rpc/account_settings_rpc"
@@ -23,9 +31,11 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { getBrowserTimeZone, getSupportedTimeZones, isValidTimeZone } from "@/lib/date-time"
+import { queryClient } from "@/queries/queries"
 import { errorStore, useError, useErrorActions } from "@/store/error_state"
 import { useUser } from "@/store/user_state"
-import type { EmailNotificationSettings } from "@/types/custom/api.types"
+import type { CurrencyCode, EmailNotificationSettings } from "@/types/custom/api.types"
 
 type FormState = {
   firstName: string
@@ -52,6 +62,62 @@ const settingsNavItems: SettingsNavItem[] = [
   { id: "notifications", label: "Notifications", icon: Bell, enabled: true },
   { id: "locale", label: "Currency & time zone", icon: Globe, enabled: true },
 ]
+
+function formatTimeZoneOptionLabel(timeZone: string) {
+  const readableName = timeZone
+    .replace(/^Etc\//, "")
+    .replaceAll("_", " ")
+
+  try {
+    const offsetPart = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(new Date())
+      .find((part) => part.type === "timeZoneName")?.value
+
+    if (offsetPart) {
+      return `(${offsetPart.replace("GMT", "GMT")}) ${readableName}`
+    }
+  } catch {
+    // Fall back to the readable IANA name when the runtime cannot derive the offset.
+  }
+
+  return readableName
+}
+
+function getTimeZoneOffsetMinutes(timeZone: string) {
+  try {
+    const offsetPart = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(new Date())
+      .find((part) => part.type === "timeZoneName")?.value
+
+    if (!offsetPart) {
+      return Number.POSITIVE_INFINITY
+    }
+
+    if (offsetPart === "GMT") {
+      return 0
+    }
+
+    const match = offsetPart.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/)
+    if (!match) {
+      return Number.POSITIVE_INFINITY
+    }
+
+    const [, sign, hoursRaw, minutesRaw] = match
+    const hours = Number(hoursRaw)
+    const minutes = Number(minutesRaw ?? "0")
+    const totalMinutes = hours * 60 + minutes
+
+    return sign === "-" ? -totalMinutes : totalMinutes
+  } catch {
+    return Number.POSITIVE_INFINITY
+  }
+}
 
 function isAccountTab(value: string | null): value is AccountTab {
   return value === "personal" || value === "login-security" || value === "notifications" || value === "locale"
@@ -213,7 +279,7 @@ function LoginSecurityPanel(props: {
             </Field>
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-              If you change your email, AirDrums will send confirmation links to both your current email
+              If you change your email, PlayInClouds will send confirmation links to both your current email
               and your new email. To finish the change, open both emails and click both confirmation links.
             </div>
 
@@ -319,7 +385,7 @@ function NotificationsPanel(props: {
     {
       title: "Account activity and policies",
       description:
-        "Confirm your booking and account activity, and learn about important AirDrums policies.",
+        "Confirm your booking and account activity, and learn about important PlayInClouds policies.",
       items: [
         {
           key: "email_account_activity_enabled" as const,
@@ -364,7 +430,7 @@ function NotificationsPanel(props: {
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-[#111111]">Notifications</h2>
         <p className="mt-2 text-sm text-[#6a6a6a]">
-          Control whether AirDrums can send you email notifications for reservations, listings,
+          Control whether PlayInClouds can send you email notifications for reservations, listings,
           chat, reviews, payouts, and account activity.
         </p>
       </div>
@@ -374,7 +440,7 @@ function NotificationsPanel(props: {
           <div className="border-b border-[#ececec] pb-6">
             <h3 className="text-2xl font-semibold text-[#111111]">Email notifications</h3>
             <p className="mt-2 max-w-2xl text-sm text-[#6a6a6a]">
-              Turn AirDrums email notifications on or off. This affects queued reservation,
+              Turn PlayInClouds email notifications on or off. This affects queued reservation,
               listing, message, payout, review, and account emails sent after the setting changes.
             </p>
           </div>
@@ -428,30 +494,121 @@ function NotificationsPanel(props: {
   )
 }
 
-function LocalePanel() {
+function LocalePanel(props: {
+  preferredCurrency: CurrencyCode
+  savedPreferredCurrency: CurrencyCode
+  preferredTimeZone: string
+  savedPreferredTimeZone: string | null
+  browserTimeZone: string
+  useBrowserTimeZone: boolean
+  supportedTimeZones: string[]
+  error: string | null
+  isLoading: boolean
+  isSaving: boolean
+  onChangeCurrency: (value: CurrencyCode) => void
+  onChangeTimeZone: (value: string) => void
+  onToggleUseBrowserTimeZone: (checked: boolean) => void
+  onSave: () => Promise<void>
+}) {
+  const isDirty =
+    props.preferredCurrency !== props.savedPreferredCurrency
+    || (
+      props.useBrowserTimeZone
+        ? props.savedPreferredTimeZone !== null
+        : props.preferredTimeZone !== (props.savedPreferredTimeZone ?? props.browserTimeZone)
+    )
+
   return (
     <section className="space-y-8">
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-[#111111]">Currency & time zone</h2>
         <p className="mt-2 text-sm text-[#6a6a6a]">
-          Currency and time zone preferences are not wired to a user-level setting yet.
+          Choose how PlayInClouds displays prices and viewer-facing times across the website.
         </p>
       </div>
 
       <div className="rounded-[28px] border border-[#e9e9e9] bg-[#ffffff] p-6 shadow-sm">
-        <div className="space-y-4">
-          <div>
-            <p className="text-lg font-medium text-[#111111]">Currency</p>
-            <p className="mt-1 text-sm text-[#6a6a6a]">
-              AirDrums currently uses listing and payment-level currency handling.
-            </p>
+        <div className="space-y-6">
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="preferredCurrency">Preferred currency</FieldLabel>
+              <select
+                id="preferredCurrency"
+                value={props.preferredCurrency}
+                onChange={(event) => props.onChangeCurrency(event.target.value as CurrencyCode)}
+                disabled={props.isLoading || props.isSaving}
+                className="h-11 w-full rounded-xl border border-[#d9d9d9] bg-[#ffffff] px-3 text-sm text-[#111111] outline-none transition-colors focus:border-[#111111]"
+              >
+                <option value="CAD">CAD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+              <FieldDescription>
+                Prices on the website will be displayed in this currency using the latest daily Bank of Canada exchange rate.
+              </FieldDescription>
+            </Field>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
+              Checkout and reservation accounting are in CAD for now. Non-CAD prices are display estimates only. 
+            </div>
+
+            {props.error ? (
+              <FieldError className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-center">
+                {props.error}
+              </FieldError>
+            ) : null}
+          </FieldGroup>
+
+          <div className="border-t border-[#ececec] pt-6">
+            <FieldGroup>
+              <div>
+                <p className="text-lg font-medium text-[#111111]">Time zone</p>
+                <p className="mt-1 text-sm text-[#6a6a6a]">
+                  Reservation and listing operations still use each listing&apos;s time zone, but dashboard and viewer-facing times use your chosen viewer time zone.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-2xl border border-[#ececec] bg-[#fafafa] px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-[#111111]">Use my current local time zone</p>
+                  <p className="mt-1 text-xs text-[#6a6a6a]">{props.browserTimeZone}</p>
+                </div>
+                <Switch
+                  checked={props.useBrowserTimeZone}
+                  disabled={props.isLoading || props.isSaving}
+                  onCheckedChange={props.onToggleUseBrowserTimeZone}
+                  aria-label="Use current local time zone"
+                />
+              </div>
+
+              <Field>
+                <FieldLabel htmlFor="preferredTimeZone">Chosen time zone</FieldLabel>
+                <select
+                  id="preferredTimeZone"
+                  value={props.useBrowserTimeZone ? props.browserTimeZone : props.preferredTimeZone}
+                  disabled={props.useBrowserTimeZone || props.isLoading || props.isSaving}
+                  onChange={(event) => props.onChangeTimeZone(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-[#d9d9d9] bg-[#ffffff] px-3 text-sm text-[#111111] outline-none transition-colors focus:border-[#111111] disabled:bg-[#f5f5f5] disabled:text-[#6a6a6a]"
+                >
+                  {props.supportedTimeZones.map((timeZone) => (
+                    <option key={timeZone} value={timeZone}>
+                      {formatTimeZoneOptionLabel(timeZone)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </FieldGroup>
           </div>
 
-          <div className="border-t border-[#ececec] pt-4">
-            <p className="text-lg font-medium text-[#111111]">Time zone</p>
-            <p className="mt-1 text-sm text-[#6a6a6a]">
-              Reservation timing currently uses listing time zones rather than a user account preference.
-            </p>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={() => void props.onSave()}
+              disabled={props.isLoading || props.isSaving || !isDirty}
+              className="min-w-[220px] rounded-full bg-[#111111] text-[#ffffff] hover:bg-[#1f1f1f]"
+            >
+              {props.isSaving ? "Saving..." : "Save preferences"}
+            </Button>
           </div>
         </div>
       </div>
@@ -475,6 +632,14 @@ export default function AccountSettingsPage() {
   const [loginSecurityPasswordError, setLoginSecurityPasswordError] = useState<string | null>(null)
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false)
   const [isSavingNotifications, setIsSavingNotifications] = useState(false)
+  const [isLoadingLocale, setIsLoadingLocale] = useState(false)
+  const [isSavingLocale, setIsSavingLocale] = useState(false)
+  const [localeError, setLocaleError] = useState<string | null>(null)
+  const [preferredCurrency, setPreferredCurrency] = useState<CurrencyCode>("CAD")
+  const [savedPreferredCurrency, setSavedPreferredCurrency] = useState<CurrencyCode>("CAD")
+  const [preferredTimeZone, setPreferredTimeZone] = useState("UTC")
+  const [savedPreferredTimeZone, setSavedPreferredTimeZone] = useState<string | null>(null)
+  const [useBrowserTimeZone, setUseBrowserTimeZone] = useState(true)
   const [notificationSettings, setNotificationSettings] = useState<EmailNotificationSettings>({
     email_account_activity_enabled: true,
     email_listing_activity_enabled: true,
@@ -503,6 +668,23 @@ export default function AccountSettingsPage() {
       notificationSettings.email_reminders_enabled !== savedNotificationSettings.email_reminders_enabled ||
       notificationSettings.email_messages_enabled !== savedNotificationSettings.email_messages_enabled,
     [notificationSettings, savedNotificationSettings]
+  )
+  const browserTimeZone = useMemo(() => getBrowserTimeZone(), [])
+  const supportedTimeZones = useMemo(
+    () =>
+      getSupportedTimeZones()
+        .filter((timeZone) => !timeZone.startsWith("Etc/GMT"))
+        .sort((left, right) => {
+          const leftOffset = getTimeZoneOffsetMinutes(left)
+          const rightOffset = getTimeZoneOffsetMinutes(right)
+
+          if (leftOffset !== rightOffset) {
+            return leftOffset - rightOffset
+          }
+
+          return left.localeCompare(right)
+        }),
+    []
   )
 
   useEffect(() => {
@@ -555,6 +737,43 @@ export default function AccountSettingsPage() {
       isCancelled = true
     }
   }, [user])
+
+  useEffect(() => {
+    if (!user) return
+
+    let isCancelled = false
+
+    const loadLocaleSettings = async () => {
+      setIsLoadingLocale(true)
+      const [currencyResult, timeZoneResult] = await Promise.all([
+        getCurrentUserCurrencyPreference(),
+        getCurrentUserTimeZonePreference(),
+      ])
+
+      if (!isCancelled && currencyResult?.preferred_currency) {
+        const nextCurrency = currencyResult.preferred_currency
+        setPreferredCurrency(nextCurrency)
+        setSavedPreferredCurrency(nextCurrency)
+      }
+
+      if (!isCancelled) {
+        const nextTimeZone = timeZoneResult?.preferred_time_zone ?? null
+        setSavedPreferredTimeZone(nextTimeZone)
+        setUseBrowserTimeZone(nextTimeZone === null)
+        setPreferredTimeZone(nextTimeZone ?? browserTimeZone)
+      }
+
+      if (!isCancelled) {
+        setIsLoadingLocale(false)
+      }
+    }
+
+    void loadLocaleSettings()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [browserTimeZone, user])
 
   if (!user) return null
 
@@ -734,6 +953,44 @@ export default function AccountSettingsPage() {
     setIsSavingNotifications(false)
   }
 
+  const handleSaveLocale = async () => {
+    if (isSavingLocale) return
+
+    setIsSavingLocale(true)
+    setLocaleError(null)
+    setError(null)
+    setSuccess(null)
+
+    if (!useBrowserTimeZone && preferredTimeZone.trim() && !isValidTimeZone(preferredTimeZone)) {
+      setLocaleError("Choose a valid IANA time zone.")
+      setIsSavingLocale(false)
+      return
+    }
+
+    const [currencyResult, timeZoneResult] = await Promise.all([
+      updateCurrentUserCurrencyPreference(preferredCurrency),
+      updateCurrentUserTimeZonePreference(useBrowserTimeZone ? null : preferredTimeZone),
+    ])
+    const latestError = errorStore.getState().error
+
+    if (latestError || !currencyResult || !timeZoneResult) {
+      setLocaleError(latestError ?? "Could not update currency and time zone.")
+      setError(null)
+      setIsSavingLocale(false)
+      return
+    }
+
+    setPreferredCurrency(currencyResult.preferred_currency)
+    setSavedPreferredCurrency(currencyResult.preferred_currency)
+    setSavedPreferredTimeZone(timeZoneResult.preferred_time_zone ?? null)
+    setUseBrowserTimeZone(timeZoneResult.preferred_time_zone === null)
+    setPreferredTimeZone(timeZoneResult.preferred_time_zone ?? browserTimeZone)
+    await queryClient.invalidateQueries({ queryKey: ["currency"] })
+    await queryClient.invalidateQueries({ queryKey: ["timezone"] })
+    setSuccess("Currency and time zone preferences updated.")
+    setIsSavingLocale(false)
+  }
+
   return (
     <main className="min-h-[calc(100vh-5.5rem)] bg-[#fbfbf8] px-4 py-8 md:px-6 md:py-10 lg:px-8">
       <div className="mx-auto max-w-7xl rounded-[32px] border border-[#e9e9e9] bg-[#ffffff] p-6 shadow-sm md:p-8">
@@ -756,7 +1013,38 @@ export default function AccountSettingsPage() {
                 onSave={handleSaveNotifications}
               />
             ) : activeTab === "locale" ? (
-              <LocalePanel />
+              <LocalePanel
+                preferredCurrency={preferredCurrency}
+                savedPreferredCurrency={savedPreferredCurrency}
+                preferredTimeZone={preferredTimeZone}
+                savedPreferredTimeZone={savedPreferredTimeZone}
+                browserTimeZone={browserTimeZone}
+                useBrowserTimeZone={useBrowserTimeZone}
+                supportedTimeZones={supportedTimeZones}
+                error={localeError}
+                isLoading={isLoadingLocale}
+                isSaving={isSavingLocale}
+                onChangeCurrency={(value) => {
+                  setLocaleError(null)
+                  setError(null)
+                  setSuccess(null)
+                  setPreferredCurrency(value)
+                }}
+                onChangeTimeZone={(value) => {
+                  setLocaleError(null)
+                  setError(null)
+                  setSuccess(null)
+                  setPreferredTimeZone(value)
+                }}
+                onToggleUseBrowserTimeZone={(checked) => {
+                  setLocaleError(null)
+                  setError(null)
+                  setSuccess(null)
+                  setUseBrowserTimeZone(checked)
+                  setPreferredTimeZone(checked ? browserTimeZone : (savedPreferredTimeZone ?? browserTimeZone))
+                }}
+                onSave={handleSaveLocale}
+              />
             ) : activeTab === "login-security" ? (
               <LoginSecurityPanel
                 form={form}

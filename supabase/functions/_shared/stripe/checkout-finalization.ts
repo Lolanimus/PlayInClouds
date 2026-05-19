@@ -1,6 +1,6 @@
 import Stripe from "npm:stripe";
 
-import { createServiceClient } from "./supabase.ts";
+import { createServiceClient } from "../supabase.ts";
 
 type CheckoutHoldRow = {
   id: string;
@@ -18,15 +18,13 @@ type ReservationRow = {
 
 export type FinalizedCheckoutResult = {
   reservation: ReservationRow;
-  reservationPaymentId: string | null;
+  guestPaymentId: string | null;
 };
 
 type PaymentIntentReconciliation = {
   chargeId: string | null;
   authorizationExpiresAt: string | null;
   balanceTransactionId: string | null;
-  hostStripeAccountId: string | null;
-  stripeTransferId: string | null;
 };
 
 export function calculatePaymentDeadline(basePaymentDeadline: string, authorizationExpiresAt: string | null) {
@@ -51,10 +49,6 @@ function getPaymentIntentReconciliation(paymentIntent: Stripe.PaymentIntent | nu
     latestCharge && typeof latestCharge.balance_transaction === "object"
       ? latestCharge.balance_transaction
       : null;
-  const destination = paymentIntent?.transfer_data?.destination ?? null;
-  const transfer = latestCharge
-    ? (latestCharge as Stripe.Charge & { transfer?: string | Stripe.Transfer | null }).transfer ?? null
-    : null;
 
   return {
     chargeId:
@@ -67,14 +61,6 @@ function getPaymentIntentReconciliation(paymentIntent: Stripe.PaymentIntent | nu
     balanceTransactionId:
       balanceTransaction?.id
       ?? (latestCharge && typeof latestCharge.balance_transaction === "string" ? latestCharge.balance_transaction : null),
-    hostStripeAccountId:
-      typeof destination === "string"
-        ? destination
-        : destination?.id ?? null,
-    stripeTransferId:
-      typeof transfer === "string"
-        ? transfer
-        : transfer?.id ?? null,
   };
 }
 
@@ -197,30 +183,24 @@ export async function finalizeCompletedCheckoutSession(
   const amountSubtotal = Math.round(reservation.total_price * 100);
   const amountTotal = session.amount_total ?? amountSubtotal;
   const amountPlatformFee = Math.max(amountTotal - amountSubtotal, 0);
-  const hostNetAmount = Math.max(amountTotal - amountPlatformFee, 0);
-
-  const { data: paymentRow, error: paymentError } = await service
-    .from("reservation_payments")
+  const { data: guestPayment, error: guestPaymentError } = await service
+    .from("reservation_guest_payments")
     .upsert({
       reservation_id: reservation.id,
       renter_id: hold.renter_id,
       host_user_id: hostUserId,
       listing_id: hold.listing_id,
-      host_stripe_account_id: reconciliation.hostStripeAccountId,
       stripe_checkout_session_id: session.id,
       stripe_payment_intent_id: paymentIntentId,
       stripe_charge_id: reconciliation.chargeId,
       stripe_balance_transaction_id: reconciliation.balanceTransactionId,
-      stripe_transfer_id: reconciliation.stripeTransferId,
       amount_subtotal: amountSubtotal,
       amount_platform_fee: amountPlatformFee,
       amount_total: amountTotal,
-      host_net_amount: hostNetAmount,
       currency: session.currency ?? "cad",
       status: "AUTH",
       authorized_at: new Date().toISOString(),
       authorization_expires_at: reconciliation.authorizationExpiresAt,
-      payout_status: "NOT_STARTED",
       last_reconciled_at: new Date().toISOString(),
     }, {
       onConflict: "reservation_id",
@@ -228,8 +208,8 @@ export async function finalizeCompletedCheckoutSession(
     .select("id")
     .single();
 
-  if (paymentError) {
-    throw new Error(`Could not save reservation payment: ${paymentError.message}`);
+  if (guestPaymentError) {
+    throw new Error(`Could not save reservation guest payment: ${guestPaymentError.message}`);
   }
 
   const { error: reservationUpdateError } = await service
@@ -245,6 +225,6 @@ export async function finalizeCompletedCheckoutSession(
 
   return {
     reservation,
-    reservationPaymentId: (paymentRow as { id: string } | null)?.id ?? null,
+    guestPaymentId: (guestPayment as { id: string } | null)?.id ?? null,
   };
 }

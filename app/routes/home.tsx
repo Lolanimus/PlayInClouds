@@ -93,7 +93,7 @@ export default function Page() {
             <section className="mx-4 mt-4 rounded-2xl border border-[#e9e9e9] bg-[#ffffff] p-5">
               <h2 className="text-lg font-semibold text-[#000000]">Find rehearsal spaces near you</h2>
               <p className="mt-2 text-sm text-[#6a6a6a]">
-                AirDrums helps you discover rehearsal spaces in your area. Start by searching your city to get relevant spaces.
+                PlayInClouds helps you discover rehearsal spaces in your area. Start by searching your city to get relevant spaces.
               </p>
               <div className="mt-4">
                 <Button

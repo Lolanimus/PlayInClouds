@@ -3,8 +3,8 @@ import Stripe from "npm:stripe";
 import {
   finalizeCompletedCheckoutSession,
 } from "../_shared/stripe/checkout-finalization.ts";
+import { releasePendingHostTransfersForHost } from "../_shared/stripe/host-transfers.ts";
 import { errorResponse, jsonResponse } from "../_shared/http.ts";
-import { reconcileStripePayoutForConnectedAccount } from "../_shared/stripe/stripe-payouts.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const stripeApiKey = Deno.env.get("STRIPE_API_KEY");
@@ -22,7 +22,7 @@ const stripe = new Stripe(stripeApiKey, {
   maxNetworkRetries: 2,
 });
 
-type ReservationPaymentRow = {
+type GuestPaymentRow = {
   id: string;
   reservation_id: string;
 };
@@ -34,27 +34,27 @@ type StripeWebhookEventRow = {
 
 type WebhookProcessResult = {
   reservationId?: string | null;
-  reservationPaymentId?: string | null;
+  guestPaymentId?: string | null;
 };
 
-async function findReservationPaymentByPaymentIntentId(service: ReturnType<typeof createServiceClient>, paymentIntentId: string) {
+async function findGuestPaymentByPaymentIntentId(service: ReturnType<typeof createServiceClient>, paymentIntentId: string) {
   const { data } = await service
-    .from("reservation_payments")
+    .from("reservation_guest_payments")
     .select("id, reservation_id")
     .eq("stripe_payment_intent_id", paymentIntentId)
     .maybeSingle();
 
-  return data as ReservationPaymentRow | null;
+  return data as GuestPaymentRow | null;
 }
 
-async function findReservationPaymentByChargeId(service: ReturnType<typeof createServiceClient>, chargeId: string) {
+async function findGuestPaymentByChargeId(service: ReturnType<typeof createServiceClient>, chargeId: string) {
   const { data } = await service
-    .from("reservation_payments")
+    .from("reservation_guest_payments")
     .select("id, reservation_id")
     .eq("stripe_charge_id", chargeId)
     .maybeSingle();
 
-  return data as ReservationPaymentRow | null;
+  return data as GuestPaymentRow | null;
 }
 
 function getStripeObjectId(event: Stripe.Event) {
@@ -128,7 +128,7 @@ async function finishWebhookEvent(
   status: "PROCESSED" | "FAILED" | "IGNORED",
   args?: {
     reservationId?: string | null;
-    reservationPaymentId?: string | null;
+    guestPaymentId?: string | null;
     errorMessage?: string | null;
   },
 ) {
@@ -137,7 +137,7 @@ async function finishWebhookEvent(
     .update({
       status,
       reservation_id: args?.reservationId ?? null,
-      reservation_payment_id: args?.reservationPaymentId ?? null,
+      guest_payment_id: args?.guestPaymentId ?? null,
       error_message: args?.errorMessage ?? null,
       processed_at: status === "FAILED" ? null : new Date().toISOString(),
     })
@@ -173,7 +173,7 @@ async function markCheckoutHoldStatus(
 }
 
 async function handleCheckoutCompleted(service: ReturnType<typeof createServiceClient>, session: Stripe.Checkout.Session): Promise<WebhookProcessResult> {
-  const { reservation, reservationPaymentId } = await finalizeCompletedCheckoutSession(
+  const { reservation, guestPaymentId } = await finalizeCompletedCheckoutSession(
     stripe,
     service,
     session,
@@ -181,7 +181,7 @@ async function handleCheckoutCompleted(service: ReturnType<typeof createServiceC
 
   return {
     reservationId: reservation.id,
-    reservationPaymentId,
+    guestPaymentId,
   };
 }
 
@@ -208,23 +208,23 @@ async function handlePaymentIntentFailed(
     typeof paymentIntent.metadata?.hold_id === "string"
       ? paymentIntent.metadata.hold_id
       : null;
-  const reservationPayment = await findReservationPaymentByPaymentIntentId(service, paymentIntentId);
+  const guestPayment = await findGuestPaymentByPaymentIntentId(service, paymentIntentId);
 
-  if (reservationPayment ?? reservationId) {
+  if (guestPayment ?? reservationId) {
     await service
-      .from("reservation_payments")
+      .from("reservation_guest_payments")
       .update({
         stripe_payment_intent_id: paymentIntentId,
         stripe_charge_id: latestCharge,
         status: "FAILED",
         last_reconciled_at: new Date().toISOString(),
       })
-      .eq("reservation_id", reservationPayment?.reservation_id ?? reservationId)
+      .eq("reservation_id", guestPayment?.reservation_id ?? reservationId)
       .neq("status", "PAID");
 
     return {
-      reservationId: reservationPayment?.reservation_id ?? reservationId,
-      reservationPaymentId: reservationPayment?.id ?? null,
+      reservationId: guestPayment?.reservation_id ?? reservationId,
+      guestPaymentId: guestPayment?.id ?? null,
     };
   }
 
@@ -237,10 +237,10 @@ async function handlePaymentIntentFailed(
 
 async function handleChargeRefunded(service: ReturnType<typeof createServiceClient>, charge: Stripe.Charge): Promise<WebhookProcessResult> {
   const fullyRefunded = charge.amount_refunded >= charge.amount;
-  const reservationPayment = await findReservationPaymentByChargeId(service, charge.id);
+  const guestPayment = await findGuestPaymentByChargeId(service, charge.id);
 
   await service
-    .from("reservation_payments")
+    .from("reservation_guest_payments")
     .update({
       stripe_charge_id: charge.id,
       status: fullyRefunded ? "REFUNDED" : "PARTIALLY_REFUNDED",
@@ -250,31 +250,43 @@ async function handleChargeRefunded(service: ReturnType<typeof createServiceClie
     .eq("stripe_charge_id", charge.id);
 
   return {
-    reservationId: reservationPayment?.reservation_id ?? null,
-    reservationPaymentId: reservationPayment?.id ?? null,
+    reservationId: guestPayment?.reservation_id ?? null,
+    guestPaymentId: guestPayment?.id ?? null,
   };
 }
 
-async function handlePayoutEvent(
+async function handleAccountUpdated(
   service: ReturnType<typeof createServiceClient>,
-  payout: Stripe.Payout,
-  connectedAccountId: string | null,
+  account: Stripe.Account,
 ): Promise<WebhookProcessResult> {
-  if (!connectedAccountId) {
+  const accountId = account.id;
+  const hostUserId = typeof account.metadata?.host_user_id === "string"
+    ? account.metadata.host_user_id
+    : null;
+
+  let resolvedHostUserId = hostUserId;
+
+  if (!resolvedHostUserId) {
+    const { data: hostAccount } = await service
+      .from("host_payment_accounts")
+      .select("user_id")
+      .eq("stripe_account_id", accountId)
+      .maybeSingle();
+
+    resolvedHostUserId = (hostAccount as { user_id: string } | null)?.user_id ?? null;
+  }
+
+  if (!resolvedHostUserId) {
     return {};
   }
 
-  const result = await reconcileStripePayoutForConnectedAccount({
-    service,
+  await releasePendingHostTransfersForHost({
     stripe,
-    payout,
-    connectedAccountId,
+    hostUserId: resolvedHostUserId,
+    accountId,
   });
 
-  return {
-    reservationId: result.reservationId,
-    reservationPaymentId: result.reservationPaymentId,
-  };
+  return {};
 }
 
 Deno.serve(async (request) => {
@@ -335,14 +347,10 @@ Deno.serve(async (request) => {
         processResult = await handleChargeRefunded(service, event.data.object as Stripe.Charge);
         eventStatus = "PROCESSED";
         break;
-      case "payout.created":
-      case "payout.updated":
-      case "payout.paid":
-      case "payout.failed":
-        processResult = await handlePayoutEvent(
+      case "account.updated":
+        processResult = await handleAccountUpdated(
           service,
-          event.data.object as Stripe.Payout,
-          event.account ?? null,
+          event.data.object as Stripe.Account,
         );
         eventStatus = "PROCESSED";
         break;
@@ -356,7 +364,7 @@ Deno.serve(async (request) => {
 
     await finishWebhookEvent(service, loggedEvent.rowId, eventStatus, {
       reservationId: processResult.reservationId ?? null,
-      reservationPaymentId: processResult.reservationPaymentId ?? null,
+      guestPaymentId: processResult.guestPaymentId ?? null,
     });
 
     console.log("stripe-webhook: processed event", {

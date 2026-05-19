@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { MapPin } from "lucide-react"
 import { useNavigate } from "react-router"
+import { useCurrency } from "@/hooks/useCurrency"
 import { ListingCard, type ListingItem } from "@/components/listings"
 import { useListings } from "@/hooks/useListings"
 import { useHostListings } from "@/store/host_listings_state"
 import { useSearchStore } from "@/store/search-store"
+import { formatHourlyRateFromCad, parseCadAmountFromPriceLabel } from "@/utils/money"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
@@ -93,6 +95,7 @@ type MapViewProps = {
 export function MapView({ listingsOverride, disableFilters = false, markerVariant = "price" }: MapViewProps) {
   const hostListings = useHostListings()
   const listingsQuery = useListings()
+  const currency = useCurrency()
   const whereValue = useSearchStore((state) => state.where)
   const dbListings = useMemo(() => {
     const rows = (listingsQuery.data as ApiListing[] | null) ?? []
@@ -105,7 +108,8 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
       title: item.title,
       subtitle: item.subtitle,
       category: item.category,
-      price: `$${item.price} CAD/hour`,
+      price: currency.formatFromCad(item.price),
+      pricePerHourCad: item.price,
       distance: "",
       rating: item.average_rating,
       reviews: item.review_count,
@@ -116,11 +120,36 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
       areaM2: item.area_m2,
       weeklySlotsByDay: item.weekly_slots_by_day ?? {},
     }))
-  }, [listingsQuery.data])
+  }, [currency, listingsQuery.data])
   const allListings = useMemo(() => {
-    if (listingsOverride && listingsOverride.length > 0) return listingsOverride
-    return dbListings.length > 0 ? dbListings : hostListings
-  }, [dbListings, hostListings, listingsOverride])
+    if (listingsOverride && listingsOverride.length > 0) {
+      return listingsOverride.map((listing) => {
+        const pricePerHourCad = listing.pricePerHourCad ?? parseCadAmountFromPriceLabel(listing.price) ?? undefined
+
+        return {
+          ...listing,
+          pricePerHourCad,
+          price: typeof pricePerHourCad === "number"
+            ? formatHourlyRateFromCad(pricePerHourCad, currency.preferredCurrency, currency.rates)
+            : listing.price,
+        }
+      })
+    }
+
+    return dbListings.length > 0
+      ? dbListings
+      : hostListings.map((listing) => {
+          const pricePerHourCad = listing.pricePerHourCad ?? parseCadAmountFromPriceLabel(listing.price) ?? undefined
+
+          return {
+            ...listing,
+            pricePerHourCad,
+            price: typeof pricePerHourCad === "number"
+              ? formatHourlyRateFromCad(pricePerHourCad, currency.preferredCurrency, currency.rates)
+              : listing.price,
+          }
+        })
+  }, [currency.preferredCurrency, currency.rates, dbListings, hostListings, listingsOverride])
 
   const priceMaxParam = useSearchStore((state) => state.priceMax)
   const distanceMaxParam = useSearchStore((state) => state.distanceMax)
@@ -148,10 +177,17 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
     selectedDurationParam >= 1 &&
     selectedDurationParam <= 12
 
-  const parseListingPrice = (value: string) => {
-    const match = value.match(/\$\s*(\d+(?:\.\d+)?)/)
-    if (!match) return Number.POSITIVE_INFINITY
-    return Number(match[1])
+  const getListingPriceForFilter = (listing: ListingItem) => {
+    if (typeof listing.pricePerHourCad === "number" && Number.isFinite(listing.pricePerHourCad)) {
+      return listing.pricePerHourCad
+    }
+
+    const parsed = parseCadAmountFromPriceLabel(listing.price)
+    if (typeof parsed === "number" && Number.isFinite(parsed)) {
+      return parsed
+    }
+
+    return Number.POSITIVE_INFINITY
   }
 
   const parseListingDistance = (value: string) => {
@@ -200,7 +236,7 @@ export function MapView({ listingsOverride, disableFilters = false, markerVarian
         })
         .filter((listing) => {
           if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
-          return parseListingPrice(listing.price) <= priceMaxParam
+          return getListingPriceForFilter(listing) <= priceMaxParam
         })
         .filter((listing) => {
           if (!Number.isFinite(distanceMaxParam) || distanceMaxParam < 0) return true

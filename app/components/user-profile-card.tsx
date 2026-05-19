@@ -174,8 +174,8 @@ export function UserProfileCard({
           <CardTitle className="text-[2rem] leading-tight text-[#ffffff]">{fullName}</CardTitle>
           <CardDescription className="mt-2 max-w-sm text-sm leading-6 text-[#ffffff]/72">
             {yearsHosting && profile.profile_role?.includes("Host")
-              ? `${yearsHosting} hosting on AirDrums`
-              : `Booker community member on AirDrums`}
+              ? `${yearsHosting} hosting on PlayInClouds`
+              : `Booker community member on PlayInClouds`}
           </CardDescription>
         </div>
 
@@ -227,7 +227,7 @@ export function UserProfileCard({
               </div>
             ) : null}
             <div className="flex items-center justify-between gap-4 rounded-2xl bg-[#ffffff] px-3 py-3 text-sm">
-              <span className="text-[#6a6a6a]">Joined AirDrums</span>
+              <span className="text-[#6a6a6a]">Joined PlayInClouds</span>
               <span className="font-semibold text-[#111111]">{formatMemberSince(profile.member_since)}</span>
             </div>
           </div>
