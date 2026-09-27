@@ -3,12 +3,10 @@
 import { useEffect, useMemo, useState } from "react"
 import { ChevronLeft, ChevronRight, Image, Star, X } from "lucide-react"
 import { useNavigate } from "react-router"
-import { useCurrency } from "@/hooks/useCurrency"
 import { useListings } from "@/hooks/useListings"
 import { cn, formatListingCategory } from "@/lib/utils"
 import { useSearchStore } from "@/store/search-store"
 import { useHostListings } from "@/store/host_listings_state"
-import { formatHourlyRateFromCad, parseCadAmountFromPriceLabel } from "@/utils/money"
 import type { Listing as ApiListing } from "@/types/custom/api.types"
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_PUBLIC_GOOGLE_MAPS_API_KEY as string | undefined
@@ -22,7 +20,6 @@ export type ListingItem = {
   subtitle: string
   category: string
   price: string
-  pricePerHourCad?: number
   distance: string
   rating: number
   reviews: number
@@ -152,7 +149,7 @@ export function ListingCard({
         <p className="text-xs text-[#6a6a6a] mb-1 truncate">{listing.subtitle}</p>
         <p className="text-xs text-[#6a6a6a] mb-2 truncate">{formatListingCategory(listing.category)}</p>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-[#000000]">{listing.price}/hour</span>
+          <span className="text-sm font-medium text-[#000000]">{listing.price}</span>
           {distanceLabel ? (
             <span className="text-xs text-[#6a6a6a]">{distanceLabel}</span>
           ) : null}
@@ -166,7 +163,6 @@ export function Listings() {
   const navigate = useNavigate()
   const hostListings = useHostListings()
   const listingsQuery = useListings()
-  const currency = useCurrency()
   const whereValue = useSearchStore((state) => state.where)
   const dbListings = useMemo(() => {
     const rows = (listingsQuery.data as ApiListing[] | null) ?? []
@@ -179,8 +175,7 @@ export function Listings() {
       title: item.title,
       subtitle: item.subtitle,
       category: item.category,
-      price: currency.formatFromCad(item.price),
-      pricePerHourCad: item.price,
+      price: `$${item.price} CAD/hour`,
       distance: "",
       rating: item.average_rating,
       reviews: item.review_count,
@@ -192,24 +187,8 @@ export function Listings() {
       advanceNoticeHours: item.advance_notice_hours,
       weeklySlotsByDay: item.weekly_slots_by_day ?? {},
     }))
-  }, [currency, listingsQuery.data])
-  const allListings = useMemo(
-    () =>
-      dbListings.length > 0
-        ? dbListings
-        : hostListings.map((listing) => {
-            const pricePerHourCad = listing.pricePerHourCad ?? parseCadAmountFromPriceLabel(listing.price) ?? undefined
-
-            return {
-              ...listing,
-              pricePerHourCad,
-              price: typeof pricePerHourCad === "number"
-                ? formatHourlyRateFromCad(pricePerHourCad, currency.preferredCurrency, currency.rates)
-                : listing.price,
-            }
-          }),
-    [currency.preferredCurrency, currency.rates, dbListings, hostListings]
-  )
+  }, [listingsQuery.data])
+  const allListings = dbListings.length > 0 ? dbListings : hostListings
 
   const priceMaxParam = useSearchStore((state) => state.priceMax)
   const distanceMaxParam = useSearchStore((state) => state.distanceMax)
@@ -272,17 +251,10 @@ export function Listings() {
     }
   }, [whereValue])
 
-  const getListingPriceForFilter = (listing: ListingItem) => {
-    if (typeof listing.pricePerHourCad === "number" && Number.isFinite(listing.pricePerHourCad)) {
-      return listing.pricePerHourCad
-    }
-
-    const parsed = parseCadAmountFromPriceLabel(listing.price)
-    if (typeof parsed === "number" && Number.isFinite(parsed)) {
-      return parsed
-    }
-
-    return Number.POSITIVE_INFINITY
+  const parseListingPrice = (value: string) => {
+    const match = value.match(/\$\s*(\d+(?:\.\d+)?)/)
+    if (!match) return Number.POSITIVE_INFINITY
+    return Number(match[1])
   }
   const parseListingDistance = (value: string) => {
     const match = value.match(/(\d+(?:\.\d+)?)\s*km/i)
@@ -336,7 +308,7 @@ export function Listings() {
     .filter(matchesWhereFilter)
     .filter((listing) => {
       if (!Number.isFinite(priceMaxParam) || priceMaxParam <= 0) return true
-      return getListingPriceForFilter(listing) <= priceMaxParam
+      return parseListingPrice(listing.price) <= priceMaxParam
     })
     .filter((listing) => {
       if (!Number.isFinite(distanceMaxParam) || distanceMaxParam < 0) return true

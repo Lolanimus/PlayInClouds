@@ -3,6 +3,8 @@ import { processAuthRequest } from "./helpers";
 import { userStore } from "@/store/user_state";
 import type { UserLogin, UserSignup } from "@/types/custom/api.types";
 
+import { confirmationWaitSeconds, recordConfirmationSent, recordConfirmationRateLimit } from "@/utils/confirmation-cooldown";
+
 type UpdateAccountPayload = {
   email?: string;
   current_password?: string;
@@ -44,27 +46,38 @@ function isEmailNotConfirmedError(error: { message?: string; code?: string } | n
   return code === "email_not_confirmed" || message.includes("email not confirmed");
 }
 
-async function requestSignupConfirmationCode(
+function signupConfirmationRequired(): AuthCodeRequestResult {
+  userStore.getState().actions.setUser(null);
+  return {
+    success: true,
+    message: "Your email is not confirmed yet. Follow the confirmation link in your email, or request another below.",
+    needsSignupConfirmation: true,
+  };
+}
+
+async function resendSignupConfirmation(
   email: string,
   captchaToken?: string | null,
   emailRedirectTo?: string | null
-): Promise<AuthCodeRequestResult> {
-  await supabase.auth.resend({
+): Promise<void> {
+  const wait = confirmationWaitSeconds(email);
+  if (wait > 0) throw new Error(`Please wait ${wait} seconds before requesting another link.`);
+  const { error } = await supabase.auth.resend({
     type: "signup",
-    email,
+    email: email.trim(),
     options: {
       ...(captchaToken ? { captchaToken } : {}),
       ...(emailRedirectTo ? { emailRedirectTo } : {}),
     },
   });
-
-  userStore.getState().actions.setUser(null);
-
-  return {
-    success: true,
-    message: "Your email is not confirmed yet. Enter the new confirmation code from your email.",
-    needsSignupConfirmation: true,
-  };
+  if (error) {
+    if (error.status === 429 || error.code === "over_email_send_rate_limit" || error.code === "over_request_rate_limit") {
+      recordConfirmationRateLimit(email);
+      throw new Error("Too many requests. Please wait at least 5 minutes before trying again. Email delivery limits may require a longer wait.");
+    }
+    throw error;
+  }
+  recordConfirmationSent(email);
 }
 
 const login = async (
@@ -91,7 +104,7 @@ const login = async (
     });
   } catch (err: any) {
     if (isEmailNotConfirmedError(err)) {
-      return requestSignupConfirmationCode(email, captchaToken, emailRedirectTo);
+      return signupConfirmationRequired();
     }
 
     userStore.getState().actions.setUser(null);
@@ -105,16 +118,7 @@ const login = async (
 
   if (passwordError) {
     if (isEmailNotConfirmedError(passwordError)) {
-      try {
-        return await requestSignupConfirmationCode(email, captchaToken, emailRedirectTo);
-      } catch (resendError) {
-        userStore.getState().actions.setUser(null);
-        return {
-          success: true,
-          message: "Your email is not confirmed yet. Enter the confirmation code from your email.",
-          needsSignupConfirmation: true,
-        };
-      }
+      return signupConfirmationRequired();
     }
 
     userStore.getState().actions.setUser(null);
@@ -209,6 +213,8 @@ const signup = async (
     userStore.getState().actions.setUser(null);
   }
 
+  if (!isEmailConfirmed(data.user)) recordConfirmationSent(email);
+
   console.info("Successfully signed up");
 
   return {
@@ -277,5 +283,5 @@ const updateAccountSettings = async (
   }
 };
 
-export { login, signout, signup, updateAccountSettings, verifySignupCode };
+export { login, signout, signup, updateAccountSettings, verifySignupCode, resendSignupConfirmation };
 export type { AuthCodeRequestResult, SignupResult };

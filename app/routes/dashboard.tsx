@@ -36,7 +36,6 @@ export default function DashboardPage() {
   const isAuthLoading = useLoading()
   const [pastReservationsPage, setPastReservationsPage] = useState(1)
   const [hasOpenCheckoutHold, setHasOpenCheckoutHold] = useState(false)
-  const [checkoutFinalizeError, setCheckoutFinalizeError] = useState<string | null>(null)
   const { toast } = useToast()
   const checkoutSuccess = searchParams.get("checkout") === "success"
   const checkoutSessionId = searchParams.get("session_id")
@@ -136,8 +135,6 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!checkoutSuccess || !user?.id || isAuthLoading) return
 
-    setCheckoutFinalizeError(null)
-
     let cancelled = false
     let attempts = 0
     const maxAttempts = 8
@@ -174,7 +171,6 @@ export default function DashboardPage() {
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "We couldn't finalize your booking yet. Please refresh and try again."
-          setCheckoutFinalizeError(message)
           console.error("Failed to finalize checkout session", error)
           toast({
             variant: "destructive",
@@ -234,11 +230,7 @@ export default function DashboardPage() {
         </CardHeader>
 
         <CardContent className="space-y-6 p-6 text-sm text-foreground">
-          {checkoutFinalizeError ? (
-            <div className="rounded-2xl border border-[#f1c7c7] bg-[#fff2f2] px-4 py-3 text-sm text-[#a12828]">
-              {checkoutFinalizeError}
-            </div>
-          ) : hasOpenCheckoutHold ? (
+          {hasOpenCheckoutHold ? (
             <div className="rounded-2xl border border-[#f4dfb0] bg-[#fff8e8] px-4 py-3 text-sm text-[#9a6700]">
               Your payment went through. It can take a few minutes for the reservation to appear here while Stripe finishes syncing the booking.
             </div>

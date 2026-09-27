@@ -14,6 +14,7 @@ import { useCurrentUserIsAdmin } from "@/hooks/useListings"
 
 const HOUR_HEIGHT = 40
 const VISIBLE_ITEMS = 5
+const PUBLIC_SUPABASE_URL = import.meta.env.VITE_PUBLIC_SUPABASE_URL!;
 
 type CitySuggestion = {
   id: string
@@ -502,7 +503,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         <div className="w-30 flex-shrink-0">
           <Link to="/" aria-label="Go to home page" className="block">
             <img
-              src="https://qplgbapauzylcbtaburl.supabase.co/storage/v1/object/public/images/logos/svg/PlayInClouds_logo_mini_black.svg"
+              src={`${PUBLIC_SUPABASE_URL}/storage/v1/object/public/images/logos/svg/PlayInClouds_logo_mini_black.svg`}
               alt="PlayInClouds"
               className="size-full"
             />

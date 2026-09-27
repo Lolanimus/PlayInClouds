@@ -289,7 +289,7 @@ export default function ListingDetailsPage() {
         advanceNoticeHours: remote.advance_notice_hours,
         timezone: remote.timezone,
         images: remote.images,
-        priceLabel: currency.formatFromCad(remote.price),
+        priceLabel: currency.formatHourlyRateFromCad(remote.price),
         priceNumber: remote.price,
         rating: remote.average_rating,
         reviews: remote.review_count,
@@ -312,10 +312,10 @@ export default function ListingDetailsPage() {
         areaM2: localListing.areaM2,
         cancellationPolicyHours: null,
         advanceNoticeHours: localListing.advanceNoticeHours ?? null,
-        timezone: viewerTimeZone,
+        timezone: listingTimeZone,
         images: localListing.images,
         priceLabel: typeof localListing.pricePerHourCad === "number"
-          ? currency.formatFromCad(localListing.pricePerHourCad)
+          ? currency.formatHourlyRateFromCad(localListing.pricePerHourCad)
           : localListing.price,
         priceNumber: localListing.pricePerHourCad ?? parseCadAmountFromPriceLabel(localListing.price) ?? parseHourlyPrice(localListing.price),
         rating: localListing.rating,
@@ -326,7 +326,7 @@ export default function ListingDetailsPage() {
     }
 
     return null
-  }, [currency, remoteListing, localListing, viewerTimeZone])
+  }, [currency, remoteListing, localListing, listingTimeZone])
 
   const hostProfileQuery = usePublicProfile(
     {
@@ -337,6 +337,13 @@ export default function ListingDetailsPage() {
     { enabled: Boolean(listing?.ownerId) }
   )
   const hostProfile = (hostProfileQuery.data as PublicProfile | null) ?? null
+
+  // Refetch month slots when page mounts or returns from checkout to ensure availability is fresh
+  useEffect(() => {
+    monthSlotsQueries.forEach((query) => {
+      query.refetch?.()
+    })
+  }, [id])
 
   const galleryImages = listing?.images?.filter(Boolean) ?? []
   const primaryImage = galleryImages[0] ?? null
@@ -531,9 +538,9 @@ export default function ListingDetailsPage() {
   const selectedSlotLabel =
     selectedDay && selectedStartHour !== null && selectedEndHour !== null
       ? formatDateRangeInTimeZone(
-          listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing!.timezone).toISOString(),
-          listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing!.timezone).toISOString(),
-          listing!.timezone,
+          listingLocalDateHourToUtc(selectedDay.dateKey, selectedStartHour, listing.timezone).toISOString(),
+          listingLocalDateHourToUtc(selectedDay.dateKey, selectedEndHour, listing.timezone).toISOString(),
+          listing.timezone,
         )
       : null
 

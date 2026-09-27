@@ -124,3 +124,21 @@ export function formatDateRangeInTimeZone(startAtIso: string, endAtIso: string, 
 
   return `${dayLabel}, ${startTimeLabel}–${endTimeLabel} ${getTimeZoneLabel(timeZone)}`
 }
+
+export function formatDateTimeInViewerTimeZone(
+  value: string | Date,
+  options: Intl.DateTimeFormatOptions = {},
+) {
+  return formatDateTimeInTimeZone(value, getBrowserTimeZone(), options)
+}
+
+export function formatDateInViewerTimeZone(
+  value: string | Date,
+  options: Intl.DateTimeFormatOptions = {},
+) {
+  return formatDateInTimeZone(value, getBrowserTimeZone(), options)
+}
+
+export function formatDateRangeInViewerTimeZone(startAtIso: string, endAtIso: string) {
+  return formatDateRangeInTimeZone(startAtIso, endAtIso, getBrowserTimeZone())
+}

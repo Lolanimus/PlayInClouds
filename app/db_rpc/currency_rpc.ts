@@ -2,7 +2,10 @@ import { processRpcRequest } from "~/app/api/supabase/helpers";
 import type { CurrencyPreferenceSettings, ExchangeRatesPayload, CurrencyCode } from "@/types/custom/api.types";
 
 const getCurrentUserCurrencyPreference = async () => {
-  return await processRpcRequest("get_current_user_currency_preference");
+  // Older databases may not have the optional currency migration yet.
+  return await processRpcRequest("get_current_user_currency_preference", {}, {
+    ignoreErrorCodes: ["PGRST202"],
+  });
 };
 
 const updateCurrentUserCurrencyPreference = async (preferredCurrency: CurrencyCode) => {
@@ -12,7 +15,9 @@ const updateCurrentUserCurrencyPreference = async (preferredCurrency: CurrencyCo
 };
 
 const getLatestExchangeRates = async () => {
-  return await processRpcRequest("get_latest_exchange_rates");
+  return await processRpcRequest("get_latest_exchange_rates", {}, {
+    ignoreErrorCodes: ["PGRST202"],
+  });
 };
 
 export {

@@ -58,7 +58,7 @@ export function formatListingCategory(value?: string | null) {
 }
 
 function getListingModerationMessageStorageKey(listingId: string) {
-  return `playinclouds:listings:${listingId}:moderation-message-dismissed`
+  return `airdrums:listings:${listingId}:moderation-message-dismissed`
 }
 
 function getListingModerationMessageVersion(listing: ListingModerationMessageState) {

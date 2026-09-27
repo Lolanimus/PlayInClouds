@@ -15,16 +15,7 @@ import { render } from "npm:@react-email/render";
 
 export type ChatEmailInput = {
   messagesUrl: string;
-  conversationCount: number;
-  conversations: Array<{
-    chatId: string;
-    listingId?: string | null;
-    listingTitle?: string | null;
-    otherUserId: string;
-    otherUserName: string;
-    firstMessageAt?: string | null;
-    firstMessagePreview?: string | null;
-  }>;
+  messageCount: number;
 };
 
 export type ChatEmailContent = {
@@ -39,12 +30,7 @@ type ChatEmailViewModel = {
   previewText: string;
   heading: string;
   intro: string;
-  conversationCount: number;
-  conversations: Array<{
-    label: string;
-    preview: string;
-  }>;
-  moreConversationCount: number;
+  messageCount: number;
   ctaLabel: string;
   ctaUrl: string;
   text: string;
@@ -101,21 +87,6 @@ const detailValue = {
   margin: "0 0 16px",
 };
 
-const conversationLabel = {
-  color: "#161616",
-  fontSize: "15px",
-  fontWeight: "700",
-  lineHeight: "1.5",
-  margin: "0 0 4px",
-};
-
-const conversationMeta = {
-  color: "#5b5b5b",
-  fontSize: "14px",
-  lineHeight: "1.5",
-  margin: "0 0 14px",
-};
-
 const button = {
   backgroundColor: "#111111",
   borderRadius: "999px",
@@ -135,39 +106,23 @@ const footer = {
 };
 
 function buildChatEmailViewModel(input: ChatEmailInput): ChatEmailViewModel {
-  const subject = input.conversationCount === 1
-    ? "You have a new message"
-    : "You have new messages";
-  const intro = input.conversationCount === 1
-    ? "You have a new unread conversation on PlayInClouds."
-    : `You have unread messages in ${input.conversationCount} conversations on PlayInClouds.`;
-  const conversations = input.conversations.slice(0, 3).map((conversation) => ({
-    label: conversation.listingTitle
-      ? `${conversation.otherUserName} - ${conversation.listingTitle}`
-      : conversation.otherUserName,
-    preview: conversation.firstMessagePreview?.trim() || "Open the conversation to read the message.",
-  }));
-  const moreConversationCount = Math.max(input.conversationCount - conversations.length, 0);
+  const subject = input.messageCount === 1
+    ? "You have 1 new message"
+    : `You have ${input.messageCount} new messages`;
+  const intro = input.messageCount === 1
+    ? "You have a new unread message on AirDrums."
+    : `You have ${input.messageCount} new unread messages on AirDrums.`;
 
   return {
     subject,
     previewText: intro,
     heading: subject,
     intro,
-    conversationCount: input.conversationCount,
-    conversations,
-    moreConversationCount,
+    messageCount: input.messageCount,
     ctaLabel: "Open messages",
     ctaUrl: input.messagesUrl,
     text:
       `${intro}\n\n` +
-      conversations.map((conversation) =>
-        `${conversation.label}\n"${conversation.preview}"`
-      ).join("\n\n") +
-      (moreConversationCount > 0
-        ? `\n\n+ ${moreConversationCount} more ${moreConversationCount === 1 ? "conversation" : "conversations"}`
-        : "") +
-      `\n\n` +
       `Open messages: ${input.messagesUrl}\n`,
   };
 }
@@ -185,27 +140,8 @@ function ChatEmail(props: { email: ChatEmailViewModel }) {
             <Heading style={heading}>{email.heading}</Heading>
             <Text style={text}>{email.intro}</Text>
 
-            <Text style={detailLabel}>Unread conversations</Text>
-            <Text style={detailValue}>{email.conversationCount}</Text>
-
-            {email.conversations.length > 0 ? (
-              <>
-                <Text style={detailLabel}>Conversations</Text>
-                {email.conversations.map((conversation) => (
-                  <React.Fragment key={conversation.label}>
-                    <Text style={conversationLabel}>{conversation.label}</Text>
-                    <Text style={conversationMeta}>
-                      "{conversation.preview}"
-                    </Text>
-                  </React.Fragment>
-                ))}
-                {email.moreConversationCount > 0 ? (
-                  <Text style={conversationMeta}>
-                    + {email.moreConversationCount} more {email.moreConversationCount === 1 ? "conversation" : "conversations"}
-                  </Text>
-                ) : null}
-              </>
-            ) : null}
+            <Text style={detailLabel}>New unread messages</Text>
+            <Text style={detailValue}>{email.messageCount}</Text>
 
             <Button href={email.ctaUrl} style={button}>{email.ctaLabel}</Button>
 

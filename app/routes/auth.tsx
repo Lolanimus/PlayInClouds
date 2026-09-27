@@ -1,3 +1,4 @@
+import { ResendConfirmation } from "@/components/resend-confirmation"
 import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
@@ -47,7 +48,7 @@ export default function AuthPage() {
   const user = useUser()
   const isAuthLoading = useLoading()
   const redirectParam = searchParams.get("redirect")
-  const safeRedirect = redirectParam && redirectParam.startsWith("/") ? redirectParam : "/dashboard"
+  const safeRedirect = redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "/dashboard"
 
   const [formData, setFormData] = useState<UserLogin>({
     email: "",
@@ -106,7 +107,7 @@ export default function AuthPage() {
         if (isEmailConfirmationError(result.message)) {
           setVerificationCode("")
           setAwaitingVerification(true)
-          setSuccess("Your email is not confirmed yet. Enter the confirmation code from your email.")
+          setSuccess("Your email is not confirmed yet. Follow the confirmation link in your email.")
           return
         }
 
@@ -128,7 +129,7 @@ export default function AuthPage() {
       if (isEmailConfirmationError(err)) {
         setVerificationCode("")
         setAwaitingVerification(true)
-        setSuccess("Your email is not confirmed yet. Enter the confirmation code from your email.")
+        setSuccess("Your email is not confirmed yet. Follow the confirmation link in your email.")
         return
       }
 
@@ -171,7 +172,7 @@ export default function AuthPage() {
   }, [formData]);
 
   useEffect(() => {
-    if (!isAuthLoading && user && !isSubmitting && !awaitingVerification) {
+    if (!isAuthLoading && user && !isSubmitting && user.email_confirmed_at) {
       navigate(safeRedirect, { replace: true })
     }
   }, [awaitingVerification, isAuthLoading, isSubmitting, user, navigate, safeRedirect])
@@ -261,48 +262,54 @@ export default function AuthPage() {
             <CardHeader>
               <CardTitle>Check your email</CardTitle>
               <CardDescription>
-                Your email is not confirmed yet. Enter the confirmation code sent to {formData.email || "your email address"}.
+                Follow the confirmation link sent to {formData.email || "your email address"}. If it opens in another browser, return here and log in after confirming.
               </CardDescription>
             </CardHeader>
 
             <CardContent>
               <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="loginVerificationCode">Confirmation code</FieldLabel>
-                  <Input
-                    id="loginVerificationCode"
-                    name="loginVerificationCode"
-                    inputMode="text"
-                    autoComplete="one-time-code"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    maxLength={64}
-                    value={verificationCode}
-                    onChange={(event) =>
-                      setVerificationCode(event.target.value.replace(/\s+/g, "").trim())
-                    }
-                    autoFocus
-                  />
-                  <FieldDescription>
-                    Use the full code from the email. If it is invalid or expired, this module will stay open.
-                  </FieldDescription>
-                </Field>
+                <ResendConfirmation email={formData.email ?? ""} redirect={safeRedirect} disabled={isSubmitting} />
+                <details>
+                  <summary className="cursor-pointer text-sm">My email includes a confirmation code</summary>
+                  <div className="mt-4 space-y-4">
+                    <Field>
+                      <FieldLabel htmlFor="loginVerificationCode">Confirmation code</FieldLabel>
+                      <Input
+                        id="loginVerificationCode"
+                        name="loginVerificationCode"
+                        inputMode="text"
+                        autoComplete="one-time-code"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        maxLength={64}
+                        value={verificationCode}
+                        onChange={(event) =>
+                          setVerificationCode(event.target.value.replace(/\s+/g, "").trim())
+                        }
+                        autoFocus
+                      />
+                      <FieldDescription>
+                        Use the full code from the email. If it is invalid or expired, this module will stay open.
+                      </FieldDescription>
+                    </Field>
 
-                {error ? (
-                  <FieldError className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-center">
-                    {error}
-                  </FieldError>
-                ) : null}
+                    {error ? (
+                      <FieldError className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-center">
+                        {error}
+                      </FieldError>
+                    ) : null}
 
-                <Button
-                  type="button"
-                  onClick={() => void submitVerification()}
-                  className="h-10 w-full cursor-pointer"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Verifying..." : "Verify and log in"}
-                </Button>
+                    <Button
+                      type="button"
+                      onClick={() => void submitVerification()}
+                      className="h-10 w-full cursor-pointer"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? "Verifying..." : "Verify and log in"}
+                    </Button>
+                  </div>
+                </details>
 
                 <Button
                   type="button"

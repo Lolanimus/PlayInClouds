@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/card"
 import { useListings } from "@/hooks/useListings"
 import { usePublicProfile } from "@/hooks/useProfile"
-import { useCurrency } from "@/hooks/useCurrency"
 import { useUser } from "@/store/user_state"
 import type { Listing, PublicProfile, PublicProfileReview } from "@/types/custom/api.types"
 
@@ -57,7 +56,6 @@ export default function PublicProfilePage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const currentUser = useUser()
-  const currency = useCurrency()
   const listingsRailRef = useRef<HTMLDivElement | null>(null)
   const [isListingsModalOpen, setIsListingsModalOpen] = useState(false)
   const profileQuery = usePublicProfile(
@@ -78,8 +76,7 @@ export default function PublicProfilePage() {
       title: listing.title,
       subtitle: listing.subtitle,
       category: listing.category,
-      price: currency.formatFromCad(listing.price),
-      pricePerHourCad: listing.price,
+      price: `$${listing.price} CAD/hour`,
       distance: "",
       rating: listing.average_rating,
       reviews: listing.review_count,
@@ -227,7 +224,7 @@ export default function PublicProfilePage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <CardTitle className="text-2xl text-[#000000]">Current listings</CardTitle>
-                        <CardDescription>Spaces this host currently has live on PlayInClouds.</CardDescription>
+                        <CardDescription>Spaces this host currently has live on AirDrums.</CardDescription>
                       </div>
 
                       {hostListings.length > 1 ? (

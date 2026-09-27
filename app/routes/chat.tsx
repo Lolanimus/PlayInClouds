@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { ArrowLeft, ExternalLink, Loader2, Search, Send, Trash2, UserCircle2 } from "lucide-react"
 
@@ -157,8 +157,8 @@ export default function ChatPage() {
   const [searchParams] = useSearchParams()
   const { toast } = useToast()
   const user = useUser()
-  const chatsQuery = useChats({ enabled: Boolean(user?.id) })
-  const listingsQuery = useListings(undefined, { enabled: Boolean(user?.id) })
+  const chatsQuery = useChats()
+  const listingsQuery = useListings()
   const guestReservationsQuery = useListUserActiveReservations(
     { p_renter_id: user?.id ?? null },
     { enabled: Boolean(user?.id) }
@@ -176,11 +176,6 @@ export default function ChatPage() {
   const [draft, setDraft] = useState("")
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [profileNamesByUserId, setProfileNamesByUserId] = useState<Record<string, string>>({})
-  const profileNamesByUserIdRef = useRef(profileNamesByUserId)
-
-  useEffect(() => {
-    profileNamesByUserIdRef.current = profileNamesByUserId
-  }, [profileNamesByUserId])
 
   const preferredListingId = searchParams.get("listingId") ?? undefined
   const preferredTargetUserId = searchParams.get("targetUserId") ?? undefined
@@ -226,17 +221,12 @@ export default function ChatPage() {
     let cancelled = false
 
     if (!participantUserIdsKey) {
-      setProfileNamesByUserId((current) => {
-        if (Object.keys(current).length === 0) return current
-        return {}
-      })
+      setProfileNamesByUserId({})
       return
     }
 
     const loadProfiles = async () => {
-      const currentNames = profileNamesByUserIdRef.current
-      const userIds = participantUserIdsKey.split("|").filter(Boolean)
-      const missingUserIds = userIds.filter((userId) => !currentNames[userId])
+      const missingUserIds = participantUserIds.filter((userId) => !profileNamesByUserId[userId])
 
       if (missingUserIds.length === 0) return
 
@@ -280,7 +270,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true
     }
-  }, [participantUserIdsKey])
+  }, [participantUserIds, participantUserIdsKey, profileNamesByUserId])
 
   const conversations = useMemo<Conversation[]>(() => {
     if (!user) return []
@@ -463,13 +453,6 @@ export default function ChatPage() {
   const activeDirectChatQuery = useChatByUserId(
     activeConversation?.targetUserId ?? "",
     activeConversation?.listingId ?? "",
-    {
-      enabled: Boolean(
-        user?.id
-        && activeConversation?.targetUserId
-        && activeConversation?.listingId
-      ),
-    }
   )
   const resolvedActiveChatId = activeConversation?.chatId ?? activeDirectChatQuery.data?.id
 

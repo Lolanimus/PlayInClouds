@@ -12,7 +12,6 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { useCurrency } from "@/hooks/useCurrency"
 import {
   Card,
   CardContent,
@@ -41,7 +40,6 @@ function getModerationLabel(status: ListingModerationStatus) {
 export default function HostDashboardPage() {
   const navigate = useNavigate()
   const user = useUser()
-  const currency = useCurrency()
   const listingsQuery = useOwnListings({ enabled: Boolean(user) })
   const deleteListingMutation = useDeleteListing()
   const [dismissedMessages, setDismissedMessages] = useState<Record<string, boolean>>({})
@@ -273,7 +271,7 @@ export default function HostDashboardPage() {
                           <div className="grid gap-3 sm:grid-cols-2">
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
                               <p className="text-xs text-[#6a6a6a]">Rate</p>
-                              <p className="font-semibold text-[#000000]">{currency.formatFromCad(listing.price)}</p>
+                              <p className="font-semibold text-[#000000]">${listing.price} CAD/hour</p>
                             </div>
                             <div className="rounded-lg bg-[#f8f8f8] px-3 py-2">
                               <p className="text-xs text-[#6a6a6a]">Rating</p>

@@ -211,7 +211,7 @@ export function ReservationCard({
                 startUtcIso={reservation.start_at}
                 endUtcIso={reservation.end_at}
                 eventTimeZone={listingTimeZone}
-                mode="event-primary"
+                mode="viewer-primary"
               />
             </div>
 

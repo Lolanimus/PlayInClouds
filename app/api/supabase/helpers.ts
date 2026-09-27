@@ -20,8 +20,6 @@ export async function processAuthRequest<T>(
       errorStore.getState().actions.setError(err.message);
     else if (err instanceof AuthError)
       errorStore.getState().actions.setError(err.message);
-    else if (err instanceof Error)
-      errorStore.getState().actions.setError(err.message);
 
     return null;
   }
@@ -42,7 +40,8 @@ export async function processBlobRequest<T>(
 
 export async function processRpcRequest<T extends keyof Functions>(
   funName: T,
-  argsObj: RpcArgs<T> | Record<string, unknown> = {} as RpcArgs<T>
+  argsObj: RpcArgs<T> | Record<string, unknown> = {} as RpcArgs<T>,
+  options: { ignoreErrorCodes?: readonly string[] } = {}
 ): Promise<Function<T>["Returns"] | null> {
   try {
     const { data, error } = await supabase.rpc(funName, argsObj);
@@ -53,6 +52,8 @@ export async function processRpcRequest<T extends keyof Functions>(
 
     return data as Function<T>["Returns"];
   } catch (err: any) {
+    if (options.ignoreErrorCodes?.includes(err?.code)) return null;
+
     console.error("", err);
     errorStore.getState().actions.setError(err.message);
 

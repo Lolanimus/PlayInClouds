@@ -129,6 +129,8 @@ export function useCurrency() {
     convertFromCad: (amountCad: number) => convertCadAmount(amountCad, displayCurrency, rates),
     formatFromCad: (amountCad: number, options?: Intl.NumberFormatOptions) =>
       formatMoneyFromCad(amountCad, preferredCurrency, rates, options),
+    formatHourlyRateFromCad: (amountCad: number) =>
+      formatHourlyRateFromCad(amountCad, preferredCurrency, rates),
     isUsingEstimatedConversion: displayCurrency !== "CAD",
   }), [displayCurrency, preferredCurrency, preferenceQuery, rates, ratesQuery]);
 }

@@ -48,6 +48,11 @@ type CheckoutHoldRow = {
   status: string;
 };
 
+type HostPaymentAccountRow = {
+  stripe_account_id: string;
+  payouts_enabled: boolean;
+};
+
 function buildAbsoluteUrl(path: string, fallback: string) {
   const safePath = path.startsWith("/") ? path : fallback;
   return `${normalizeLocalSiteUrl(rawSiteUrl)}${safePath}`;
@@ -143,6 +148,22 @@ Deno.serve(async (request) => {
 
     if (listing.owner_id === user.id) {
       return errorResponse("Hosts cannot book their own listings", 400);
+    }
+
+    const { data: hostPaymentAccountData, error: hostPaymentAccountError } = await service
+      .from("host_payment_accounts")
+      .select("stripe_account_id, payouts_enabled")
+      .eq("user_id", listing.owner_id)
+      .maybeSingle();
+
+    const hostPaymentAccount = hostPaymentAccountData as HostPaymentAccountRow | null;
+
+    if (hostPaymentAccountError) {
+      return errorResponse("Could not load host payout details", 500);
+    }
+
+    if (!hostPaymentAccount?.stripe_account_id || !hostPaymentAccount.payouts_enabled) {
+      return errorResponse("This host is not ready to receive payouts yet", 400);
     }
 
     const reservationStartAt = new Date(body.startAt);
@@ -267,11 +288,16 @@ Deno.serve(async (request) => {
       },
       payment_intent_data: {
         capture_method: "manual",
+        application_fee_amount: amountPlatformFee,
+        transfer_data: {
+          destination: hostPaymentAccount.stripe_account_id,
+        },
         metadata: {
           hold_id: hold.id,
           listing_id: listing.id,
           renter_id: user.id,
           host_user_id: listing.owner_id,
+          host_stripe_account_id: hostPaymentAccount.stripe_account_id,
         },
       },
     }, {

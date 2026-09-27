@@ -2,21 +2,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queries } from "../queries/queries";
 import { createDirectChat, deleteChat } from "~/backend/src/middleware/db_rpc/chat_rpc";
 
-export const useChats = (config?: { enabled?: boolean }) => {
+export const useChats = () => {
   return useQuery({
     ...queries.chats.list,
-    enabled: config?.enabled ?? true,
   });
 };
 
-export const useChatByUserId = (
-  userId: string,
-  listingId: string,
-  config?: { enabled?: boolean }
-) => {
+export const useChatByUserId = (userId: string, listingId: string) => {
   return useQuery({
     ...queries.chats.detailByUserId(userId, listingId),
-    enabled: config?.enabled ?? Boolean(userId && listingId),
+    enabled: Boolean(userId && listingId),
   });
 };
 

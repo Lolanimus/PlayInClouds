@@ -63,62 +63,6 @@ const settingsNavItems: SettingsNavItem[] = [
   { id: "locale", label: "Currency & time zone", icon: Globe, enabled: true },
 ]
 
-function formatTimeZoneOptionLabel(timeZone: string) {
-  const readableName = timeZone
-    .replace(/^Etc\//, "")
-    .replaceAll("_", " ")
-
-  try {
-    const offsetPart = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      timeZoneName: "longOffset",
-    })
-      .formatToParts(new Date())
-      .find((part) => part.type === "timeZoneName")?.value
-
-    if (offsetPart) {
-      return `(${offsetPart.replace("GMT", "GMT")}) ${readableName}`
-    }
-  } catch {
-    // Fall back to the readable IANA name when the runtime cannot derive the offset.
-  }
-
-  return readableName
-}
-
-function getTimeZoneOffsetMinutes(timeZone: string) {
-  try {
-    const offsetPart = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      timeZoneName: "longOffset",
-    })
-      .formatToParts(new Date())
-      .find((part) => part.type === "timeZoneName")?.value
-
-    if (!offsetPart) {
-      return Number.POSITIVE_INFINITY
-    }
-
-    if (offsetPart === "GMT") {
-      return 0
-    }
-
-    const match = offsetPart.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/)
-    if (!match) {
-      return Number.POSITIVE_INFINITY
-    }
-
-    const [, sign, hoursRaw, minutesRaw] = match
-    const hours = Number(hoursRaw)
-    const minutes = Number(minutesRaw ?? "0")
-    const totalMinutes = hours * 60 + minutes
-
-    return sign === "-" ? -totalMinutes : totalMinutes
-  } catch {
-    return Number.POSITIVE_INFINITY
-  }
-}
-
 function isAccountTab(value: string | null): value is AccountTab {
   return value === "personal" || value === "login-security" || value === "notifications" || value === "locale"
 }
@@ -279,7 +223,7 @@ function LoginSecurityPanel(props: {
             </Field>
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-              If you change your email, PlayInClouds will send confirmation links to both your current email
+              If you change your email, AirDrums will send confirmation links to both your current email
               and your new email. To finish the change, open both emails and click both confirmation links.
             </div>
 
@@ -385,7 +329,7 @@ function NotificationsPanel(props: {
     {
       title: "Account activity and policies",
       description:
-        "Confirm your booking and account activity, and learn about important PlayInClouds policies.",
+        "Confirm your booking and account activity, and learn about important AirDrums policies.",
       items: [
         {
           key: "email_account_activity_enabled" as const,
@@ -430,7 +374,7 @@ function NotificationsPanel(props: {
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-[#111111]">Notifications</h2>
         <p className="mt-2 text-sm text-[#6a6a6a]">
-          Control whether PlayInClouds can send you email notifications for reservations, listings,
+          Control whether AirDrums can send you email notifications for reservations, listings,
           chat, reviews, payouts, and account activity.
         </p>
       </div>
@@ -440,7 +384,7 @@ function NotificationsPanel(props: {
           <div className="border-b border-[#ececec] pb-6">
             <h3 className="text-2xl font-semibold text-[#111111]">Email notifications</h3>
             <p className="mt-2 max-w-2xl text-sm text-[#6a6a6a]">
-              Turn PlayInClouds email notifications on or off. This affects queued reservation,
+              Turn AirDrums email notifications on or off. This affects queued reservation,
               listing, message, payout, review, and account emails sent after the setting changes.
             </p>
           </div>
@@ -523,7 +467,7 @@ function LocalePanel(props: {
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-[#111111]">Currency & time zone</h2>
         <p className="mt-2 text-sm text-[#6a6a6a]">
-          Choose how PlayInClouds displays prices and viewer-facing times across the website.
+          Choose how AirDrums displays prices across the website.
         </p>
       </div>
 
@@ -557,6 +501,17 @@ function LocalePanel(props: {
                 {props.error}
               </FieldError>
             ) : null}
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={() => void props.onSave()}
+                disabled={props.isLoading || props.isSaving || !isDirty}
+                className="min-w-[220px] rounded-full bg-[#111111] text-[#ffffff] hover:bg-[#1f1f1f]"
+              >
+                {props.isSaving ? "Saving..." : "Save currency"}
+              </Button>
+            </div>
           </FieldGroup>
 
           <div className="border-t border-[#ececec] pt-6">
@@ -583,32 +538,27 @@ function LocalePanel(props: {
 
               <Field>
                 <FieldLabel htmlFor="preferredTimeZone">Chosen time zone</FieldLabel>
-                <select
+                <Input
                   id="preferredTimeZone"
+                  list="supported-timezones"
                   value={props.useBrowserTimeZone ? props.browserTimeZone : props.preferredTimeZone}
                   disabled={props.useBrowserTimeZone || props.isLoading || props.isSaving}
                   onChange={(event) => props.onChangeTimeZone(event.target.value)}
-                  className="h-11 w-full rounded-xl border border-[#d9d9d9] bg-[#ffffff] px-3 text-sm text-[#111111] outline-none transition-colors focus:border-[#111111] disabled:bg-[#f5f5f5] disabled:text-[#6a6a6a]"
-                >
+                />
+                <datalist id="supported-timezones">
                   {props.supportedTimeZones.map((timeZone) => (
-                    <option key={timeZone} value={timeZone}>
-                      {formatTimeZoneOptionLabel(timeZone)}
-                    </option>
+                    <option key={timeZone} value={timeZone} />
                   ))}
-                </select>
+                </datalist>
+                <FieldDescription>
+                  Leave this on your local time zone by default, or choose any valid IANA time zone such as `America/Toronto` or `Europe/Paris`.
+                </FieldDescription>
               </Field>
-            </FieldGroup>
-          </div>
 
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              onClick={() => void props.onSave()}
-              disabled={props.isLoading || props.isSaving || !isDirty}
-              className="min-w-[220px] rounded-full bg-[#111111] text-[#ffffff] hover:bg-[#1f1f1f]"
-            >
-              {props.isSaving ? "Saving..." : "Save preferences"}
-            </Button>
+              <div className="rounded-2xl border border-[#ececec] bg-[#fafafa] px-4 py-3 text-sm leading-6 text-[#3d3d3d]">
+                Effective time zone: <span className="font-medium text-[#111111]">{props.useBrowserTimeZone ? props.browserTimeZone : props.preferredTimeZone}</span>
+              </div>
+            </FieldGroup>
           </div>
         </div>
       </div>
@@ -670,22 +620,7 @@ export default function AccountSettingsPage() {
     [notificationSettings, savedNotificationSettings]
   )
   const browserTimeZone = useMemo(() => getBrowserTimeZone(), [])
-  const supportedTimeZones = useMemo(
-    () =>
-      getSupportedTimeZones()
-        .filter((timeZone) => !timeZone.startsWith("Etc/GMT"))
-        .sort((left, right) => {
-          const leftOffset = getTimeZoneOffsetMinutes(left)
-          const rightOffset = getTimeZoneOffsetMinutes(right)
-
-          if (leftOffset !== rightOffset) {
-            return leftOffset - rightOffset
-          }
-
-          return left.localeCompare(right)
-        }),
-    []
-  )
+  const supportedTimeZones = useMemo(() => getSupportedTimeZones(), [])
 
   useEffect(() => {
     if (!user) {
