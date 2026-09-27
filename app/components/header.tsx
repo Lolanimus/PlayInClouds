@@ -293,15 +293,21 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
     navigate("/host/dashboard")
   }
 
-  const handleClickOutside = (e: MouseEvent) => {
+  const handlePointerDownOutside = (event: PointerEvent) => {
     const currentActiveField = activeFieldRef.current
-    const target = e.target as Node
+    const eventPath = event.composedPath()
+    const clickedInsideHeader = headerRef.current
+      ? eventPath.includes(headerRef.current)
+      : false
+    const clickedInsideUserMenu = userMenuRef.current
+      ? eventPath.includes(userMenuRef.current)
+      : false
 
-    if (headerRef.current && !headerRef.current.contains(target) && currentActiveField) {
+    if (!clickedInsideHeader && currentActiveField) {
       transitionToField(null)
     }
 
-    if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+    if (!clickedInsideUserMenu) {
       setIsUserMenuOpen(false)
     }
   }
@@ -315,9 +321,9 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
   }, [closingField])
 
   useEffect(() => {
-    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("pointerdown", handlePointerDownOutside)
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("pointerdown", handlePointerDownOutside)
     }
   }, [transitionToField])
 
@@ -497,10 +503,10 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         : `${participantCount} ppl`
 
   return (
-    <header ref={headerRef} className="relative z-40 bg-[#000000] w-full">
+    <header ref={headerRef} className="relative isolate z-40 w-full bg-[#000000]">
       <div className="relative flex items-center justify-between pl-8">
         {/* Logo */}
-        <div className="w-30 flex-shrink-0">
+        <div className="relative z-30 w-30 flex-shrink-0">
           <Link to="/" aria-label="Go to home page" className="block">
             <img
               src={`${PUBLIC_SUPABASE_URL}/storage/v1/object/public/images/logos/svg/PlayInClouds_logo_mini_black.svg`}
@@ -511,9 +517,9 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         </div>
 
         {/* Search Bar */}
-        <div className="absolute left-1/2 -translate-x-1/2">
+        <div className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2">
           <div className="flex items-center">
-            <div className="relative">
+            <div className="pointer-events-auto relative">
             <div className={cn(
               "inline-flex w-max max-w-screen-xl items-center rounded-full bg-[#ffffff] transition-all duration-200 ease-out",
               isSearchSummary ? "shadow-xl ring-1 ring-[#000000]/5" : "shadow-lg"
@@ -892,7 +898,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
             <Button
               variant="outline"
               onClick={onOpenFilters}
-              className="ml-3 flex items-center gap-2 rounded-full border-[#dadada] bg-[#ffffff] text-[#000000] hover:bg-[#e9e9e9] transition-colors"
+              className="pointer-events-auto ml-3 flex items-center gap-2 rounded-full border-[#dadada] bg-[#ffffff] text-[#000000] hover:bg-[#e9e9e9] transition-colors"
             >
               <SlidersHorizontal className="h-4 w-4" />
               <span>Filters</span>
@@ -901,7 +907,7 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
         </div>
 
         {/* Right Actions */}
-        <div className="flex items-center justify-end gap-4 w-48 flex-shrink-0">
+        <div className="relative z-[100] flex w-48 flex-shrink-0 items-center justify-end gap-4">
           <Button
             variant="ghost"
             onClick={handleOpenHostTools}
@@ -910,19 +916,27 @@ export function Header({ onOpenFilters }: { onOpenFilters?: () => void }) {
             List your space
           </Button>
           {user ? <NotificationsMenu /> : null}
-          <div ref={userMenuRef} className="relative">
+          <div ref={userMenuRef} className="relative isolate">
             <Button
+              type="button"
               size="icon"
               variant="ghost"
               onClick={() => setIsUserMenuOpen((prev) => !prev)}
-              className="h-10 w-10 text-[#ffffff] hover:bg-[#ffffff]/10 flex-shrink-0"
+              className="h-10 w-10 flex-shrink-0 touch-manipulation text-[#ffffff] hover:bg-[#ffffff]/10"
               aria-label="Open user menu"
+              aria-expanded={isUserMenuOpen}
+              aria-controls="user-menu"
+              aria-haspopup="menu"
             >
               <Menu className="h-5 w-5" />
             </Button>
 
             {isUserMenuOpen && (
-              <div className="absolute right-0 top-full mt-2 min-w-36 rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-1 shadow-xl z-[90]">
+              <div
+                id="user-menu"
+                role="menu"
+                className="pointer-events-auto absolute right-0 top-full z-[110] mt-2 min-w-36 touch-manipulation rounded-xl border border-[#e9e9e9] bg-[#ffffff] p-1 shadow-xl"
+              >
                 {user ? (
                   <>
                     <Link
