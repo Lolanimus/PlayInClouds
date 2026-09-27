@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router"
 import { ChevronLeft, ChevronRight, PlusCircle, Settings } from "lucide-react"
-import { finalizeCheckoutSession } from "~/api/supabase/payments"
+import { finalizeCheckoutSession } from "~/app/api/supabase/payments"
 
 import supabase from "@/utils/supabase"
 import { sortPastReservationsByMostRecent, sortReservationsForViewer } from "@/lib/reservation-priority"

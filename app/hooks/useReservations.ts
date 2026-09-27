@@ -8,6 +8,17 @@ function getMutationErrorMessage(fallback: string) {
   return errorStore.getState().error ?? fallback
 }
 
+function getMonthKeyFromIsoDate(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    return `${year}-${month}-01`;
+  } catch {
+    return "";
+  }
+}
+
 export const useGetReservation = (
   opts?: { p_reservation_id?: string },
   config?: { enabled?: boolean }
@@ -92,9 +103,25 @@ export const useCreateReservation = () => {
 
       return result
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queries.reservations._def });
-      queryClient.invalidateQueries({ queryKey: queries.hours._def });
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: queries.reservations._def, refetchType: "active" });
+      
+      const startMonth = getMonthKeyFromIsoDate(variables.p_start_at);
+      const endMonth = getMonthKeyFromIsoDate(variables.p_end_at);
+      
+      if (startMonth) {
+        queryClient.invalidateQueries({
+          queryKey: ["list-month-slots", { p_listing_id: variables.p_listing_id, p_month: startMonth }],
+          refetchType: "active",
+        });
+      }
+      
+      if (endMonth && endMonth !== startMonth) {
+        queryClient.invalidateQueries({
+          queryKey: ["list-month-slots", { p_listing_id: variables.p_listing_id, p_month: endMonth }],
+          refetchType: "active",
+        });
+      }
     },
     onError: (err: any) => {
       console.error("Error creating reservation", err);
@@ -116,9 +143,27 @@ export const useCancelReservation = () => {
 
       return result
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queries.reservations._def });
-      queryClient.invalidateQueries({ queryKey: queries.hours._def });
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: queries.reservations._def, refetchType: "active" });
+      
+      if (result?.listing_id && result?.start_at && result?.end_at) {
+        const startMonth = getMonthKeyFromIsoDate(result.start_at);
+        const endMonth = getMonthKeyFromIsoDate(result.end_at);
+        
+        if (startMonth) {
+          queryClient.invalidateQueries({
+            queryKey: ["list-month-slots", { p_listing_id: result.listing_id, p_month: startMonth }],
+            refetchType: "active",
+          });
+        }
+        
+        if (endMonth && endMonth !== startMonth) {
+          queryClient.invalidateQueries({
+            queryKey: ["list-month-slots", { p_listing_id: result.listing_id, p_month: endMonth }],
+            refetchType: "active",
+          });
+        }
+      }
     },
     onError: (err: any) => {
       console.error("Error cancelling reservation", err);
@@ -140,9 +185,27 @@ export const useConfirmReservation = () => {
 
       return result
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queries.reservations._def });
-      queryClient.invalidateQueries({ queryKey: queries.hours._def });
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: queries.reservations._def, refetchType: "active" });
+      
+      if (result?.listing_id && result?.start_at && result?.end_at) {
+        const startMonth = getMonthKeyFromIsoDate(result.start_at);
+        const endMonth = getMonthKeyFromIsoDate(result.end_at);
+        
+        if (startMonth) {
+          queryClient.invalidateQueries({
+            queryKey: ["list-month-slots", { p_listing_id: result.listing_id, p_month: startMonth }],
+            refetchType: "active",
+          });
+        }
+        
+        if (endMonth && endMonth !== startMonth) {
+          queryClient.invalidateQueries({
+            queryKey: ["list-month-slots", { p_listing_id: result.listing_id, p_month: endMonth }],
+            refetchType: "active",
+          });
+        }
+      }
     },
     onError: (err: any) => {
       console.error("Error confirming reservation", err);
@@ -164,9 +227,27 @@ export const useAcceptLateReservationTerms = () => {
 
       return result
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queries.reservations._def });
-      queryClient.invalidateQueries({ queryKey: queries.hours._def });
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: queries.reservations._def, refetchType: "active" });
+      
+      if (result?.listing_id && result?.start_at && result?.end_at) {
+        const startMonth = getMonthKeyFromIsoDate(result.start_at);
+        const endMonth = getMonthKeyFromIsoDate(result.end_at);
+        
+        if (startMonth) {
+          queryClient.invalidateQueries({
+            queryKey: ["list-month-slots", { p_listing_id: result.listing_id, p_month: startMonth }],
+            refetchType: "active",
+          });
+        }
+        
+        if (endMonth && endMonth !== startMonth) {
+          queryClient.invalidateQueries({
+            queryKey: ["list-month-slots", { p_listing_id: result.listing_id, p_month: endMonth }],
+            refetchType: "active",
+          });
+        }
+      }
     },
     onError: (err: any) => {
       console.error("Error accepting late reservation terms", err);

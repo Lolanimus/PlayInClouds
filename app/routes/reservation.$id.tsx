@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router"
-import { CalendarClock, ChevronLeft, Clock3, ExternalLink, Hash, MapPin, MessageCircle, ReceiptText, Star, Users } from "lucide-react"
-
+import { CalendarClock, ChevronLeft, ExternalLink, Hash, MapPin, MessageCircle, ReceiptText, Star, Users } from "lucide-react"
 import { MapView } from "@/components/map-view"
+import { TimeDisplay, TimeTextHint } from "@/components/time-display"
+import { useCurrency } from "@/hooks/useCurrency"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ListingCard, type ListingItem } from "@/components/listings"
-import { TimeWithLocalHint } from "@/components/time-with-local-hint"
 import { Textarea } from "@/components/ui/textarea"
 import {
   formatDateInTimeZone,
   formatDateTimeInTimeZone,
-  formatDateTimeInViewerTimeZone,
   getTimeZoneLabel,
 } from "@/lib/date-time"
 import {
@@ -29,6 +28,7 @@ import {
   useGetReservation,
 } from "@/hooks/useReservations"
 import { useToast } from "@/hooks/use-toast"
+import { useViewerTimeZone } from "@/hooks/useViewerTimeZone"
 import { useUser } from "@/store/user_state"
 import type { Listing, PendingReservationReview, Reservation } from "@/types/custom/api.types"
 
@@ -46,14 +46,6 @@ type ReservationDetailsPayload = Reservation & {
   listing?: Listing | null
   owner?: ReservationProfile | null
   booker?: ReservationProfile | null
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-    maximumFractionDigits: 2,
-  }).format(value)
 }
 
 function getDurationHours(startAt: string, endAt: string) {
@@ -178,6 +170,8 @@ export default function ReservationDetailsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { toast } = useToast()
   const user = useUser()
+  const currency = useCurrency()
+  const { viewerTimeZone } = useViewerTimeZone()
   const [showMoreInfo, setShowMoreInfo] = useState(false)
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false)
   const [reviewRating, setReviewRating] = useState(0)
@@ -220,7 +214,8 @@ export default function ReservationDetailsPage() {
       title: listing.title,
       subtitle: listing.subtitle,
       category: listing.category,
-      price: `$${listing.price} CAD/hour`,
+      price: currency.formatFromCad(listing.price),
+      pricePerHourCad: listing.price,
       distance: "",
       rating: listing.average_rating,
       reviews: listing.review_count,
@@ -230,7 +225,7 @@ export default function ReservationDetailsPage() {
       conveniencesDesc: listing.conveniences_desc,
       areaM2: listing.area_m2,
     }
-  }, [listing])
+  }, [currency, listing])
 
   const isLoading =
     reservationQuery.isLoading
@@ -352,10 +347,10 @@ export default function ReservationDetailsPage() {
   const confirmationDeadlineLocalTime = reservation
     ? (
       isExpiredPending || isAwaitingLateConsent
-        ? formatDateTimeInViewerTimeZone(reservation.payment_deadline)
+        ? formatDateTimeInTimeZone(reservation.payment_deadline, viewerTimeZone)
         : hasLateRequestWindow
-          ? `Confirm by ${formatDateTimeInViewerTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline)}; late-request window until ${formatDateTimeInViewerTimeZone(reservation.payment_deadline)}`
-          : formatDateTimeInViewerTimeZone(reservation.payment_deadline)
+          ? `Confirm by ${formatDateTimeInTimeZone(normalConfirmationDeadline ?? reservation.payment_deadline, viewerTimeZone)}; late-request window until ${formatDateTimeInTimeZone(reservation.payment_deadline, viewerTimeZone)}`
+          : formatDateTimeInTimeZone(reservation.payment_deadline, viewerTimeZone)
     )
     : null
 
@@ -487,7 +482,7 @@ export default function ReservationDetailsPage() {
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Total paid</p>
-                        <p className="mt-1 text-sm font-semibold text-[#111111]">{formatCurrency(reservation.total_price)}</p>
+                        <p className="mt-1 text-sm font-semibold text-[#111111]">{currency.formatFromCad(reservation.total_price)}</p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-3 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#7a7a7a]">Duration</p>
@@ -502,12 +497,7 @@ export default function ReservationDetailsPage() {
                           Start
                         </p>
                         <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">
-                          <TimeWithLocalHint
-                            primaryText={formatDateTimeInTimeZone(reservation.start_at, listingTimeZone)}
-                            localTime={formatDateTimeInViewerTimeZone(reservation.start_at)}
-                          >
-                            {formatDateTimeInTimeZone(reservation.start_at, listingTimeZone)}
-                          </TimeWithLocalHint>
+                          <TimeDisplay utcIso={reservation.start_at} eventTimeZone={listingTimeZone} mode="event-primary" />
                         </p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
@@ -516,12 +506,7 @@ export default function ReservationDetailsPage() {
                           End
                         </p>
                         <p className="mt-2 text-sm font-medium leading-6 text-[#111111]">
-                          <TimeWithLocalHint
-                            primaryText={formatDateTimeInTimeZone(reservation.end_at, listingTimeZone)}
-                            localTime={formatDateTimeInViewerTimeZone(reservation.end_at)}
-                          >
-                            {formatDateTimeInTimeZone(reservation.end_at, listingTimeZone)}
-                          </TimeWithLocalHint>
+                          <TimeDisplay utcIso={reservation.end_at} eventTimeZone={listingTimeZone} mode="event-primary" />
                         </p>
                       </div>
                       <div className="rounded-2xl border border-[#ececec] bg-[#ffffff] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)] md:col-span-2">
@@ -537,13 +522,12 @@ export default function ReservationDetailsPage() {
                       <div className="rounded-2xl border border-[#d8e3f0] bg-[#f6f9fc] px-4 py-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]">
                         <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#5e738a]">Confirmation deadline</p>
                         <p className="mt-2 text-sm font-medium leading-6 text-[#16324f]">
-                          <TimeWithLocalHint
+                          <TimeTextHint
                             primaryText={confirmationDeadlineMessage ?? ""}
-                            localTime={confirmationDeadlineLocalTime ?? ""}
+                            secondaryText={confirmationDeadlineLocalTime ?? ""}
+                            mode="event-primary"
                             align="right"
-                          >
-                            {confirmationDeadlineMessage ?? ""}
-                          </TimeWithLocalHint>
+                          />
                         </p>
                         {!isHost && isRenter && isAwaitingLateConsent && !isExpiredPending ? (
                           <p className="mt-2 text-sm leading-6 text-[#5e738a]">
@@ -768,19 +752,18 @@ export default function ReservationDetailsPage() {
                   <CardContent className="grid gap-3 md:grid-cols-2">
                     <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
                       <p className="text-xs text-[#6a6a6a]">Cost</p>
-                      <p className="mt-1 text-base font-semibold text-[#000000]">{formatCurrency(reservation.total_price)}</p>
+                      <p className="mt-1 text-base font-semibold text-[#000000]">{currency.formatFromCad(reservation.total_price)}</p>
                     </div>
                     <div className="rounded-2xl border border-[#efefef] bg-[#fbfbfb] px-4 py-4">
                       <p className="flex items-center gap-2 text-xs text-[#6a6a6a]"><ReceiptText className="h-3.5 w-3.5" /> Receipt</p>
                       <p className="mt-1 text-sm text-[#000000]">
                         Booked on{" "}
-                        <TimeWithLocalHint
-                          primaryText={formatDateTimeInTimeZone(reservation.created_at, listingTimeZone)}
-                          localTime={formatDateTimeInViewerTimeZone(reservation.created_at)}
+                        <TimeDisplay
+                          utcIso={reservation.created_at}
+                          eventTimeZone={listingTimeZone}
+                          mode="event-primary"
                           align="right"
-                        >
-                          {formatDateTimeInTimeZone(reservation.created_at, listingTimeZone)}
-                        </TimeWithLocalHint>
+                        />
                       </p>
                     </div>
                   </CardContent>

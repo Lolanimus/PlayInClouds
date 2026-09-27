@@ -133,7 +133,7 @@ Deno.serve(async (request) => {
     }
 
     const { data: paymentData } = await service
-      .from("reservation_payments")
+      .from("reservation_guest_payments")
       .select("reservation_id, stripe_payment_intent_id, status")
       .eq("reservation_id", body.reservationId)
       .maybeSingle();
@@ -232,7 +232,7 @@ Deno.serve(async (request) => {
       await stripe.paymentIntents.cancel(payment.stripe_payment_intent_id);
 
       const { error: paymentUpdateError } = await service
-        .from("reservation_payments")
+        .from("reservation_guest_payments")
         .update({
           status: "AUTH_CANCELED",
           canceled_at: new Date().toISOString(),

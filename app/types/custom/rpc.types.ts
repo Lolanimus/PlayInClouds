@@ -1,6 +1,6 @@
 import type { Database as DatabaseGenerated, Json } from "../database-generated.types";
 import type { MergeDeep } from "type-fest";
-import type { ActorContextPayload, Chat, Listing, ListingBookingPolicy, ListingHourSlot, ListingModerationQueueItem, Message, Messages, Notification, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review } from "./api.types";
+import type { ActorContextPayload, Chat, CurrencyPreferenceSettings, EmailNotificationSettings, ExchangeRatesPayload, Listing, ListingBookingPolicy, ListingHourSlot, ListingModerationQueueItem, Message, Messages, Notification, PendingReservationReview, PublicProfile, Reservation, ReservationReview, Review, TimeZonePreferenceSettings } from "./api.types";
 
 export type Database = MergeDeep<
   DatabaseGenerated,
@@ -54,6 +54,18 @@ export type Database = MergeDeep<
         }
         get_direct_chat_by_user_id: {
           Returns: Chat
+        }
+        get_current_user_currency_preference: {
+          Returns: CurrencyPreferenceSettings
+        }
+        get_current_user_time_zone_preference: {
+          Returns: TimeZonePreferenceSettings
+        }
+        get_email_notification_settings: {
+          Returns: EmailNotificationSettings
+        }
+        get_latest_exchange_rates: {
+          Returns: ExchangeRatesPayload
         }
         current_user_is_admin: {
           Returns: boolean
@@ -135,6 +147,15 @@ export type Database = MergeDeep<
         }
         update_listing: {
           Returns: Listing
+        }
+        update_email_notification_settings: {
+          Returns: EmailNotificationSettings
+        }
+        update_current_user_currency_preference: {
+          Returns: CurrencyPreferenceSettings
+        }
+        update_current_user_time_zone_preference: {
+          Returns: TimeZonePreferenceSettings
         }
         upsert_listing_booking_policy: {
           Returns: ListingBookingPolicy
