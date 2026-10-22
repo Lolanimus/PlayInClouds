@@ -27,7 +27,7 @@ const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
 
 export const useSearchStore = create<SearchStore>((set) => ({
-  where: "",
+  where: "New York, NY, USA",
   date: hasBookableHourToday ? todayStart : tomorrowStart,
   startHour: hasBookableHourToday ? nextBookableHourToday : 0,
   duration: 1,
