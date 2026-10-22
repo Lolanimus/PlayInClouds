@@ -11,6 +11,7 @@ import {
 import { useEffect, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { Analytics } from "@vercel/analytics/react";
 import { Bug, X } from "lucide-react";
 import { queryClient } from "./queries/queries";
 
@@ -49,6 +50,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <script type="module" src="./cookieconsent-config.js"></script>
         {children}
         <ScrollRestoration />
+        <Analytics />
         <Scripts />
       </body>
     </html>
