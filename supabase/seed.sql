@@ -1,11 +1,11 @@
--- AirDrums demo seed
+-- PlayInClouds demo seed
 --
 -- Demo accounts (all use password: Demo123456! )
---   admin@airdrums.demo        -> admin account
---   mona@airdrums.demo         -> host with approved + pending listings
---   leo@airdrums.demo          -> host with approved + rejected listings
---   gina@airdrums.demo         -> verified guest with completed + future stays
---   sam@airdrums.demo          -> guest with pending request + review reminder
+--   admin@playinclouds.demo        -> admin account
+--   mona@playinclouds.demo         -> host with approved + pending listings
+--   leo@playinclouds.demo          -> host with approved + rejected listings
+--   gina@playinclouds.demo         -> verified guest with completed + future stays
+--   sam@playinclouds.demo          -> guest with pending request + review reminder
 --   antox.qscwdv@gmail.com     -> demo user account for Artem Melnikov
 --
 -- Run with:
@@ -84,7 +84,7 @@ values
     '10000000-0000-4000-8000-000000000001',
     'authenticated',
     'authenticated',
-    'admin@airdrums.demo',
+    'admin@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -98,7 +98,7 @@ values
     '10000000-0000-4000-8000-000000000002',
     'authenticated',
     'authenticated',
-    'mona@airdrums.demo',
+    'mona@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -112,7 +112,7 @@ values
     '10000000-0000-4000-8000-000000000003',
     'authenticated',
     'authenticated',
-    'leo@airdrums.demo',
+    'leo@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -126,7 +126,7 @@ values
     '10000000-0000-4000-8000-000000000004',
     'authenticated',
     'authenticated',
-    'gina@airdrums.demo',
+    'gina@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -140,7 +140,7 @@ values
     '10000000-0000-4000-8000-000000000005',
     'authenticated',
     'authenticated',
-    'sam@airdrums.demo',
+    'sam@playinclouds.demo',
     extensions.crypt('Demo123456!', extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
@@ -178,41 +178,41 @@ values
   (
     '11000000-0000-4000-8000-000000000001',
     '10000000-0000-4000-8000-000000000001',
-    '{"sub":"10000000-0000-4000-8000-000000000001","email":"admin@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000001","email":"admin@playinclouds.demo"}'::jsonb,
     'email',
-    'admin@airdrums.demo',
+    'admin@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000002',
-    '{"sub":"10000000-0000-4000-8000-000000000002","email":"mona@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000002","email":"mona@playinclouds.demo"}'::jsonb,
     'email',
-    'mona@airdrums.demo',
+    'mona@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000003',
     '10000000-0000-4000-8000-000000000003',
-    '{"sub":"10000000-0000-4000-8000-000000000003","email":"leo@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000003","email":"leo@playinclouds.demo"}'::jsonb,
     'email',
-    'leo@airdrums.demo',
+    'leo@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000004',
     '10000000-0000-4000-8000-000000000004',
-    '{"sub":"10000000-0000-4000-8000-000000000004","email":"gina@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000004","email":"gina@playinclouds.demo"}'::jsonb,
     'email',
-    'gina@airdrums.demo',
+    'gina@playinclouds.demo',
     now(), now(), now()
   ),
   (
     '11000000-0000-4000-8000-000000000005',
     '10000000-0000-4000-8000-000000000005',
-    '{"sub":"10000000-0000-4000-8000-000000000005","email":"sam@airdrums.demo"}'::jsonb,
+    '{"sub":"10000000-0000-4000-8000-000000000005","email":"sam@playinclouds.demo"}'::jsonb,
     'email',
-    'sam@airdrums.demo',
+    'sam@playinclouds.demo',
     now(), now(), now()
   ),
   (
@@ -1161,7 +1161,7 @@ values
     '10000000-0000-4000-8000-000000000002',
     'listing_approved',
     'Listing approved',
-    'Downtown Drum Loft is now live on AirDrums.',
+    'Downtown Drum Loft is now live on PlayInClouds.',
     '/host/dashboard',
     'listing',
     '20000000-0000-4000-8000-000000000001',

@@ -155,7 +155,7 @@ async function ensureStripeAccountForHost(userId: string) {
       transfers: { requested: true },
     },
     business_profile: {
-      product_description: "AirDrums host payouts for listing reservations",
+      product_description: "PlayInClouds host payouts for listing reservations",
     },
     individual: fullName
       ? {

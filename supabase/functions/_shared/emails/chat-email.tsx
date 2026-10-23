@@ -110,8 +110,8 @@ function buildChatEmailViewModel(input: ChatEmailInput): ChatEmailViewModel {
     ? "You have 1 new message"
     : `You have ${input.messageCount} new messages`;
   const intro = input.messageCount === 1
-    ? "You have a new unread message on AirDrums."
-    : `You have ${input.messageCount} new unread messages on AirDrums.`;
+    ? "You have a new unread message on PlayInClouds."
+    : `You have ${input.messageCount} new unread messages on PlayInClouds.`;
 
   return {
     subject,

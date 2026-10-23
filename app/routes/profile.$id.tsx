@@ -224,7 +224,7 @@ export default function PublicProfilePage() {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <CardTitle className="text-2xl text-[#000000]">Current listings</CardTitle>
-                        <CardDescription>Spaces this host currently has live on AirDrums.</CardDescription>
+                        <CardDescription>Spaces this host currently has live on PlayInClouds.</CardDescription>
                       </div>
 
                       {hostListings.length > 1 ? (

@@ -223,7 +223,7 @@ function LoginSecurityPanel(props: {
             </Field>
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-              If you change your email, AirDrums will send confirmation links to both your current email
+              If you change your email, PlayInClouds will send confirmation links to both your current email
               and your new email. To finish the change, open both emails and click both confirmation links.
             </div>
 
@@ -329,7 +329,7 @@ function NotificationsPanel(props: {
     {
       title: "Account activity and policies",
       description:
-        "Confirm your booking and account activity, and learn about important AirDrums policies.",
+        "Confirm your booking and account activity, and learn about important PlayInClouds policies.",
       items: [
         {
           key: "email_account_activity_enabled" as const,
@@ -374,7 +374,7 @@ function NotificationsPanel(props: {
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-[#111111]">Notifications</h2>
         <p className="mt-2 text-sm text-[#6a6a6a]">
-          Control whether AirDrums can send you email notifications for reservations, listings,
+          Control whether PlayInClouds can send you email notifications for reservations, listings,
           chat, reviews, payouts, and account activity.
         </p>
       </div>
@@ -384,7 +384,7 @@ function NotificationsPanel(props: {
           <div className="border-b border-[#ececec] pb-6">
             <h3 className="text-2xl font-semibold text-[#111111]">Email notifications</h3>
             <p className="mt-2 max-w-2xl text-sm text-[#6a6a6a]">
-              Turn AirDrums email notifications on or off. This affects queued reservation,
+              Turn PlayInClouds email notifications on or off. This affects queued reservation,
               listing, message, payout, review, and account emails sent after the setting changes.
             </p>
           </div>
@@ -467,7 +467,7 @@ function LocalePanel(props: {
       <div>
         <h2 className="text-3xl font-semibold tracking-tight text-[#111111]">Currency & time zone</h2>
         <p className="mt-2 text-sm text-[#6a6a6a]">
-          Choose how AirDrums displays prices across the website.
+          Choose how PlayInClouds displays prices across the website.
         </p>
       </div>
 
