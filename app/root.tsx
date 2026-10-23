@@ -24,6 +24,11 @@ import { useError, useErrorActions, useSuccess } from "./store/error_state";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
+  {
+    rel: "icon",
+    type: "image/svg+xml",
+    href: "https://vgkqdlkyyvukksrrlusa.supabase.co/storage/v1/object/public/images/logos/svg/PlayInClouds_logo_mini_black.svg",
+  },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
